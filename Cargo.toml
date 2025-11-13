@@ -87,18 +87,10 @@ ureq = { version = "^3", features = ["json"] }
 tiny_http = "^0.11"
 rumqttc = "^0.25"
 
-axum = "^0.8"
-hyper = { version = "^1", features = ["full"] }
-
 expectrl = "^0.8"
 regex = "^1"
 vt100 = "^0.15"
 ctrlc = "^3"
-
-# Python support - RustPython embedded mode
-rustpython-vm = { version = "^0.4", default-features = false }
-rustpython-stdlib = { version = "^0.4", default-features = false, features = ["zlib"] }
-rustpython-compiler = "^0.4"
 
 [dependencies]
 anyhow.workspace = true
@@ -143,6 +135,7 @@ crossterm.workspace = true
 
 ratatui.workspace = true
 unicode-width.workspace = true
+ctrlc.workspace = true
 
 rmodbus.workspace = true
 libc.workspace = true
@@ -150,11 +143,6 @@ serialport.workspace = true
 interprocess.workspace = true
 ureq.workspace = true
 rumqttc.workspace = true
-
-ctrlc.workspace = true
-rustpython-vm.workspace = true
-rustpython-stdlib.workspace = true
-rustpython-compiler.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true

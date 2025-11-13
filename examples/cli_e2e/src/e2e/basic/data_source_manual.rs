@@ -5,10 +5,11 @@ use std::{
     process::Stdio,
 };
 
-use crate::utils::{
-    build_debug_bin, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
+use crate::utils::{build_debug_bin, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2};
+use aoba::{
+    protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
+    utils::sleep_3s,
 };
-use aoba::protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode};
 
 fn write_station_snapshot(file: &mut File, values: &[u16]) -> Result<()> {
     let payload = vec![StationConfig::single_range(
@@ -63,8 +64,7 @@ pub async fn test_manual_data_source() -> Result<()> {
         .spawn()?;
 
     // Give server time to start
-    sleep_1s().await;
-    sleep_1s().await;
+    sleep_3s().await;
 
     // Check if server is still running
     match server.try_wait()? {
@@ -146,8 +146,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         .spawn()?;
 
     // Give server time to start
-    sleep_1s().await;
-    sleep_1s().await;
+    sleep_3s().await;
 
     // Check if server is still running
     match server.try_wait()? {
