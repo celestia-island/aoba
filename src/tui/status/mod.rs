@@ -36,10 +36,13 @@ pub mod serializable {
         time::Instant,
     };
 
-    use crate::tui::status::{
-        cursor::{ConfigPanelCursor, Cursor, ModbusDashboardCursor},
-        modbus::{ModbusConnectionMode, ModbusRegisterItem, RegisterMode},
-        port::{PortConfig, PortData, PortState, PortStatusIndicator},
+    use crate::{
+        protocol::status::types::ModbusMasterDataSource,
+        tui::status::{
+            cursor::{ConfigPanelCursor, Cursor, ModbusDashboardCursor},
+            modbus::{ModbusConnectionMode, ModbusRegisterItem, RegisterMode},
+            port::{PortConfig, PortData, PortState, PortStatusIndicator},
+        },
     };
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +66,8 @@ pub mod serializable {
         pub modbus_masters: Vec<TuiModbusStation>,
         pub modbus_slaves: Vec<TuiModbusStation>,
         pub log_count: usize,
+        #[serde(default)]
+        pub master_source: ModbusMasterDataSource,
     }
 
     impl Default for TuiPort {
@@ -74,6 +79,7 @@ pub mod serializable {
                 modbus_masters: Vec::new(),
                 modbus_slaves: Vec::new(),
                 log_count: 0,
+                master_source: ModbusMasterDataSource::default(),
             }
         }
     }
@@ -186,6 +192,12 @@ pub mod serializable {
                         }
                     }
 
+                    let master_source = if let PortConfig::Modbus { master_source, .. } = &port.config {
+                        master_source.clone()
+                    } else {
+                        ModbusMasterDataSource::default()
+                    };
+
                     ports.push(TuiPort {
                         name: port.port_name.clone(),
                         enabled,
@@ -193,6 +205,7 @@ pub mod serializable {
                         modbus_masters,
                         modbus_slaves,
                         log_count: port.logs.len(),
+                        master_source,
                     });
                 }
             }
@@ -327,7 +340,7 @@ pub mod serializable {
             }
             let config = PortConfig::Modbus {
                 mode: ModbusConnectionMode::default_master(),
-                master_source: Default::default(),
+                master_source: port.master_source.clone(),
                 stations,
             };
             let status_indicator = match &state {
@@ -554,6 +567,10 @@ pub mod serializable {
                     match kind.to_ascii_lowercase().as_str() {
                         "addline" => Ok(ModbusDashboardCursor::AddLine),
                         "modbusmode" => Ok(ModbusDashboardCursor::ModbusMode),
+                        "mastersourcekind" => Ok(ModbusDashboardCursor::MasterSourceKind),
+                        "mastersourcevalue" => Ok(ModbusDashboardCursor::MasterSourceValue),
+                        "requestinterval" => Ok(ModbusDashboardCursor::RequestInterval),
+                        "timeout" => Ok(ModbusDashboardCursor::Timeout),
                         "stationid" => Ok(ModbusDashboardCursor::StationId { index }),
                         "registermode" => Ok(ModbusDashboardCursor::RegisterMode { index }),
                         "registerstartaddress" => {

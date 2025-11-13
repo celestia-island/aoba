@@ -167,6 +167,9 @@ async fn main() -> Result<()> {
             log::info!("    - multi_station_slave_mixed_types");
             log::info!("    - multi_station_slave_spaced_addresses");
             log::info!("    - multi_station_slave_mixed_ids");
+            log::info!("  Data Source Configuration:");
+            log::info!("    - data_source_ipc_pipe");
+            log::info!("    - data_source_http_server");
             log::info!("");
             log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
             log::info!("       cargo run --package tui_e2e -- --list");
@@ -298,7 +301,15 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
         ))?,
     );
 
-    // IPC test workflows (removed)
+    // Data source configuration workflows
+    workflows.insert(
+        "data_source_ipc_pipe".to_string(),
+        parse_workflow(include_str!("../workflow/data_source/ipc_pipe.toml"))?,
+    );
+    workflows.insert(
+        "data_source_http_server".to_string(),
+        parse_workflow(include_str!("../workflow/data_source/http_server.toml"))?,
+    );
 
     Ok(workflows)
 }

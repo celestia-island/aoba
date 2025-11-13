@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Rendering mode tests (screen-capture-only) - 14 modules
+  # Rendering mode tests (screen-capture-only) - 16 modules
   tui-e2e-rendering:
     name: TUI E2E Rendering - ${{ matrix.module }}
     runs-on: ubuntu-latest
@@ -35,6 +35,9 @@ jobs:
           - multi_station_slave_mixed_types
           - multi_station_slave_spaced_addresses
           - multi_station_slave_mixed_ids
+          # Data source configuration
+          - data_source_ipc_pipe
+          - data_source_http_server
 
     steps:
       - uses: actions/checkout@v5
@@ -69,7 +72,7 @@ jobs:
       - name: Run TUI E2E module (rendering mode)
         run: ./scripts/run_ci_locally.sh --workflow tui-rendering --module ${{ matrix.module }}
 
-  # Drill-down mode tests (full integration) - 14 modules
+  # Drill-down mode tests (full integration) - 16 modules
   tui-e2e-drilldown:
     name: TUI E2E Drill-down - ${{ matrix.module }}
     runs-on: ubuntu-latest
@@ -95,6 +98,9 @@ jobs:
           - multi_station_slave_mixed_types
           - multi_station_slave_spaced_addresses
           - multi_station_slave_mixed_ids
+          # Data source configuration
+          - data_source_ipc_pipe
+          - data_source_http_server
 
     steps:
       - uses: actions/checkout@v5
