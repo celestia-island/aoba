@@ -1,5 +1,0 @@
-# Marker file to indicate this package supports type checking
-# This file should be empty or contain only comments
-#
-# When Python type checkers (mypy, pyright, etc.) see this file,
-# they know to look for .pyi stub files in this directory.

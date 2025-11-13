@@ -28,7 +28,6 @@ jobs:
           - data_source_http_persist
           - data_source_mqtt
           - data_source_mqtt_persist
-          - data_source_python
 
     steps:
       - uses: actions/checkout@v5

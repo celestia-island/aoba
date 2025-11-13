@@ -797,21 +797,6 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             // It will be created or connected when starting
             Ok(())
         }
-        types::modbus::ModbusMasterDataSource::PythonModule { path } => {
-            if path.is_empty() {
-                return Ok(()); // Allow empty path, will use placeholder
-            }
-            // Check if file exists
-            if !std::path::Path::new(path).exists() {
-                let err_msg = lang()
-                    .protocol
-                    .modbus
-                    .err_file_not_found
-                    .replace("{}", path);
-                return Err(err_msg);
-            }
-            Ok(())
-        }
     }
 }
 
