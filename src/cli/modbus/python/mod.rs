@@ -1,9 +1,8 @@
 pub mod embedded;
 pub mod types;
 
-use std::path::{Path, PathBuf};
-
 use anyhow::Result;
+use std::path::{Path, PathBuf};
 
 pub use embedded::PythonEmbeddedRunner;
 pub use types::PythonOutput;
@@ -23,12 +22,12 @@ pub trait PythonRunner: Send {
 /// Resolve a script path: if relative, make it relative to the current working directory
 fn resolve_script_path(script_path: &str) -> PathBuf {
     let path = Path::new(script_path);
-    
+
     // If the path is already absolute, return it as-is
     if path.is_absolute() {
         return path.to_path_buf();
     }
-    
+
     // For relative paths, resolve relative to the current working directory
     match std::env::current_dir() {
         Ok(cwd) => {
@@ -59,7 +58,7 @@ pub fn create_python_runner(
     // Resolve relative paths to absolute paths based on current working directory
     let resolved_path = resolve_script_path(&script_path);
     let resolved_path_str = resolved_path.to_string_lossy().to_string();
-    
+
     Ok(Box::new(PythonEmbeddedRunner::new(
         resolved_path_str,
         initial_reboot_interval_ms,

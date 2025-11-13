@@ -23,7 +23,7 @@ pub async fn test_python_script_data_source() -> Result<()> {
     let _ = std::fs::remove_file(counter_file);
 
     let binary = build_debug_bin("aoba")?;
-    
+
     // Round 1: Sequential 0-9
     log::info!("🧪 Testing Round 1: Sequential 0-9");
     let expected_round1 = vec![0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9];
