@@ -96,11 +96,6 @@ pub fn run_binary_sync(args: &[&str]) -> Result<std::process::Output> {
     Ok(output)
 }
 
-/// Sleep for 1 second (1000ms) - standard delay for CI/E2E tests
-pub async fn sleep_1s() {
-    tokio::time::sleep(Duration::from_millis(1000)).await;
-}
-
 /// Check if a serial port exists (Windows-only helper)
 #[cfg(windows)]
 pub fn port_exists(port_name: &str) -> bool {

@@ -587,8 +587,7 @@ fn commit_text_edit(
                                     }
                                 }
                             }
-                            ModbusMasterDataSource::IpcPipe { path }
-                            | ModbusMasterDataSource::PythonModule { path } => {
+                            ModbusMasterDataSource::IpcPipe { path } => {
                                 if *path != trimmed {
                                     *path = trimmed.clone();
                                     port_data.config_modified = true;

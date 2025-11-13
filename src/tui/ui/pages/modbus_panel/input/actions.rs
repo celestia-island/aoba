@@ -176,10 +176,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     | types::modbus::ModbusMasterDataSource::HttpServer { url } => {
                                         url.clone()
                                     }
-                                    types::modbus::ModbusMasterDataSource::IpcPipe { path }
-                                    | types::modbus::ModbusMasterDataSource::PythonModule {
-                                        path,
-                                    } => path.clone(),
+                                    types::modbus::ModbusMasterDataSource::IpcPipe { path } => {
+                                        path.clone()
+                                    }
                                     _ => String::new(),
                                 };
                                 return Ok(value);
