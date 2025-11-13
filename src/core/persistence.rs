@@ -155,12 +155,6 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
                                     value: Some(path.clone()),
                                 })
                             }
-                            ModbusMasterDataSource::PythonModule { path } => {
-                                Some(SerializableMasterSource {
-                                    kind: "python".to_string(),
-                                    value: Some(path.clone()),
-                                })
-                            }
                         }
                     } else {
                         None
@@ -272,9 +266,6 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
                                     url: value.unwrap_or_default(),
                                 }),
                                 "ipc" => Some(ModbusMasterDataSource::IpcPipe {
-                                    path: value.unwrap_or_default(),
-                                }),
-                                "python" => Some(ModbusMasterDataSource::PythonModule {
                                     path: value.unwrap_or_default(),
                                 }),
                                 _ => None,

@@ -74,7 +74,6 @@ pub enum ModbusMasterDataSourceKind {
     MqttServer,
     HttpServer,
     IpcPipe,
-    PythonModule,
 }
 
 impl ModbusMasterDataSourceKind {
@@ -85,7 +84,6 @@ impl ModbusMasterDataSourceKind {
             Self::MqttServer,
             Self::HttpServer,
             Self::IpcPipe,
-            Self::PythonModule,
         ]
     }
 
@@ -105,7 +103,7 @@ impl ModbusMasterDataSourceKind {
             Self::Manual => ModbusMasterDataSourceValueKind::None,
             Self::TransparentForward => ModbusMasterDataSourceValueKind::Port,
             Self::MqttServer | Self::HttpServer => ModbusMasterDataSourceValueKind::Url,
-            Self::IpcPipe | Self::PythonModule => ModbusMasterDataSourceValueKind::Path,
+            Self::IpcPipe => ModbusMasterDataSourceValueKind::Path,
         }
     }
 }
@@ -126,9 +124,6 @@ impl fmt::Display for ModbusMasterDataSourceKind {
                 lang().protocol.modbus.data_source_http.clone()
             }
             ModbusMasterDataSourceKind::IpcPipe => lang().protocol.modbus.data_source_ipc.clone(),
-            ModbusMasterDataSourceKind::PythonModule => {
-                lang().protocol.modbus.data_source_python.clone()
-            }
         };
         write!(f, "{label}")
     }
@@ -160,9 +155,6 @@ pub enum ModbusMasterDataSource {
     IpcPipe {
         path: String,
     },
-    PythonModule {
-        path: String,
-    },
 }
 
 impl ModbusMasterDataSource {
@@ -175,7 +167,6 @@ impl ModbusMasterDataSource {
             ModbusMasterDataSource::MqttServer { .. } => ModbusMasterDataSourceKind::MqttServer,
             ModbusMasterDataSource::HttpServer { .. } => ModbusMasterDataSourceKind::HttpServer,
             ModbusMasterDataSource::IpcPipe { .. } => ModbusMasterDataSourceKind::IpcPipe,
-            ModbusMasterDataSource::PythonModule { .. } => ModbusMasterDataSourceKind::PythonModule,
         }
     }
 
@@ -192,9 +183,6 @@ impl ModbusMasterDataSource {
             ModbusMasterDataSourceKind::MqttServer => Self::MqttServer { url: String::new() },
             ModbusMasterDataSourceKind::HttpServer => Self::HttpServer { url: String::new() },
             ModbusMasterDataSourceKind::IpcPipe => Self::IpcPipe {
-                path: String::new(),
-            },
-            ModbusMasterDataSourceKind::PythonModule => Self::PythonModule {
                 path: String::new(),
             },
         }
@@ -221,8 +209,7 @@ impl ModbusMasterDataSource {
         match self {
             ModbusMasterDataSource::MqttServer { url }
             | ModbusMasterDataSource::HttpServer { url } => Some(url.as_str()),
-            ModbusMasterDataSource::IpcPipe { path }
-            | ModbusMasterDataSource::PythonModule { path } => Some(path.as_str()),
+            ModbusMasterDataSource::IpcPipe { path } => Some(path.as_str()),
             _ => None,
         }
     }
@@ -233,8 +220,7 @@ impl ModbusMasterDataSource {
             | ModbusMasterDataSource::HttpServer { url } => {
                 *url = value;
             }
-            ModbusMasterDataSource::IpcPipe { path }
-            | ModbusMasterDataSource::PythonModule { path } => {
+            ModbusMasterDataSource::IpcPipe { path } => {
                 *path = value;
             }
             ModbusMasterDataSource::Manual => {}
