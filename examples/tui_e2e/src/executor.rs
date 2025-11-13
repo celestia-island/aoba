@@ -5,6 +5,8 @@
 use anyhow::{bail, Result};
 use std::{fmt, time::Duration};
 
+use aoba::utils::{sleep_1s, sleep_3s};
+
 use crate::{
     mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
     renderer::render_tui_to_string,
@@ -347,7 +349,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
     log::info!("✅ CLI emulator spawned successfully");
 
     // Give CLI time to initialize
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    sleep_3s().await;
 
     Ok(())
 }
@@ -424,7 +426,7 @@ async fn execute_step_group_with_retry(
             }
 
             // Wait 1 second before retrying the action steps
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            sleep_3s().await;
         }
 
         let mut verification_failed = false;
@@ -552,12 +554,12 @@ async fn execute_single_step(
             for _ in 0..times {
                 // Send keyboard input via IPC
                 simulate_key_input(ctx, key).await?;
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                sleep_1s().await;
             }
             // Short delay after key press to allow TUI to process
             // Use explicit sleep_ms if specified, otherwise 200ms default
             if step.sleep_ms.is_none() {
-                tokio::time::sleep(Duration::from_millis(200)).await;
+                sleep_1s().await;
             }
         }
         // In ScreenCaptureOnly mode, keyboard actions are ignored
@@ -589,11 +591,11 @@ async fn execute_single_step(
         if ctx.mode == ExecutionMode::DrillDown {
             for ch in value.chars() {
                 simulate_char_input(ctx, ch).await?;
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                sleep_1s().await;
             }
             // Add delay after typing to ensure all characters are processed by TUI
             // TUI has 100ms delay after each char, so we need to wait for that plus render time
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            sleep_3s().await;
         }
     }
 
@@ -623,7 +625,7 @@ async fn execute_single_step(
     if step.verify.is_some() {
         // In DrillDown mode, give extra time for TUI to render before requesting screen
         if ctx.mode == ExecutionMode::DrillDown {
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            sleep_1s().await;
         }
 
         // Render the TUI to a string based on execution mode
@@ -849,7 +851,7 @@ async fn execute_match_master_registers_trigger(
     };
 
     // Give TUI time to be ready for Modbus communication
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    sleep_1s().await;
 
     // Spawn CLI process as master to read from TUI master (which will respond as if it's a slave)
     // Actually, we need to spawn as master-provide mode to read from the TUI master

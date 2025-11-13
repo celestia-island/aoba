@@ -7,6 +7,7 @@ use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
 };
+use aoba::utils::{sleep_1s, sleep_3s};
 use aoba::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
@@ -65,7 +66,7 @@ async fn publish_mqtt_data(
     });
 
     // Wait for connection
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    sleep_1s().await;
 
     // Publish the payload with retained flag so the subscriber can receive it even if it connects later
     client
@@ -76,7 +77,7 @@ async fn publish_mqtt_data(
     log::info!("Published MQTT data to topic: {}", topic);
 
     // Give time for message to be delivered
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    sleep_1s().await;
 
     // Clean up
     client.disconnect().await.ok();
@@ -105,7 +106,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
             .arg("-c")
             .arg("mosquitto -d -p 1883 2>/dev/null || true")
             .spawn();
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        sleep_3s().await;
     }
 
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
@@ -227,7 +228,7 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
             .arg("-c")
             .arg("mosquitto -d -p 1883 2>/dev/null || true")
             .spawn();
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        sleep_3s().await;
     }
 
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);

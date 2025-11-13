@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use aoba::utils::{sleep_1s, sleep_3s};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
@@ -6,8 +7,7 @@ use std::{
 };
 
 use crate::utils::{
-    build_debug_bin, create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1,
-    DEFAULT_PORT2,
+    build_debug_bin, create_modbus_command, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 
 /// Test basic master-slave communication with virtual serial ports
@@ -44,9 +44,7 @@ pub async fn test_basic_master_slave_communication() -> Result<()> {
     .spawn()?;
 
     // Give server time to start and fully acquire the port
-    sleep_1s().await;
-    sleep_1s().await;
-    sleep_1s().await;
+    sleep_3s().await;
 
     // Check if server is still running
     match server.try_wait()? {
