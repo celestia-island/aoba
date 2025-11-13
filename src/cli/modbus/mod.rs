@@ -212,14 +212,22 @@ pub fn parse_data_line(
         return Err(anyhow!("Empty line"));
     }
 
-    if let Ok(stations) = serde_json::from_str::<Vec<StationConfig>>(line) {
-        return extract_values_from_station_configs(
-            &stations,
-            station_id,
-            register_mode,
-            start_address,
-            register_length,
-        );
+    match serde_json::from_str::<Vec<StationConfig>>(line) {
+        Ok(stations) => {
+            return extract_values_from_station_configs(
+                &stations,
+                station_id,
+                register_mode,
+                start_address,
+                register_length,
+            );
+        }
+        Err(e) => {
+            log::debug!(
+                "Failed to parse as Vec<StationConfig>: {}. Trying legacy format...",
+                e
+            );
+        }
     }
 
     // Fallback: legacy format {"values": [...]}
@@ -237,7 +245,7 @@ pub fn parse_data_line(
         }
     }
 
-    Err(anyhow!("Invalid data format"))
+    Err(anyhow!("Invalid data format: could not parse as Vec<StationConfig> or legacy {{\"values\": [...]}} format"))
 }
 
 fn extract_values_from_station_configs(

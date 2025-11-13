@@ -1682,6 +1682,11 @@ fn read_one_data_update(
                 .read_to_string()
                 .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
 
+            log::debug!(
+                "HTTP response text (first 500 chars): {}",
+                &text.chars().take(500).collect::<String>()
+            );
+
             parse_data_line(
                 &text,
                 station_id,
@@ -1689,6 +1694,13 @@ fn read_one_data_update(
                 register_address,
                 register_length,
             )
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to parse HTTP response data: {}. Response was: {}",
+                    e,
+                    &text.chars().take(200).collect::<String>()
+                )
+            })
         }
         DataSource::IpcPipe(path) => {
             // IPC pipe: similar to Pipe but for inter-process communication
