@@ -95,9 +95,10 @@ regex = "^1"
 vt100 = "^0.15"
 ctrlc = "^3"
 
-# Python support - RustPython embedded mode (optional, disabled for now due to threading issues)
-# rustpython-vm = { version = "^0.4", features = ["threading"], optional = true }
-# rustpython-stdlib = { version = "^0.4", default-features = false, features = ["zlib", "ssl"], optional = true }
+# Python support - RustPython embedded mode
+rustpython-vm = { version = "^0.4", default-features = false }
+rustpython-stdlib = { version = "^0.4", default-features = false, features = ["zlib"] }
+rustpython-compiler = "^0.4"
 
 [dependencies]
 anyhow.workspace = true
@@ -151,10 +152,9 @@ ureq.workspace = true
 rumqttc.workspace = true
 
 ctrlc.workspace = true
-
-# Python support - currently external mode only
-# rustpython-vm.workspace = true
-# rustpython-stdlib.workspace = true
+rustpython-vm.workspace = true
+rustpython-stdlib.workspace = true
+rustpython-compiler.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true
