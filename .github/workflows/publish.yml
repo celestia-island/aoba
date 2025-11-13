@@ -10,7 +10,7 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ubuntu-latest]
     needs: [checks]
     timeout-minutes: 10
 

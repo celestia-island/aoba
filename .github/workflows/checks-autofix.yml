@@ -14,7 +14,7 @@ jobs:
 
   fixes:
     name: Auto-fix and commit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ubuntu-latest]
     needs: [check]
     # Ensure this job runs even if the upstream `check` job failed.
     # This lets the auto-fix steps attempt fixes and commit regardless of check result.
