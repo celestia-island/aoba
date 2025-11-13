@@ -118,7 +118,7 @@ pub async fn test_http_data_source() -> Result<()> {
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
-    let mut rng = StdRng::seed_from_u64(0xA0BA_DA7A_01_u64);
+    let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A01_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
     let server_url = run_simple_server(payload).await?;
@@ -213,7 +213,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
-    let mut rng = StdRng::seed_from_u64(0xA0BA_DA7A_02_u64);
+    let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A02_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
     let server_url = run_simple_server(payload).await?;
