@@ -3,7 +3,9 @@ use std::{path::Path, process::Command};
 
 /// Return a sorted list of available ports as (port_name, port_type_string).
 pub fn enumerate_ports() -> Vec<(String, String)> {
-    let mut ports = serialport::available_ports().unwrap_or_default();
+    // Use unified platform-specific enumeration which includes virtual port
+    // detection when CI/debug hints are enabled.
+    let mut ports = crate::protocol::tty::available_ports_sorted();
     ports.sort_by_key(|p| p.port_name.clone());
     ports
         .into_iter()

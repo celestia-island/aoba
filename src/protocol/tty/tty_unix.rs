@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    os::unix::fs::FileTypeExt,
     path::Path,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -111,7 +110,11 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
         if Path::new(port_path).exists() {
             // Check if it's a symlink to a pts device or a character device
             if let Ok(metadata) = fs::symlink_metadata(port_path) {
-                if metadata.file_type().is_symlink() || metadata.file_type().is_char_device() {
+                // Accept any non-directory filesystem entry here. Some test
+                // harnesses create regular files or sockets in /tmp (not
+                // strict symlinks/char devices), so treat any existing
+                // non-directory path as a virtual port candidate.
+                if !metadata.file_type().is_dir() {
                     virtual_ports.push(SerialPortInfo {
                         port_name: port_path.to_string(),
                         port_type: SerialPortType::Unknown,
@@ -128,9 +131,7 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
             if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
                 if name.starts_with("aoba_vcom") {
                     if let Ok(metadata) = fs::symlink_metadata(&path) {
-                        if metadata.file_type().is_symlink()
-                            || metadata.file_type().is_char_device()
-                        {
+                        if !metadata.file_type().is_dir() {
                             virtual_ports.push(SerialPortInfo {
                                 port_name: path.to_string_lossy().to_string(),
                                 port_type: SerialPortType::Unknown,
@@ -151,7 +152,7 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
             let path = Path::new(&value);
             if path.exists() {
                 if let Ok(metadata) = fs::symlink_metadata(path) {
-                    if metadata.file_type().is_symlink() || metadata.file_type().is_char_device() {
+                    if !metadata.file_type().is_dir() {
                         virtual_ports.push(SerialPortInfo {
                             port_name: value.clone(),
                             port_type: SerialPortType::Unknown,
