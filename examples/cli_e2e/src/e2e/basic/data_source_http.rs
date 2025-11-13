@@ -7,8 +7,7 @@ use tiny_http::{Header, Response, Server};
 use ureq::Agent;
 
 use crate::utils::{
-    build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1,
-    DEFAULT_PORT2,
+    build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 use aoba::{
     cli::modbus::ModbusResponse,

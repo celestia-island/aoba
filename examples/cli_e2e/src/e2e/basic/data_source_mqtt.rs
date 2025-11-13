@@ -5,8 +5,7 @@ use std::{process::Stdio, time::Duration};
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 
 use crate::utils::{
-    build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1,
-    DEFAULT_PORT2,
+    build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 use aoba::{
     cli::modbus::ModbusResponse,
@@ -37,7 +36,12 @@ fn parse_client_response(stdout: &[u8]) -> Result<ModbusResponse> {
 }
 
 /// Publish data to MQTT broker for testing
-async fn publish_mqtt_data(broker_host: &str, broker_port: u16, topic: &str, payload: &str) -> Result<()> {
+async fn publish_mqtt_data(
+    broker_host: &str,
+    broker_port: u16,
+    topic: &str,
+    payload: &str,
+) -> Result<()> {
     let client_id = format!("test_publisher_{}", uuid::Uuid::new_v4());
     let mut mqtt_options = MqttOptions::new(client_id, broker_host, broker_port);
     mqtt_options.set_keep_alive(Duration::from_secs(5));
@@ -85,7 +89,7 @@ async fn publish_mqtt_data(broker_host: &str, broker_port: u16, topic: &str, pay
 /// This test requires an external MQTT broker to be running (e.g., mosquitto)
 pub async fn test_mqtt_data_source() -> Result<()> {
     log::info!("🧪 Testing MQTT data source mode...");
-    
+
     // Check if mosquitto broker is available
     let broker_available = std::process::Command::new("sh")
         .arg("-c")
@@ -207,7 +211,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
 /// Test master mode with MQTT data source in persistent mode
 pub async fn test_mqtt_data_source_persist() -> Result<()> {
     log::info!("🧪 Testing MQTT data source persistent mode...");
-    
+
     // Check if mosquitto broker is available
     let broker_available = std::process::Command::new("sh")
         .arg("-c")
