@@ -1683,7 +1683,7 @@ fn read_one_data_update(
                 .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
 
             log::debug!("HTTP response text (first 500 chars): {}", &text.chars().take(500).collect::<String>());
-            
+
             parse_data_line(
                 &text,
                 station_id,
