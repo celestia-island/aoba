@@ -1,4 +1,5 @@
 pub mod master;
+pub mod python;
 pub mod slave;
 
 use anyhow::{anyhow, Result};
@@ -6,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::{io::Write, time::Duration};
 
 use crate::protocol::status::types::modbus::{RegisterMode, StationConfig};
+
+pub use python::{PythonExecutionMode, PythonRunner};
 
 /// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
 pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
@@ -105,6 +108,10 @@ pub enum DataSource {
     MqttServer(String),         // URL
     HttpServer(String),         // URL
     IpcPipe(String),            // pipe path
+    PythonScript {
+        mode: PythonExecutionMode,
+        path: String,
+    },
 }
 
 impl std::str::FromStr for DataSource {
@@ -129,9 +136,21 @@ impl std::str::FromStr for DataSource {
             Ok(DataSource::HttpServer(format!("https://{}", url)))
         } else if let Some(path) = s.strip_prefix("ipc:") {
             Ok(DataSource::IpcPipe(path.to_string()))
+        } else if let Some(spec) = s.strip_prefix("python:") {
+            // Parse python:mode:path format
+            // Examples: python:embedded:/path/to/script.py or python:external:/path/to/script.py
+            let parts: Vec<&str> = spec.splitn(2, ':').collect();
+            if parts.len() != 2 {
+                return Err(anyhow!(
+                    "Invalid Python data source format. Use: python:embedded:<path> or python:external:<path>"
+                ));
+            }
+            let mode = parts[0].parse::<PythonExecutionMode>()?;
+            let path = parts[1].to_string();
+            Ok(DataSource::PythonScript { mode, path })
         } else {
             Err(anyhow!(
-                "Invalid data source format. Use: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, or file:<path>"
+                "Invalid data source format. Use: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, python:embedded:<path>, python:external:<path>, or file:<path>"
             ))
         }
     }
@@ -248,7 +267,7 @@ pub fn parse_data_line(
     Err(anyhow!("Invalid data format: could not parse as Vec<StationConfig> or legacy {{\"values\": [...]}} format"))
 }
 
-fn extract_values_from_station_configs(
+pub(crate) fn extract_values_from_station_configs(
     stations: &[StationConfig],
     station_id: u8,
     register_mode: RegisterMode,
