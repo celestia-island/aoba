@@ -500,7 +500,7 @@ async fn execute_step_group_with_retry(
 /// Capture screenshot from current TUI state
 async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
     match ctx.mode {
-        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(120, 40),
+        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(160, 50),
         ExecutionMode::DrillDown => {
             if let Some(sender) = ctx.ipc_sender.as_mut() {
                 let (content, _width, _height) =
@@ -630,7 +630,7 @@ async fn execute_single_step(
         let screen_content = match ctx.mode {
             ExecutionMode::ScreenCaptureOnly => {
                 // Use TestBackend directly
-                render_tui_to_string(120, 40)?
+                render_tui_to_string(160, 50)?
             }
             ExecutionMode::DrillDown => {
                 // Request screen from TUI process via IPC
@@ -690,6 +690,13 @@ async fn execute_single_step(
             } else if screen_content.contains(&expected_text) {
                 Ok(())
             } else {
+                // Log the actual screen content for debugging
+                log::error!("❌ Verification failed. Expected text not found: '{}'", expected_text);
+                log::error!("📺 Actual screen content:\n{}", screen_content);
+                log::error!("📏 Screen size: {} lines, {} chars total", 
+                    screen_content.lines().count(), 
+                    screen_content.len());
+                
                 Err(VerificationFailure::new(
                     expected_text.clone(),
                     Some("expected text not present on screen".to_string()),
