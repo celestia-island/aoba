@@ -54,6 +54,9 @@ async fn test_python_round(
     let temp_dir = std::env::temp_dir();
     let server_output = temp_dir.join(format!("server_python_output_{}.log", std::process::id()));
     let server_output_file = std::fs::File::create(&server_output)?;
+    
+    let server_stderr = temp_dir.join(format!("server_python_stderr_{}.log", std::process::id()));
+    let server_stderr_file = std::fs::File::create(&server_stderr)?;
 
     // Start master with Python script data source
     let mut master = std::process::Command::new(binary)
@@ -75,11 +78,22 @@ async fn test_python_round(
             data_source,
         ])
         .stdout(Stdio::from(server_output_file))
-        .stderr(Stdio::piped())
+        .stderr(Stdio::from(server_stderr_file))
         .spawn()?;
 
     // Wait for master to be ready and Python script to execute
-    wait_for_process_ready(&mut master, 3000).await?;
+    let ready_result = wait_for_process_ready(&mut master, 3000).await;
+    
+    // If failed to start, log stderr for debugging
+    if ready_result.is_err() {
+        if let Ok(stderr_content) = std::fs::read_to_string(&server_stderr) {
+            log::error!("❌ Master stderr:\n{}", stderr_content);
+        }
+        if let Ok(stdout_content) = std::fs::read_to_string(&server_output) {
+            log::error!("❌ Master stdout:\n{}", stdout_content);
+        }
+        ready_result?;
+    }
 
     // Poll slave to get data
     let client_output = std::process::Command::new(binary)
