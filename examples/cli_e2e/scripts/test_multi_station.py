@@ -7,6 +7,7 @@ Tests handling of multiple Modbus stations with different register types.
 import json
 import sys
 
+
 def main():
     # Define multiple stations with different register types
     stations = [
@@ -50,16 +51,18 @@ def main():
             }
         }
     ]
-    
+
     # Output JSON
     output = {
         "stations": stations,
         "reboot_interval": 1500
     }
-    
+
     print(json.dumps(output))
-    
-    sys.stderr.write(f"Multi-station script executed: {len(stations)} stations\n")
+
+    sys.stderr.write(
+        f"Multi-station script executed: {len(stations)} stations\n")
+
 
 if __name__ == "__main__":
     main()

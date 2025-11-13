@@ -7,6 +7,7 @@ Outputs a simple station configuration with holding registers.
 import json
 import sys
 
+
 def main():
     # Define a simple station configuration
     stations = [
@@ -24,18 +25,19 @@ def main():
             }
         }
     ]
-    
+
     # Output JSON
     output = {
         "stations": stations,
         "reboot_interval": 1000  # Execute every 1 second
     }
-    
+
     # Print to stdout (one line)
     print(json.dumps(output))
-    
+
     # Optional: Print debug info to stderr
     sys.stderr.write("Test script executed successfully\n")
+
 
 if __name__ == "__main__":
     main()

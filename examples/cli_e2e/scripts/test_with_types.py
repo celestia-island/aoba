@@ -28,6 +28,7 @@ except ImportError:
     print("Warning: aoba module not available (not in RustPython mode)")
     print("This script is intended to run in embedded mode")
 
+
 def main() -> None:
     """
     Main function demonstrating aoba module usage with type hints.
@@ -53,7 +54,8 @@ def main() -> None:
                     {
                         "address_start": 0,
                         "length": 8,
-                        "initial_values": [1, 0, 1, 0, 1, 0, 1, 0]  # Coils: 0 or 1
+                        # Coils: 0 or 1
+                        "initial_values": [1, 0, 1, 0, 1, 0, 1, 0]
                     }
                 ]
             }
@@ -72,10 +74,10 @@ def main() -> None:
             }
         }
     ]
-    
+
     # Convert to JSON string
     stations_json = json.dumps(stations)
-    
+
     # Call aoba functions - IDE will show:
     # - Function signature: push_stations(stations_json: str) -> None
     # - Docstring with parameter description
@@ -83,18 +85,19 @@ def main() -> None:
     # - Possible exceptions
     if 'aoba' in dir():
         aoba.push_stations(stations_json)
-        
+
         # Set reboot interval - IDE will show:
         # - Function signature: set_reboot_interval(interval_ms: int) -> None
         # - Valid range and recommendations from docstring
         aoba.set_reboot_interval(2000)  # 2 seconds
-        
+
         print("Station configuration pushed successfully")
         print(f"Configured {len(stations)} stations")
     else:
         # For testing/type checking outside RustPython
         print("DRY RUN MODE - Would push configuration:")
         print(json.dumps(stations, indent=2))
+
 
 if __name__ == "__main__":
     main()

@@ -38,6 +38,7 @@ Test script demonstrating multiple stations with different register types.
 Example script demonstrating IDE type hints and autocompletion with the aoba module.
 
 This script uses the `aoba.pyi` stub file to provide:
+
 - Type checking with mypy, pyright, etc.
 - IDE autocompletion in VSCode, PyCharm, etc.
 - Function signature hints
@@ -50,6 +51,7 @@ This script uses the `aoba.pyi` stub file to provide:
 Python type stub file that provides type hints and IDE support for the `aoba` module (available in RustPython embedded mode).
 
 The stub file includes:
+
 - `push_stations(stations_json: str) -> None`: Function signature with parameter types
 - `set_reboot_interval(interval_ms: int) -> None`: Function signature with parameter types
 - Comprehensive docstrings with parameter descriptions, return types, and exceptions
@@ -65,6 +67,7 @@ Marker file indicating this package supports type checking. This tells Python ty
 1. **Place aoba.pyi in your script directory**: The stub file should be in the same directory as your Python scripts or in your Python path.
 
 2. **Import the aoba module normally**:
+
    ```python
    import aoba
    ```
@@ -76,6 +79,7 @@ Marker file indicating this package supports type checking. This tells Python ty
    - Error highlighting for type mismatches
 
 4. **Type check your scripts**:
+
    ```bash
    mypy your_script.py
    ```
@@ -162,4 +166,3 @@ aoba --master-provide-persist /dev/ttyUSB0 \
 - Standard library only (no external dependencies required)
 - Optional: mypy for type checking (`pip install mypy`)
 - Optional: IDE with Python support (VSCode with Pylance, PyCharm, etc.)
-
