@@ -47,9 +47,16 @@ async fn main() -> Result<()> {
     }
 
     // One-shot actions (e.g., --list-ports). If handled, exit.
-    if actions::run_one_shot_actions(&matches) {
-        return Ok(());
-    }
+    // Note: Some one-shot actions (like MQTT-based master-provide) need to run in a blocking context
+    // because they use synchronous MQTT clients that create their own tokio runtime.
+    // We use spawn_blocking to avoid "runtime within runtime" panics.
+    let matches_clone = matches.clone();
+    tokio::task::spawn_blocking(move || {
+        if actions::run_one_shot_actions(&matches_clone) {
+            std::process::exit(0);
+        }
+    })
+    .await?;
 
     // If TUI requested, run in this process so it inherits the terminal.
     if matches.get_flag("tui") {

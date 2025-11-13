@@ -27,6 +27,8 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 expectrl.workspace = true
 tiny_http.workspace = true
 ureq.workspace = true
+rumqttc.workspace = true
+uuid.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 serialport.workspace = true
