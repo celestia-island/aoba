@@ -470,7 +470,15 @@ mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 [[workflow.simulate_data_feed_round1]]
 description = "Verify data appears on screen (partial)"
-verify = "0x0000 0x0001 0x0002 0x0003 0x0004 0x0005"
+verify = "    0x0000              0x0000 0x0001 0x0002 0x0003"
+
+[[workflow.simulate_data_feed_round1]]
+description = "Verify data on 0x0004 row (partial)"
+verify = "    0x0004              0x0004 0x0005 0x0006 0x0007"
+
+[[workflow.simulate_data_feed_round1]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0008 0x0009"
 
 [[workflow.simulate_data_feed_round1]]
 description = "Verify all register values in mock state"
@@ -488,9 +496,26 @@ description = "Verify data appears on screen (partial)"
 verify = "    0x0000              0x0009 0x0008 0x0007 0x0006"
 
 [[workflow.simulate_data_feed_round2]]
+description = "Verify data on 0x0004 row (partial)"
+verify = "    0x0004              0x0005 0x0004 0x0003 0x0002"
+
+[[workflow.simulate_data_feed_round2]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0001 0x0000"
+
+[[workflow.simulate_data_feed_round2]]
+description = "Verify data on 0x0004 row (partial)"
+verify = "    0x0004              0x0005 0x0004 0x0003 0x0002"
+
+[[workflow.simulate_data_feed_round2]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0001 0x0000"
+
+[[workflow.simulate_data_feed_round2]]
 description = "Verify all register values in mock state"
 mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+
 
 # Step 12: Simulate external data feed - Round 3 (Custom pattern)
 [[workflow.simulate_data_feed_round3]]
@@ -500,7 +525,14 @@ mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888
 
 [[workflow.simulate_data_feed_round3]]
 description = "Verify data appears on screen (partial)"
-verify = "0x1111 0x2222 0x3333 0x4444 0x5555 0x6666"
+verify = "    0x0000              0x1111 0x2222 0x3333 0x4444"
+
+[[workflow.simulate_data_feed_round3]]
+description = "Verify data on 0x0004 row (partial)"
+verify = "    0x0004              0x5555 0x6666 0x7777 0x8888"
+
+[[workflow.simulate_data_feed_round3]]
+description = "Verify data on 0x0008 row (partial)"
 
 [[workflow.simulate_data_feed_round3]]
 description = "Verify all register values in mock state"
