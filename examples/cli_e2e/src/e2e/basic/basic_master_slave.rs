@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use aoba::utils::{sleep_1s, sleep_3s};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
@@ -9,6 +8,7 @@ use std::{
 use crate::utils::{
     build_debug_bin, create_modbus_command, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
+use aoba::utils::{sleep_1s, sleep_3s};
 
 /// Test basic master-slave communication with virtual serial ports
 /// Server = Modbus Master (provides data, responds to requests) on port1

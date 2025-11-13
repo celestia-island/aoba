@@ -5,15 +5,15 @@
 use anyhow::{bail, Result};
 use std::{fmt, time::Duration};
 
-use aoba::utils::{sleep_1s, sleep_3s};
-
 use crate::{
     mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
     renderer::render_tui_to_string,
     retry_state_machine::{group_steps, is_verification_step, StepGroup},
     workflow::{Workflow, WorkflowStep},
 };
-use aoba::utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
+use aoba::utils::{
+    {sleep_1s, sleep_3s}, {E2EToTuiMessage, IpcChannelId, IpcSender},
+};
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

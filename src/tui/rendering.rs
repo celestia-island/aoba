@@ -4,8 +4,7 @@ use std::{io, sync::Arc, thread, time::Duration};
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
-use crate::tui::status::Status;
-use crate::utils::sleep_1s;
+use crate::{tui::status::Status, utils::sleep_1s};
 
 /// Render UI function that only reads from Status (immutable reference)
 fn render_ui(frame: &mut Frame) -> Result<()> {

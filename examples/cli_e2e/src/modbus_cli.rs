@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use aoba::utils::sleep_1s;
 use std::{
     fs::File,
     io::Write,
@@ -7,6 +6,7 @@ use std::{
 };
 
 use crate::utils::build_debug_bin;
+use aoba::utils::sleep_1s;
 
 /// Test slave listen temporary mode (single response)
 pub async fn test_slave_listen_temp() -> Result<()> {
