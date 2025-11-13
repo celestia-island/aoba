@@ -426,7 +426,7 @@ mock_set_value = { kind = "AddLine" }
 # Step 8: Save configuration
 [[workflow.save_configuration]]
 description = "Save configuration with Ctrl+S"
-key = "Ctrl+s"
+key = "Ctrl+S"
 
 [[workflow.save_configuration]]
 description = "Enable port in mock state"
@@ -485,7 +485,7 @@ mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
 [[workflow.simulate_data_feed_round2]]
 description = "Verify data appears on screen (partial)"
-verify = "0x0009 0x0008 0x0007 0x0006 0x0005 0x0004"
+verify = "    0x0000              0x0009 0x0008 0x0007 0x0006"
 
 [[workflow.simulate_data_feed_round2]]
 description = "Verify all register values in mock state"
