@@ -10,21 +10,53 @@ use aoba::cli::modbus::ModbusResponse;
 pub async fn test_python_script_data_source() -> Result<()> {
     log::info!("🧪 Testing Python script data source mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
-    let temp_dir = std::env::temp_dir();
 
     // Path to the Python script
-    let script_path =
-        std::path::Path::new("examples/tui_e2e/workflow/data_source/python_data_source.py");
+    let script_path = std::path::Path::new("scripts/modbus_data_source.py");
     let script_path = std::fs::canonicalize(script_path)?;
-    let script_path_str = script_path.to_str().unwrap();
+    let script_path_str = format!("python:{}", script_path.to_str().unwrap());
 
-    log::info!("🧪 Using Python script: {}", script_path_str);
+    log::info!("🧪 Using Python script data source: {}", script_path_str);
 
-    let server_output = temp_dir.join("server_python_output.log");
-    let server_output_file = std::fs::File::create(&server_output)?;
+    // Clean up counter file from previous runs
+    let counter_file = "/tmp/modbus_data_source_counter.txt";
+    let _ = std::fs::remove_file(counter_file);
 
     let binary = build_debug_bin("aoba")?;
-    let mut master = std::process::Command::new(&binary)
+    
+    // Round 1: Sequential 0-9
+    log::info!("🧪 Testing Round 1: Sequential 0-9");
+    let expected_round1 = vec![0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    test_python_round(&binary, &script_path_str, &ports, &expected_round1).await?;
+
+    // Round 2: Reverse 9-0
+    log::info!("🧪 Testing Round 2: Reverse 9-0");
+    let expected_round2 = vec![9u16, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+    test_python_round(&binary, &script_path_str, &ports, &expected_round2).await?;
+
+    // Round 3: Custom pattern
+    log::info!("🧪 Testing Round 3: Custom pattern");
+    let expected_round3 = vec![
+        0x1111u16, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA,
+    ];
+    test_python_round(&binary, &script_path_str, &ports, &expected_round3).await?;
+
+    log::info!("✅ Python script data source test completed successfully");
+    Ok(())
+}
+
+async fn test_python_round(
+    binary: &std::path::Path,
+    data_source: &str,
+    ports: &crate::utils::VcomMatchers,
+    expected: &[u16],
+) -> Result<()> {
+    let temp_dir = std::env::temp_dir();
+    let server_output = temp_dir.join(format!("server_python_output_{}.log", std::process::id()));
+    let server_output_file = std::fs::File::create(&server_output)?;
+
+    // Start master with Python script data source
+    let mut master = std::process::Command::new(binary)
         .arg("--enable-virtual-ports")
         .args([
             "--master-provide",
@@ -40,42 +72,16 @@ pub async fn test_python_script_data_source() -> Result<()> {
             "--baud-rate",
             "9600",
             "--data-source",
-            script_path_str,
+            data_source,
         ])
         .stdout(Stdio::from(server_output_file))
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // Wait for master to be ready with flexible waiting (minimum 3 seconds)
+    // Wait for master to be ready and Python script to execute
     wait_for_process_ready(&mut master, 3000).await?;
 
-    // Round 1: Sequential 0-9
-    log::info!("🧪 Testing Round 1: Sequential 0-9");
-    let expected_round1 = vec![0u16, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    test_python_round(binary.to_str().unwrap(), &ports, &expected_round1).await?;
-
-    // Round 2: Reverse 9-0
-    log::info!("🧪 Testing Round 2: Reverse 9-0");
-    let expected_round2 = vec![9u16, 8, 7, 6, 5, 4, 3, 2, 1, 0];
-    test_python_round(binary.to_str().unwrap(), &ports, &expected_round2).await?;
-
-    // Round 3: Custom pattern
-    log::info!("🧪 Testing Round 3: Custom pattern");
-    let expected_round3 = vec![
-        0x1111u16, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA,
-    ];
-    test_python_round(binary.to_str().unwrap(), &ports, &expected_round3).await?;
-
-    master.kill()?;
-    log::info!("✅ Python script data source test completed successfully");
-    Ok(())
-}
-
-async fn test_python_round(
-    binary: &str,
-    ports: &crate::utils::VcomMatchers,
-    expected: &[u16],
-) -> Result<()> {
+    // Poll slave to get data
     let client_output = std::process::Command::new(binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -99,6 +105,9 @@ async fn test_python_round(
         .stderr(Stdio::piped())
         .spawn()?
         .wait_with_output()?;
+
+    // Kill master for this round
+    master.kill()?;
 
     if !client_output.status.success() {
         let stderr = String::from_utf8_lossy(&client_output.stderr);

@@ -1,7 +1,7 @@
 # Data Source - Python Script Mode
 # Test ID: data_source_python_script
 # Station: ID=1, Type=Holding, Address=0x0000, Length=10
-# Data Source: Python Script with path examples/tui_e2e/workflow/data_source/python_data_source.py
+# Data Source: Python Script with path scripts/modbus_data_source.py
 #
 # Test Focus:
 # - Configure master station with Python script data source
