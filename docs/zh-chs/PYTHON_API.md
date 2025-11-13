@@ -314,6 +314,118 @@ python3 /path/to/script.py 2>&1 | grep -i error
 
 ## 故障排除
 
+### 脚本未执行
+
+1. **外部模式**：验证 Python 已安装并在 PATH 中
+   ```bash
+   which python3  # Unix
+   Get-Command python3  # Windows
+   ```
+
+2. **嵌入模式**：检查 RustPython 兼容性
+   - RustPython 0.4 可能不支持某些 Python 功能
+   - 使用外部模式以获得完整的 Python 兼容性
+
+### 无效的 JSON 输出
+
+- 确保 JSON 输出到 stdout，而不是 stderr
+- 使用 `json.dumps()` 生成有效的 JSON
+- 避免额外的 print 语句污染 JSON 输出
+
+### 类型检查错误
+
+如果使用 `aoba.pyi` 存根文件：
+- 确保 `aoba.pyi` 和 `py.typed` 与脚本在同一目录
+- 使用 try/except ImportError 处理 aoba 模块不可用的情况
+- 运行 `mypy your_script.py` 验证类型
+
+## IDE 支持和类型提示
+
+### 类型存根文件
+
+aoba 模块（在 RustPython 嵌入模式中可用）包含用于 IDE 支持的类型存根文件：
+
+- **`aoba.pyi`**：Python 类型存根文件，包含函数签名、参数类型和文档字符串
+- **`py.typed`**：标记文件，表示该包支持类型检查
+
+### 优势
+
+使用这些存根文件，您的 IDE 将提供：
+
+1. **自动补全**：函数名称和参数
+2. **类型检查**：使用 mypy、pyright 等进行静态类型分析
+3. **内联文档**：函数文档字符串和参数描述
+4. **错误检测**：在运行前高亮显示类型不匹配
+
+### 设置
+
+1. 将 `aoba.pyi` 和 `py.typed` 复制到您的脚本目录：
+   ```bash
+   cp examples/cli_e2e/scripts/aoba.pyi /path/to/your/scripts/
+   cp examples/cli_e2e/scripts/py.typed /path/to/your/scripts/
+   ```
+
+2. 正常导入 aoba 模块：
+   ```python
+   import aoba
+   ```
+
+3. 您的 IDE 现在将显示类型提示和文档！
+
+### 类型提示示例
+
+```python
+import json
+import aoba
+
+# IDE 显示：push_stations(stations_json: str) -> None
+# 悬停时显示带有参数详细信息的文档字符串
+stations = [{
+    "id": 1,
+    "mode": "master",
+    "map": {
+        "holding": [{
+            "address_start": 0,
+            "length": 10,
+            "initial_values": [100, 200, 300]
+        }]
+    }
+}]
+
+# 类型检查：确保 stations_json 是字符串
+aoba.push_stations(json.dumps(stations))
+
+# IDE 显示：set_reboot_interval(interval_ms: int) -> None
+# 类型检查：确保 interval_ms 是整数
+aoba.set_reboot_interval(1000)
+```
+
+### 使用 mypy 进行类型检查
+
+```bash
+# 安装 mypy
+pip install mypy
+
+# 类型检查您的脚本
+mypy your_script.py
+
+# 示例输出：
+# your_script.py:10: error: Argument 1 to "push_stations" has incompatible type "dict"; expected "str"
+# Found 1 error in 1 file (checked 1 source file)
+```
+
+### 支持的 IDE
+
+类型存根文件适用于：
+- **VSCode** with Pylance 扩展
+- **PyCharm**（专业版和社区版）
+- **Sublime Text** with LSP-pyright
+- **Vim/Neovim** with coc-pyright 或 vim-lsp
+- **Emacs** with lsp-pyright
+- 任何支持 Python 语言服务器的编辑器
+
+## 故障排除
+
 ### 找不到脚本
 
 确保脚本路径是绝对路径且文件存在：

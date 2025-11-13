@@ -314,6 +314,118 @@ python3 /path/to/script.py 2>&1 | grep -i error
 
 ## Troubleshooting
 
+### Script Not Executing
+
+1. **External Mode**: Verify Python is installed and in PATH
+   ```bash
+   which python3  # Unix
+   Get-Command python3  # Windows
+   ```
+
+2. **Embedded Mode**: Check RustPython compatibility
+   - Some Python features may not be supported in RustPython 0.4
+   - Use external mode for full Python compatibility
+
+### Invalid JSON Output
+
+- Ensure JSON is printed to stdout, not stderr
+- Use `json.dumps()` to generate valid JSON
+- Avoid extra print statements that would corrupt JSON output
+
+### Type Checking Errors
+
+If using the `aoba.pyi` stub file:
+- Ensure `aoba.pyi` and `py.typed` are in the same directory as your script
+- Use try/except ImportError to handle when aoba module is not available
+- Run `mypy your_script.py` to validate types
+
+## IDE Support and Type Hints
+
+### Type Stub Files
+
+The aoba module (available in RustPython embedded mode) includes type stub files for IDE support:
+
+- **`aoba.pyi`**: Python type stub file with function signatures, parameter types, and docstrings
+- **`py.typed`**: Marker file indicating the package supports type checking
+
+### Benefits
+
+With these stub files, your IDE will provide:
+
+1. **Autocompletion**: Function names and parameters
+2. **Type Checking**: Static type analysis with mypy, pyright, etc.
+3. **Inline Documentation**: Function docstrings and parameter descriptions
+4. **Error Detection**: Type mismatches highlighted before runtime
+
+### Setup
+
+1. Copy `aoba.pyi` and `py.typed` to your script directory:
+   ```bash
+   cp examples/cli_e2e/scripts/aoba.pyi /path/to/your/scripts/
+   cp examples/cli_e2e/scripts/py.typed /path/to/your/scripts/
+   ```
+
+2. Import the aoba module normally:
+   ```python
+   import aoba
+   ```
+
+3. Your IDE will now show type hints and documentation!
+
+### Example with Type Hints
+
+```python
+import json
+import aoba
+
+# IDE shows: push_stations(stations_json: str) -> None
+# Hovering shows the docstring with parameter details
+stations = [{
+    "id": 1,
+    "mode": "master",
+    "map": {
+        "holding": [{
+            "address_start": 0,
+            "length": 10,
+            "initial_values": [100, 200, 300]
+        }]
+    }
+}]
+
+# Type checked: ensures stations_json is a string
+aoba.push_stations(json.dumps(stations))
+
+# IDE shows: set_reboot_interval(interval_ms: int) -> None
+# Type checked: ensures interval_ms is an integer
+aoba.set_reboot_interval(1000)
+```
+
+### Type Checking with mypy
+
+```bash
+# Install mypy
+pip install mypy
+
+# Type check your script
+mypy your_script.py
+
+# Example output:
+# your_script.py:10: error: Argument 1 to "push_stations" has incompatible type "dict"; expected "str"
+# Found 1 error in 1 file (checked 1 source file)
+```
+
+### Supported IDEs
+
+The type stub files work with:
+- **VSCode** with Pylance extension
+- **PyCharm** (Professional and Community)
+- **Sublime Text** with LSP-pyright
+- **Vim/Neovim** with coc-pyright or vim-lsp
+- **Emacs** with lsp-pyright
+- Any editor with Python Language Server support
+
+## Troubleshooting
+
 ### Script not found
 
 Make sure the script path is absolute and the file exists:
