@@ -5,26 +5,14 @@ This script uses the aoba module to push station configurations.
 The script cycles through three test patterns on each execution.
 """
 
-try:
-    import aoba
-except ImportError:
-    # For testing outside RustPython, simulate aoba module
-    class MockAoba:
-        @staticmethod
-        def push_stations(json_str):
-            print(f"[Mock] push_stations called with: {json_str}")
-        
-        @staticmethod
-        def set_reboot_interval(ms):
-            print(f"[Mock] set_reboot_interval called with: {ms}")
-    
-    aoba = MockAoba()
+import aoba
 
 # State management using a simple counter file
 # This allows us to cycle through rounds on each execution
 import os
 tempdir = "/tmp"
 counter_file = os.path.join(tempdir, "modbus_data_source_counter.txt")
+
 
 def get_round_number():
     """Get current round number from counter file."""
@@ -34,9 +22,10 @@ def get_round_number():
                 count = int(f.read().strip())
                 # Cycle through rounds 1, 2, 3
                 return ((count % 3) + 1)
-        except:
+        except (IOError, ValueError):
             pass
     return 1
+
 
 def increment_counter():
     """Increment the counter for next execution."""
@@ -45,11 +34,12 @@ def increment_counter():
         try:
             with open(counter_file, 'r') as f:
                 current = int(f.read().strip())
-        except:
+        except (IOError, ValueError):
             pass
-    
+
     with open(counter_file, 'w') as f:
         f.write(str(current + 1))
+
 
 # Get current round
 round_num = get_round_number()
@@ -63,7 +53,8 @@ elif round_num == 2:
     values = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 else:  # round_num == 3
     # Round 3: Custom pattern
-    values = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+    values = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555,
+              0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
 # Create station configuration JSON
 stations_json = f'''[
