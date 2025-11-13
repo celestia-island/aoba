@@ -155,7 +155,7 @@ description = "Confirm Data Source Kind"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Verify IPC Pipe data source is selected"
+description = "Verify Python Module data source is selected"
 verify = "Python Module"
 
 [[workflow.configure_data_source]]
@@ -172,9 +172,9 @@ description = "Enter edit mode for data source path"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Type IPC pipe path"
+description = "Type Python script path (relative to working directory)"
 input = "string"
-value = "/tmp/test_python_script"
+value = "scripts/modbus_data_source.py"
 
 [[workflow.configure_data_source]]
 description = "Confirm data source path"
@@ -183,11 +183,11 @@ key = "Enter"
 [[workflow.configure_data_source]]
 description = "Update data source path in mock state"
 mock_path = "$.ports['/tmp/vcom1'].master_source.path"
-mock_set_value = "/tmp/test_python_script"
+mock_set_value = "scripts/modbus_data_source.py"
 
 [[workflow.configure_data_source]]
 description = "Verify data source path is shown"
-verify = "/tmp/test_python_script"
+verify = "scripts/modbus_data_source.py"
 
 # Step 6: Create station
 [[workflow.create_station]]
@@ -460,7 +460,7 @@ mock_verify_value = { type = "occupied_by_this" }
 [[workflow.verify_port_enabled]]
 description = "Verify data source configuration"
 mock_verify_path = "$.ports['/tmp/vcom1'].master_source"
-mock_verify_value = { type = "python_module", path = "/tmp/test_python_script" }
+mock_verify_value = { type = "python_module", path = "scripts/modbus_data_source.py" }
 
 # Step 10: Simulate external data feed - Round 1 (Sequential: 0-9)
 [[workflow.simulate_data_feed_round1]]
