@@ -101,10 +101,9 @@ pub enum DataSource {
     Manual,
     File(String),
     Pipe(String),
-    TransparentForward(String), // port name
-    MqttServer(String),         // URL
-    HttpServer(String),         // URL
-    IpcPipe(String),            // pipe path
+    MqttServer(String), // URL
+    HttpServer(u16),    // Port
+    IpcPipe(String),    // pipe path
 }
 
 impl std::str::FromStr for DataSource {
@@ -117,21 +116,21 @@ impl std::str::FromStr for DataSource {
             Ok(DataSource::File(path.to_string()))
         } else if let Some(name) = s.strip_prefix("pipe:") {
             Ok(DataSource::Pipe(name.to_string()))
-        } else if let Some(port) = s.strip_prefix("transparent:") {
-            Ok(DataSource::TransparentForward(port.to_string()))
         } else if let Some(url) = s.strip_prefix("mqtt://") {
             Ok(DataSource::MqttServer(format!("mqtt://{}", url)))
         } else if let Some(url) = s.strip_prefix("mqtts://") {
             Ok(DataSource::MqttServer(format!("mqtts://{}", url)))
-        } else if let Some(url) = s.strip_prefix("http://") {
-            Ok(DataSource::HttpServer(format!("http://{}", url)))
-        } else if let Some(url) = s.strip_prefix("https://") {
-            Ok(DataSource::HttpServer(format!("https://{}", url)))
+        } else if let Some(port_str) = s.strip_prefix("http://") {
+            // Parse port number from http://PORT format
+            let port: u16 = port_str.parse().map_err(|_| {
+                anyhow!("Invalid HTTP port number. Use: http://<port> (e.g., http://8080)")
+            })?;
+            Ok(DataSource::HttpServer(port))
         } else if let Some(path) = s.strip_prefix("ipc:") {
             Ok(DataSource::IpcPipe(path.to_string()))
         } else {
             Err(anyhow!(
-                "Invalid data source format. Use: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, or file:<path>"
+                "Invalid data source format. Use: manual, mqtt://<url>, http://<port>, ipc:<path>, or file:<path>"
             ))
         }
     }
@@ -355,4 +354,59 @@ pub fn extract_values_from_storage(
     }
 
     Ok(values)
+}
+
+/// Build a StationConfig snapshot by reading current values from `storage`.
+///
+/// This clones the provided `station` and replaces each `RegisterRange`'s
+/// `initial_values` with the values read from `storage` for that range.
+pub fn build_station_snapshot_from_storage(
+    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    station: &crate::protocol::status::types::modbus::StationConfig,
+) -> Result<crate::protocol::status::types::modbus::StationConfig> {
+    use crate::protocol::status::types::modbus::RegisterMode;
+
+    let mut sc = station.clone();
+
+    for range in sc.map.holding.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::Holding,
+        )?;
+        range.initial_values = vals;
+    }
+
+    for range in sc.map.coils.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::Coils,
+        )?;
+        range.initial_values = vals;
+    }
+
+    for range in sc.map.discrete_inputs.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::DiscreteInputs,
+        )?;
+        range.initial_values = vals;
+    }
+
+    for range in sc.map.input.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::Input,
+        )?;
+        range.initial_values = vals;
+    }
+
+    Ok(sc)
 }

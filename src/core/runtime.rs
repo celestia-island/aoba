@@ -9,6 +9,7 @@ use super::{
     bus::{CoreToUi, UiToCore},
     subprocess::{CliSubprocessConfig, SubprocessManager},
 };
+use crate::utils::sleep::sleep_1s;
 
 /// Configuration for the core runtime
 pub struct CoreRuntimeConfig {
@@ -72,7 +73,7 @@ pub struct RuntimeStartConfig {
 /// - Managing CLI subprocesses
 /// - Polling IPC messages
 /// - Periodic port scanning
-pub fn run_core_thread<C: CoreContext>(
+pub async fn run_core_thread<C: CoreContext>(
     ui_rx: flume::Receiver<UiToCore>,
     core_tx: flume::Sender<CoreToUi>,
     input_kill_tx: flume::Sender<()>,
@@ -241,6 +242,7 @@ pub fn run_core_thread<C: CoreContext>(
             .send(CoreToUi::Tick)
             .map_err(|err| anyhow!("Failed to send Tick: {err}"))?;
 
-        std::thread::sleep(Duration::from_millis(50));
+        // Use async sleep instead of blocking sleep
+        sleep_1s().await;
     }
 }

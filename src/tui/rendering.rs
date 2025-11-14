@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
-use std::{io, sync::Arc, thread, time::Duration};
+use std::{io, sync::Arc, time::Duration};
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
-use crate::{tui::status::Status, utils::sleep_1s};
+use crate::{core::task_manager::spawn_task, tui::status::Status, utils::sleep_1s};
 
 /// Render UI function that only reads from Status (immutable reference)
 fn render_ui(frame: &mut Frame) -> Result<()> {
@@ -233,11 +233,11 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
 
     let (input_kill_tx, _input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_handle = thread::spawn({
+    let core_task = spawn_task({
         let core_tx = core_tx.clone();
         let ui_rx = ui_rx.clone();
 
-        move || crate::tui::runtime::run_core_thread(ui_rx, core_tx, input_kill_tx)
+        async move { crate::tui::runtime::run_core_thread(ui_rx, core_tx, input_kill_tx).await }
     });
 
     let ipc_channel_id = crate::utils::IpcChannelId(channel_id.to_string());
@@ -329,9 +329,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
 
     log::info!("🧹 Cleaning up IPC mode");
     ui_tx.send(crate::core::bus::UiToCore::Quit)?;
-    core_handle
-        .join()
-        .map_err(|err| anyhow!("Failed to join core thread: {err:?}"))??;
+    let _ = core_task.await;
 
     Ok(())
 }

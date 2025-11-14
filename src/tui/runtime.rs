@@ -8,6 +8,7 @@ use crate::{
     core::{
         bus::{Bus, CoreToUi, UiToCore},
         subprocess::{CliSubprocessConfig, SubprocessManager},
+        task_manager::spawn_task,
     },
     protocol::status::{
         debug_dump::{enable_debug_dump, start_status_dump_thread},
@@ -18,11 +19,12 @@ use crate::{
         ipc::handle_cli_ipc_message,
         logs::*,
         status::{
+            self as types,
             port::{PortConfig, PortData, PortState, PortStatusIndicator, PortSubprocessInfo},
-            {self as types, Status, TuiStatus},
+            Status, TuiStatus,
         },
     },
-    utils::i18n::lang,
+    utils::{i18n::lang, sleep::sleep_1s},
 };
 
 /// Helper function to get stations configuration from TUI status
@@ -36,6 +38,9 @@ fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
         }
     })
 }
+
+// Named constant for initial stations send retries to avoid magic numbers
+const INITIAL_STATIONS_SEND_RETRIES: usize = 3;
 
 pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
@@ -66,12 +71,16 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
         let dump_path = PathBuf::from("/tmp/ci_tui_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
-        start_status_dump_thread(dump_path, Some(shutdown_signal_clone), || {
-            TuiStatus::from_global_status().and_then(|status| {
-                serde_json::to_string_pretty(&status)
-                    .map_err(|e| anyhow!("Failed to serialize TUI status: {e}"))
-            })
-        });
+        start_status_dump_thread(
+            dump_path,
+            Some(shutdown_signal_clone),
+            std::sync::Arc::new(|| {
+                TuiStatus::from_global_status().and_then(|status| {
+                    serde_json::to_string_pretty(&status)
+                        .map_err(|e| anyhow!("Failed to serialize TUI status: {e}"))
+                })
+            }),
+        );
 
         Some(shutdown_signal)
     } else {
@@ -149,13 +158,17 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_handle = thread::spawn({
+    let core_task = spawn_task({
         let core_tx = core_tx.clone();
         let thr_tx = thr_tx.clone();
         let ui_rx = ui_rx.clone();
         let input_kill_tx = input_kill_tx.clone();
 
-        move || thr_tx.send(run_core_thread(ui_rx, core_tx, input_kill_tx))
+        async move {
+            let res = run_core_thread(ui_rx, core_tx, input_kill_tx).await;
+            thr_tx.send(res)?;
+            Ok(())
+        }
     });
 
     let input_handle = thread::spawn({
@@ -179,9 +192,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
         }
     }
 
-    core_handle
-        .join()
-        .map_err(|err| anyhow!("Failed to join core thread: {err:?}"))??;
+    let _ = core_task.await;
     render_handle
         .join()
         .map_err(|err| anyhow!("Failed to join render thread: {err:?}"))??;
@@ -199,7 +210,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn run_core_thread(
+pub async fn run_core_thread(
     ui_rx: flume::Receiver<UiToCore>,
     core_tx: flume::Sender<CoreToUi>,
     input_kill_tx: flume::Sender<()>,
@@ -304,7 +315,8 @@ pub fn run_core_thread(
                         &port_name,
                         &mut subprocess_manager,
                         &core_tx,
-                    )?;
+                    )
+                    .await?;
                 }
                 UiToCore::RestartRuntime(port_name) => {
                     log::info!("RestartRuntime requested for {port_name}");
@@ -313,7 +325,8 @@ pub fn run_core_thread(
                         &port_name,
                         &mut subprocess_manager,
                         &core_tx,
-                    )?;
+                    )
+                    .await?;
                 }
                 UiToCore::SendRegisterUpdate {
                     port_name,
@@ -400,11 +413,11 @@ pub fn run_core_thread(
         core_tx
             .send(CoreToUi::Tick)
             .map_err(|err| anyhow!("failed to send Tick: {err}"))?;
-        thread::sleep(Duration::from_millis(50));
+        sleep_1s().await;
     }
 }
 
-fn restart_runtime(
+async fn restart_runtime(
     label: &str,
     port_name: &str,
     subprocess_manager: &mut SubprocessManager,
@@ -457,7 +470,7 @@ fn restart_runtime(
     }
 
     // Start the new subprocess
-    start_runtime(label, port_name, subprocess_manager, core_tx)?;
+    start_runtime(label, port_name, subprocess_manager, core_tx).await?;
 
     Ok(())
 }
@@ -513,7 +526,7 @@ fn stop_runtime(
     Ok(false)
 }
 
-fn start_runtime(
+async fn start_runtime(
     label: &str,
     port_name: &str,
     subprocess_manager: &mut SubprocessManager,
@@ -607,7 +620,7 @@ fn start_runtime(
 
                             log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
                             let mut stations_sent = false;
-                            for attempt in 1..=10 {
+                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
                                 match subprocess_manager.send_stations_update_for_port(
                                     port_name,
                                     get_stations_from_status,
@@ -616,8 +629,8 @@ fn start_runtime(
                                         stations_sent = true;
                                         break;
                                     }
-                                    Err(_err) if attempt < 10 => {
-                                        thread::sleep(Duration::from_millis(200));
+                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
+                                        sleep_1s().await;
                                     }
                                     Err(err) => {
                                         log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
@@ -697,7 +710,7 @@ fn start_runtime(
 
                             log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
                             let mut stations_sent = false;
-                            for attempt in 1..=10 {
+                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
                                 match subprocess_manager.send_stations_update_for_port(
                                     port_name,
                                     get_stations_from_status,
@@ -706,8 +719,8 @@ fn start_runtime(
                                         stations_sent = true;
                                         break;
                                     }
-                                    Err(_err) if attempt < 10 => {
-                                        thread::sleep(Duration::from_millis(200));
+                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
+                                        sleep_1s().await;
                                     }
                                     Err(err) => {
                                         log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");

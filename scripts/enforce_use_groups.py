@@ -137,12 +137,12 @@ def classify_use(path: Optional[str], workspace_crates: set[str]) -> int:
         token = token[4:].strip()
     if token.startswith("use "):
         token = token[4:].strip()
-    if token.startswith(("crate::", "self::", "super::")):
+    if token.startswith(("crate::", "self::", "super::", "_main::")):
         return 3
     if token.startswith("::"):
         token = token.lstrip(":")
     base = re.split(r"::|,|\s|{", token, maxsplit=1)[0]
-    if base in ("crate", "self", "super"):
+    if base in ("crate", "self", "super", "_main"):
         return 3
     if base in workspace_crates:
         return 3
