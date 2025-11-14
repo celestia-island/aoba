@@ -1,0 +1,273 @@
+# Data Source - MQTT Client Mode
+# Test ID: data_source_mqtt_client
+# Station: ID=1, Type=Holding, Address=0x0000, Length=10
+# Data Source: MQTT Client with URL mqtt://localhost:1883/topic
+#
+# Test Focus:
+# - Configure master station with MQTT client data source
+# - Verify data source configuration in mock state
+# - Simulate external MQTT messages feeding data
+# - Verify data appears correctly on screen (3 rounds)
+
+[manifest]
+id = "data_source_mqtt_client"
+description = "Master mode with MQTT client data source"
+station_id = 1
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+mode = "master"
+
+init_order = [
+  "navigate_to_entry",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "configure_data_source",
+  "create_station",
+  "configure_station_fields",
+  "save_configuration",
+  "verify_port_enabled",
+  "simulate_data_feed_round1",
+]
+
+recycle_order = ["simulate_data_feed_round2", "simulate_data_feed_round3"]
+
+[[workflow.navigate_to_entry]]
+description = "Initialize mock state for entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.navigate_to_entry]]
+description = "Ensure entry page port order"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.navigate_to_entry]]
+description = "Initial navigation to entry page"
+verify = "/tmp/vcom1"
+
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom2"
+
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected port to enter config panel"
+key = "Enter"
+
+[[workflow.enter_config_panel]]
+description = "Switch mock state to config panel"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.enter_config_panel]]
+description = "Set config panel cursor to EnablePort"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "EnablePort"
+
+[[workflow.enter_config_panel]]
+verify = "Enable Port"
+
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration menu item"
+key = "Down"
+times = 2
+
+[[workflow.navigate_to_business_config]]
+description = "Highlight Business Configuration entry"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "ProtocolConfig"
+
+[[workflow.navigate_to_business_config]]
+verify = "Enter Business Configuration"
+
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "Enter"
+
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.enter_modbus_panel]]
+verify = "ModBus Master/Slave Set"
+
+[[workflow.configure_data_source]]
+description = "Navigate down from AddLine to ModbusMode"
+key = "Down"
+
+[[workflow.configure_data_source]]
+description = "Update cursor to ModbusMode"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "ModbusMode" }
+
+[[workflow.configure_data_source]]
+description = "Verify ModbusMode field is shown"
+verify = "Connection Mode"
+
+[[workflow.configure_data_source]]
+description = "Navigate down from ModbusMode to MasterSourceKind"
+key = "Down"
+
+[[workflow.configure_data_source]]
+description = "Update cursor to MasterSourceKind"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "MasterSourceKind" }
+
+[[workflow.configure_data_source]]
+description = "Verify Data Source field is shown"
+verify = "Data Source"
+
+[[workflow.configure_data_source]]
+description = "Enter edit mode for Data Source Kind"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Cycle to MqttServer (Manual->MqttServer)"
+key = "Char(m)"
+
+[[workflow.configure_data_source]]
+description = "Initialize data source in mock state to MqttServer"
+mock_path = "$.ports['/tmp/vcom1'].master_source"
+mock_set_value = { type = "mqtt_server", url = "mqtt://localhost:1883/topic" }
+
+[[workflow.configure_data_source]]
+description = "Confirm Data Source Kind"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Verify MQTT data source is selected"
+verify = "MQTT Topic"
+
+[[workflow.configure_data_source]]
+description = "Enter edit mode for data source value"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Type MQTT url"
+input = "text"
+value = "mqtt://localhost:1883/topic"
+
+[[workflow.configure_data_source]]
+description = "Confirm data source url"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Update data source url in mock state"
+mock_path = "$.ports['/tmp/vcom1'].master_source.url"
+mock_set_value = "mqtt://localhost:1883/topic"
+
+[[workflow.configure_data_source]]
+description = "Verify data source url is shown"
+verify = "localhost:1883"
+
+[[workflow.create_station]]
+description = "Navigate down to AddLine (station creation)"
+key = "Down"
+
+[[workflow.create_station]]
+description = "Update cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.create_station]]
+description = "Press Enter on 'Create Station' to create new station"
+key = "Enter"
+
+[[workflow.create_station]]
+description = "Initialize master station structure with empty registers"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
+mock_set_value = [
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+]
+
+[[workflow.create_station]]
+description = "Focus cursor on station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.create_station]]
+verify = "#1 - ID: 1"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+a"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type station ID value 1"
+input = "decimal"
+value = 1
+
+[[workflow.configure_station_fields]]
+description = "Confirm Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Station ID in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
+mock_set_value = 1
+
+[[workflow.configure_station_fields]]
+description = "Return to top with Ctrl+PageUp"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station_fields]]
+description = "Jump to ModbusMode with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceKind with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceValue with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to station with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Move to Register Type field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Register Type"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Keep Holding register type (default)"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Verify Register Type is correctly set"
+verify = "Register Type         Holding Registers(03)"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Type in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_type"
+mock_set_value = "Holding"
