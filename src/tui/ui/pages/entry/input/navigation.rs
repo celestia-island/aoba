@@ -85,10 +85,34 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
-        // Support for About (A key) and Refresh (R key) shortcuts
+        // Support for About (A key)
         KeyCode::Char('a') | KeyCode::Char('A') => {
             write_status(|status| {
                 status.page = Page::About { view_offset: 0 };
+                Ok(())
+            })?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+        }
+        // Support for New (N key) - placeholder for port creation
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            log::info!("New port creation requested - feature not yet fully implemented");
+            write_status(|status| {
+                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                    message: "Port creation is not yet implemented. Use system tools or --check-port to add ports.".to_string(),
+                    timestamp: chrono::Local::now(),
+                });
+                Ok(())
+            })?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+        }
+        // Support for Delete (D key) - placeholder for port deletion
+        KeyCode::Char('d') | KeyCode::Char('D') => {
+            log::info!("Port deletion requested - feature not yet fully implemented");
+            write_status(|status| {
+                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                    message: "Port deletion is not yet implemented. Ports are managed by the system.".to_string(),
+                    timestamp: chrono::Local::now(),
+                });
                 Ok(())
             })?;
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
