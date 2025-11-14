@@ -1,7 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use bytes::Bytes;
 use chrono::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use serialport::SerialPort;
 
@@ -55,9 +56,7 @@ pub async fn read_modbus_frame(
     // Acquire serial lock once for the duration of this read operation. This avoids
     // interleaved lock/unlock cycles which can split incoming data across reads
     // in a way that appears to reorder bytes from the caller's perspective.
-    let mut guard = usbtty
-        .lock()
-        .map_err(|err| anyhow!("Failed to lock USBTTY port: {err}"))?;
+    let mut guard = usbtty.lock().await;
 
     // Step 1: read minimal 2 bytes (slave id + function)
     while collected.len() < 2 {
