@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use aoba::utils::sleep::sleep_1s;
+use _main::utils::sleep::sleep_1s;
 
 /// Platform-specific default port names as constants
 #[cfg(windows)]

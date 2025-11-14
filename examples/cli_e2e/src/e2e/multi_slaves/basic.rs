@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::process::{Command, Stdio};
 
 use crate::utils::build_debug_bin;
-use aoba::{
+use _main::{
     cli::config::{
         CommunicationMethod, CommunicationParams, ModbusBootConfig, PersistenceMode, RegisterMap,
         RegisterRange, StationConfig, StationMode,

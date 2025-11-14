@@ -9,7 +9,7 @@ use serde_json::{json, Map, Value};
 use serde_json_path::JsonPath;
 use std::sync::Mutex;
 
-use aoba::tui::status::{self, TuiStatus};
+use _main::tui::status::{self, TuiStatus};
 
 /// Global mock state storage
 static MOCK_STATE: Lazy<Mutex<Value>> = Lazy::new(|| {

@@ -7,7 +7,7 @@ use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
 };
-use aoba::{
+use _main::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
     utils::{sleep_1s, sleep_3s},

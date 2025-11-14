@@ -32,5 +32,6 @@ uuid.workspace = true
 [target.'cfg(windows)'.dependencies]
 serialport.workspace = true
 
-[dependencies.aoba]
+[dependencies._main]
 path = "../.."
+package = "aoba"

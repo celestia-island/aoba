@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use aoba::{
     cli::{self, actions, cleanup},
-    init_common, start_tui,
+    init_common,
+    protocol::tty::enable_virtual_port_hint,
+    start_tui,
 };
 
 #[tokio::main]
@@ -17,7 +19,7 @@ async fn main() -> Result<()> {
     init_common();
 
     if matches.get_flag("enable-virtual-ports") {
-        aoba::protocol::tty::enable_virtual_port_hint();
+        enable_virtual_port_hint();
         log::info!("🔌 Virtual VCOM port detection enabled");
     }
 

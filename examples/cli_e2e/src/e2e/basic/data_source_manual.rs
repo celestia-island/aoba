@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::utils::{build_debug_bin, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2};
-use aoba::{
+use _main::{
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
     utils::sleep_3s,
 };

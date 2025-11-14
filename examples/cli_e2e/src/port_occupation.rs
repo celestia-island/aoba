@@ -74,7 +74,7 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
             .enable_time()
             .build()
             .expect("failed to build runtime for test sleep");
-        rt.block_on(async { aoba::utils::sleep::sleep_3s().await });
+        rt.block_on(async { _main::utils::sleep::sleep_3s().await });
     }
 
     // Check while occupied
@@ -176,7 +176,7 @@ pub fn test_port_occupation_detection_linux(port1: &str, port2: &str) -> Result<
             .enable_time()
             .build()
             .expect("failed to build runtime for test sleep");
-        rt.block_on(async { aoba::utils::sleep::sleep_3s().await });
+        rt.block_on(async { _main::utils::sleep::sleep_3s().await });
     }
     log::info!("✅ Slave process started (PID: {})", slave_process.id());
 
@@ -227,7 +227,7 @@ pub fn test_port_occupation_detection_linux(port1: &str, port2: &str) -> Result<
             .enable_time()
             .build()
             .expect("failed to build runtime for test sleep");
-        rt.block_on(async { aoba::utils::sleep::sleep_3s().await });
+        rt.block_on(async { _main::utils::sleep::sleep_3s().await });
     }
 
     let check5 = Command::new(&bin_path)

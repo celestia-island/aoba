@@ -50,16 +50,16 @@ mod workflow;
 
 pub use executor::*;
 
-// IPC types are imported directly from `aoba::utils`; `ipc` module was removed.
-// If you need IPC types, use `use aoba::utils::...` where required.
+// IPC types are imported directly from `_main::utils`; `ipc` module was removed.
+// If you need IPC types, use `use _main::utils::...` where required.
 // public use ipc::*;
 pub use mock_state::*;
 pub use parser::*;
 pub use renderer::*;
 pub use workflow::*;
 
+use _main::utils::i18n;
 use anyhow::Result;
-use aoba::utils::i18n;
 use clap::Parser;
 
 /// TUI E2E test suite with TOML-based workflows
@@ -193,7 +193,12 @@ async fn main() -> Result<()> {
         .manifest
         .mode
         .as_ref()
-        .map(|m| matches!(m, aoba::protocol::status::types::modbus::StationMode::Slave))
+        .map(|m| {
+            matches!(
+                m,
+                _main::protocol::status::types::modbus::StationMode::Slave
+            )
+        })
         .unwrap_or(false);
 
     // Execute the workflow
