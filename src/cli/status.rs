@@ -67,6 +67,6 @@ impl CliStatusDumper {
     /// Stop the background dumping task.
     pub async fn stop(self) {
         self.should_stop.store(true, Ordering::Relaxed);
-        let _ = self.task_handle.await;
+        self.task_handle.await.unwrap_or(());
     }
 }

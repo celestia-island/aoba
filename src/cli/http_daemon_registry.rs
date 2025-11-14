@@ -47,7 +47,7 @@ pub async fn shutdown_and_join(port: u16) -> Result<()> {
     };
 
     if let Some(tx) = maybe_entry {
-        let _ = tx.send(());
+        tx.send(()).unwrap_or(());
     }
 
     // take and join the handle if present
@@ -61,7 +61,7 @@ pub async fn shutdown_and_join(port: u16) -> Result<()> {
     };
 
     if let Some(h) = handle_to_await {
-        let _ = h.await;
+        h.await.unwrap_or(());
     }
 
     Ok(())
