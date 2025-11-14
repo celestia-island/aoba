@@ -290,6 +290,93 @@ pub fn render_kv_lines_with_indicators(
                         types::cursor::ModbusDashboardCursor::MasterSourceValue
                     );
 
+                    // Special handling for PortForwarding - show selector or hint
+                    if matches!(master_source, ModbusMasterDataSource::PortForwarding { .. }) {
+                        let current_port_name = read_status(|status| {
+                            if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                                &status.page
+                            {
+                                Ok(status.ports.order.get(*selected_port).cloned())
+                            } else {
+                                Ok(None)
+                            }
+                        })?;
+
+                        let all_ports = read_status(|status| Ok(status.ports.order.clone()))?;
+                        let available_ports: Vec<String> = all_ports
+                            .iter()
+                            .filter(|p| Some(p.as_str()) != current_port_name.as_deref())
+                            .cloned()
+                            .collect();
+
+                        if available_ports.is_empty() {
+                            // No other ports available - show greyed hint
+                            let state = if selected {
+                                TextState::Selected
+                            } else {
+                                TextState::Normal
+                            };
+                            let hint_text =
+                                lang().protocol.modbus.data_source_port_forwarding_hint.clone();
+                            let style = if selected {
+                                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+                            } else {
+                                Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+                            };
+                            return Ok(vec![Span::styled(hint_text, style)]);
+                        }
+
+                        let ModbusMasterDataSource::PortForwarding { source_port } = master_source
+                        else {
+                            unreachable!();
+                        };
+
+                        let editing = selected
+                            && matches!(input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
+
+                        if editing {
+                            // Show selector-style with arrow navigation
+                            if let types::ui::InputRawBuffer::Index(idx) = &input_raw_buffer {
+                                let selected_port_name = available_ports
+                                    .get(*idx)
+                                    .cloned()
+                                    .unwrap_or_else(|| available_ports[0].clone());
+                                return Ok(vec![
+                                    Span::raw("< "),
+                                    Span::styled(selected_port_name, Style::default().fg(Color::Yellow)),
+                                    Span::raw(" >"),
+                                ]);
+                            }
+                        }
+
+                        // Display current selection
+                        let display_text = if source_port.is_empty() {
+                            lang()
+                                .protocol
+                                .modbus
+                                .data_source_placeholder_port_forwarding
+                                .clone()
+                        } else {
+                            source_port.clone()
+                        };
+
+                        let style = match state {
+                            TextState::Normal => Style::default().fg(Color::White),
+                            TextState::Selected => Style::default().fg(Color::Yellow),
+                            TextState::Editing => Style::default().fg(Color::Yellow),
+                        };
+
+                        return Ok(vec![Span::styled(display_text, style)]);
+                    }
+
                     // Check if this is HttpServer (numeric port input) or text input
                     let is_http_server =
                         matches!(master_source, ModbusMasterDataSource::HttpServer { .. });

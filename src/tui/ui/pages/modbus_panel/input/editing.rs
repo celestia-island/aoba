@@ -231,8 +231,38 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::modbus::ModbusMasterDataSourceKind::all().len()
                     }
                     types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-                        // No selector for MasterSourceValue - HttpServer uses numeric text input
-                        0
+                        // For PortForwarding, return count of available ports
+                        read_status(|status| {
+                            if let crate::tui::status::Page::ModbusDashboard {
+                                selected_port, ..
+                            } = &status.page
+                            {
+                                if let Some(port_name) = status.ports.order.get(*selected_port) {
+                                    if let Some(port_data) = status.ports.map.get(port_name) {
+                                        if let types::port::PortConfig::Modbus {
+                                            master_source, ..
+                                        } = &port_data.config
+                                        {
+                                            if matches!(
+                                                master_source,
+                                                ModbusMasterDataSource::PortForwarding { .. }
+                                            ) {
+                                                // Count ports excluding the current one
+                                                let count = status
+                                                    .ports
+                                                    .order
+                                                    .iter()
+                                                    .filter(|p| *p != port_name)
+                                                    .count();
+                                                return Ok(count);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Ok(0)
+                        })
+                        .unwrap_or(0)
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
@@ -435,8 +465,87 @@ fn commit_selector_edit(
                     }
                 }
                 types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-                    // MasterSourceValue now only handles text inputs (no selectors)
-                    // HttpServer is handled via text input with numeric validation
+                    // Handle PortForwarding selector (index-based selection)
+                    // Get the current data source kind first
+                    let is_port_forwarding = read_status(|status| {
+                        if let Some(port_data) = status.ports.map.get(&port_name) {
+                            if let types::port::PortConfig::Modbus { master_source, .. } =
+                                &port_data.config
+                            {
+                                return Ok(matches!(
+                                    master_source,
+                                    ModbusMasterDataSource::PortForwarding { .. }
+                                ));
+                            }
+                        }
+                        Ok(false)
+                    })?;
+
+                    if is_port_forwarding {
+                        // Get available ports (excluding current port)
+                        let all_ports = read_status(|status| Ok(status.ports.order.clone()))?;
+                        let available_ports: Vec<String> = all_ports
+                            .iter()
+                            .filter(|p| p.as_str() != port_name)
+                            .cloned()
+                            .collect();
+
+                        if selected_index < available_ports.len() {
+                            let selected_port_name = &available_ports[selected_index];
+
+                            let mut should_restart = false;
+                            write_status(|status| {
+                                let port = status
+                                    .ports
+                                    .map
+                                    .get_mut(&port_name)
+                                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+
+                                if let types::port::PortConfig::Modbus { master_source, .. } =
+                                    &mut port.config
+                                {
+                                    if let ModbusMasterDataSource::PortForwarding {
+                                        source_port,
+                                    } = master_source
+                                    {
+                                        if *source_port != *selected_port_name {
+                                            *source_port = selected_port_name.clone();
+                                            port.config_modified = true;
+                                            if matches!(port.state, PortState::OccupiedByThis) {
+                                                should_restart = true;
+                                            }
+                                            log::info!(
+                                                "Updated port forwarding source to: {}",
+                                                selected_port_name
+                                            );
+                                        }
+                                    }
+                                }
+
+                                Ok(())
+                            })?;
+
+                            if should_restart {
+                                let translations = lang();
+                                let reason = format!(
+                                    "{} {}",
+                                    translations
+                                        .tabs
+                                        .log
+                                        .runtime_restart_reason_data_source_change
+                                        .clone(),
+                                    selected_port_name
+                                );
+                                crate::tui::append_runtime_restart_log(
+                                    &port_name,
+                                    reason,
+                                    StationMode::Master,
+                                );
+                                return Ok(Some(port_name.clone()));
+                            }
+                        }
+                    }
+                    // For other data sources (HttpServer), text input is used
                 }
                 _ => {}
             }
