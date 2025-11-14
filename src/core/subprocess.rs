@@ -13,7 +13,7 @@ use flume::Receiver;
 
 use crate::{
     cli::{config::StationConfig, status::CliMode},
-    core::task_manager::spawn_anyhow_task,
+    core::task_manager::spawn_task,
     protocol::{
         ipc::{
             generate_socket_name, get_command_channel_name, IpcClient, IpcCommandClient,
@@ -148,7 +148,7 @@ impl ManagedSubprocess {
         // Spawn log readers using task_manager (no need to store handles)
         if let Some(stdout) = child.stdout.take() {
             let port_label = config.port_name.clone();
-            spawn_anyhow_task(async move {
+            spawn_task(async move {
                 let mut reader = BufReader::new(stdout);
                 let mut line = String::new();
                 loop {
@@ -176,7 +176,7 @@ impl ManagedSubprocess {
 
         if let Some(stderr) = child.stderr.take() {
             let port_label = config.port_name.clone();
-            spawn_anyhow_task(async move {
+            spawn_task(async move {
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
                 loop {
@@ -205,7 +205,7 @@ impl ManagedSubprocess {
         // Use channels for IPC connection results
         let (ipc_tx, ipc_rx) = flume::bounded(1);
         let socket_name = ipc_socket_name.clone();
-        spawn_anyhow_task(async move {
+        spawn_task(async move {
             // Recreate the IPC client inside the blocking task
             let result = match IpcClient::listen(socket_name) {
                 Ok(client) => client.accept(),
@@ -223,7 +223,7 @@ impl ManagedSubprocess {
         // Use channels for command connection results
         let (cmd_tx, cmd_rx) = flume::bounded(1);
         let command_channel_name = get_command_channel_name(&ipc_socket_name);
-        spawn_anyhow_task(async move {
+        spawn_task(async move {
             // Wait a bit for CLI to set up its command listener
             crate::utils::sleep::sleep_1s().await;
 

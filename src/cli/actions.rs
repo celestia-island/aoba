@@ -526,8 +526,7 @@ async fn start_configuration(config: &super::config::ModbusBootConfig) -> anyhow
     // Start the actual runtime with the config
     // Use global task manager to spawn the runtime
     let config_clone = config.clone();
-    let task =
-        task_manager::spawn_anyhow_task(async move { run_config_runtime(&config_clone).await });
+    let task = task_manager::spawn_task(async move { run_config_runtime(&config_clone).await });
 
     // Wait for the task to complete
     let _ = task.await;

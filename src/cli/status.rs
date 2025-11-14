@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 pub use crate::protocol::status::types::{CliMode, CliStatus, RegisterMode};
 
 /// CLI status module
@@ -22,7 +24,7 @@ use crate::{core::task_manager::spawn_task, utils::sleep_1s};
 /// It spawns a background task that periodically serializes the provided
 /// status object and writes it to a file in `/tmp`.
 pub struct CliStatusDumper {
-    task_handle: tokio::task::JoinHandle<()>,
+    task_handle: tokio::task::JoinHandle<Result<()>>,
     should_stop: Arc<AtomicBool>,
 }
 
@@ -50,12 +52,14 @@ impl CliStatusDumper {
                             log::error!("Failed to write CLI status file: {e}");
                         }
                     }
-                    Err(e) => {
-                        log::error!("Failed to serialize CLI status: {e}");
+                    Err(err) => {
+                        log::error!("Failed to serialize CLI status: {err}");
                     }
                 }
                 sleep_1s().await;
             }
+
+            Ok(())
         });
 
         Self {
@@ -67,6 +71,6 @@ impl CliStatusDumper {
     /// Stop the background dumping task.
     pub async fn stop(self) {
         self.should_stop.store(true, Ordering::Relaxed);
-        self.task_handle.await.unwrap_or(());
+        self.task_handle.await.unwrap_or(Ok(())).unwrap_or(());
     }
 }

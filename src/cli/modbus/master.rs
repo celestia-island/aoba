@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     cli::{actions, cleanup, http_daemon_registry as http_registry},
-    core::task_manager::spawn_blocking_anyhow_task,
+    core::task_manager::spawn_blocking_task,
     protocol::modbus::{
         build_slave_coils_response, build_slave_discrete_inputs_response,
         build_slave_holdings_response, build_slave_inputs_response,
@@ -159,7 +159,7 @@ fn run_http_server_daemon(
         .with_state(state);
 
     // Run HTTP server using task manager
-    let _ = crate::core::task_manager::spawn_anyhow_task(async move {
+    let _ = crate::core::task_manager::spawn_task(async move {
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
@@ -222,7 +222,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         let port = *http_port;
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
-        let handle = spawn_blocking_anyhow_task(move || {
+        let handle = spawn_blocking_task(move || {
             run_http_server_daemon(port, tx, shutdown_rx, None)?;
             Ok(())
         });
@@ -565,7 +565,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
         let storage_for_thread = storage_clone.clone();
-        let handle = spawn_blocking_anyhow_task(move || {
+        let handle = spawn_blocking_task(move || {
             run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread))?;
             Ok(())
         });
@@ -600,9 +600,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         http_rx: http_rx_clone,
     };
 
-    let _update_thread = crate::core::task_manager::spawn_anyhow_task(async move {
-        update_storage_loop(update_args).await
-    });
+    let _update_thread =
+        crate::core::task_manager::spawn_task(
+            async move { update_storage_loop(update_args).await },
+        );
 
     // Parse optional debounce seconds argument (floating seconds). Default 1.0s
     // Single-precision seconds argument

@@ -8,7 +8,7 @@ use crate::{
     core::{
         bus::{Bus, CoreToUi, UiToCore},
         subprocess::{CliSubprocessConfig, SubprocessManager},
-        task_manager::spawn_anyhow_task,
+        task_manager::spawn_task,
     },
     protocol::status::{
         debug_dump::{enable_debug_dump, start_status_dump_thread},
@@ -158,7 +158,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_task = spawn_anyhow_task({
+    let core_task = spawn_task({
         let core_tx = core_tx.clone();
         let thr_tx = thr_tx.clone();
         let ui_rx = ui_rx.clone();
