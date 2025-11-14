@@ -13,12 +13,11 @@ use interprocess::local_socket::{
     {GenericFilePath, GenericNamespaced, ListenerOptions},
 };
 
-use crate::core::task_manager::spawn_blocking_anyhow_task;
-
 use super::{
     E2EToTuiMessage, IpcChannelId, TuiToE2EMessage, CONNECT_RETRY_INTERVAL, CONNECT_TIMEOUT,
     IO_TIMEOUT,
 };
+use crate::core::task_manager::spawn_blocking_anyhow_task;
 
 /// Helper struct for bidirectional IPC pipe communication
 struct Pipe {
