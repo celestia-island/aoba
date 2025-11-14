@@ -259,7 +259,7 @@ fn boot_serial_loop(
         // Only sleep if no data was received to avoid excessive CPU usage
         // When data is flowing, continue immediately to read more
         if !data_received {
-            std::thread::sleep(Duration::from_millis(1));
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 }

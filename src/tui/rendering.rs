@@ -233,11 +233,13 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
 
     let (input_kill_tx, _input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_handle = thread::spawn({
+    let core_task = tokio::spawn({
         let core_tx = core_tx.clone();
         let ui_rx = ui_rx.clone();
 
-        move || crate::tui::runtime::run_core_thread(ui_rx, core_tx, input_kill_tx)
+        async move {
+            let _ = crate::tui::runtime::run_core_thread(ui_rx, core_tx, input_kill_tx).await;
+        }
     });
 
     let ipc_channel_id = crate::utils::IpcChannelId(channel_id.to_string());
@@ -329,9 +331,9 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
 
     log::info!("🧹 Cleaning up IPC mode");
     ui_tx.send(crate::core::bus::UiToCore::Quit)?;
-    core_handle
-        .join()
-        .map_err(|err| anyhow!("Failed to join core thread: {err:?}"))??;
+    core_task
+        .await
+        .map_err(|err| anyhow!("Failed to join core task: {err:?}"))?;
 
     Ok(())
 }

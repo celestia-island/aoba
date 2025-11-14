@@ -244,7 +244,7 @@ struct PortInfo<'a> {
     product: Option<String>,
 }
 
-pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
+pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     // Handle check-port command (must be before list-ports)
     if let Some(port_name) = matches.get_one::<String>("check-port") {
         let is_occupied = check_port_occupation(port_name);
@@ -332,7 +332,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen
     if let Some(port) = matches.get_one::<String>("slave-listen") {
-        if let Err(err) = super::modbus::slave::handle_slave_listen(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_listen(matches, port).await {
             eprintln!("Error in slave-listen: {err}");
             std::process::exit(1);
         }
@@ -341,7 +341,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen persist
     if let Some(port) = matches.get_one::<String>("slave-listen-persist") {
-        if let Err(err) = super::modbus::slave::handle_slave_listen_persist(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_listen_persist(matches, port).await {
             eprintln!("Error in slave-listen-persist: {err}");
             std::process::exit(1);
         }
@@ -350,7 +350,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave poll (client mode - sends request)
     if let Some(port) = matches.get_one::<String>("slave-poll") {
-        if let Err(err) = super::modbus::slave::handle_slave_poll(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_poll(matches, port).await {
             eprintln!("Error in slave-poll: {err}");
             std::process::exit(1);
         }
@@ -359,7 +359,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave poll persist (client mode - continuous polling)
     if let Some(port) = matches.get_one::<String>("slave-poll-persist") {
-        if let Err(err) = super::modbus::slave::handle_slave_poll_persist(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_poll_persist(matches, port).await {
             eprintln!("Error in slave-poll-persist: {err}");
             std::process::exit(1);
         }
@@ -368,7 +368,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus master provide
     if let Some(port) = matches.get_one::<String>("master-provide") {
-        if let Err(err) = super::modbus::master::handle_master_provide(matches, port) {
+        if let Err(err) = super::modbus::master::handle_master_provide(matches, port).await {
             eprintln!("Error in master-provide: {err}");
             std::process::exit(1);
         }
@@ -377,7 +377,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus master provide persist
     if let Some(port) = matches.get_one::<String>("master-provide-persist") {
-        if let Err(err) = super::modbus::master::handle_master_provide_persist(matches, port) {
+        if let Err(err) = super::modbus::master::handle_master_provide_persist(matches, port).await
+        {
             eprintln!("Error in master-provide-persist: {err}");
             std::process::exit(1);
         }
@@ -522,7 +523,7 @@ fn start_configuration(
     // Start the actual runtime with the config
     // We need to spawn a blocking task since we're already in an async context
     let config_clone = config.clone();
-    std::thread::spawn(move || {
+    let handle = std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             if let Err(e) = run_config_runtime(&config_clone).await {
@@ -531,9 +532,11 @@ fn start_configuration(
         });
     });
 
-    // Keep the main thread alive
-    loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
+    // Wait for the runtime thread to exit. This blocks the current thread
+    // without relying on the removed `blocking::sleep` helpers.
+    match handle.join() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Config runtime thread panicked: {:?}", e).into()),
     }
 }
 

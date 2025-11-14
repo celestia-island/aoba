@@ -10,12 +10,14 @@ use aoba::{
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
 };
 
+use aoba::utils::sleep::{sleep_1s, sleep_3s};
+
 /// Post JSON data to the HTTP server running in the subprocess
 async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Result<()> {
     let url = format!("http://127.0.0.1:{}", port);
 
     // Wait a bit for the server to start
-    thread::sleep(Duration::from_secs(1));
+    sleep_3s().await;
 
     // Try to POST the data with retries
     for attempt in 0..10 {
@@ -38,7 +40,7 @@ async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Res
                 );
             }
         }
-        thread::sleep(Duration::from_millis(500));
+        sleep_1s().await;
     }
 
     Err(anyhow!(
@@ -123,7 +125,7 @@ pub async fn test_http_data_source() -> Result<()> {
     post_handle.await??;
 
     // Give the master time to process the HTTP data
-    thread::sleep(Duration::from_millis(500));
+    sleep_1s().await;
 
     let client_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
@@ -232,7 +234,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     post_handle.await??;
 
     // Give the master time to process the HTTP data
-    thread::sleep(Duration::from_millis(500));
+    sleep_1s().await;
 
     let client_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")

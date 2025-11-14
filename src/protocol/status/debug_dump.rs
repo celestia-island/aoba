@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use crate::utils::sleep::sleep_1s;
 /// Debug dump utilities for CI/E2E testing
 ///
 /// This module provides functionality to periodically dump the global status tree
@@ -12,9 +13,8 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread,
-    time::Duration,
 };
+use tokio::task;
 
 /// Flag to control whether debug dumping is enabled
 static DEBUG_DUMP_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -41,17 +41,14 @@ pub fn is_debug_dump_enabled() -> bool {
 ///
 /// # Returns
 /// A JoinHandle to the spawned thread
-pub fn start_status_dump_thread<F>(
+pub fn start_status_dump_thread(
     output_path: PathBuf,
     shutdown_signal: Option<Arc<AtomicBool>>,
-    status_fn: F,
-) -> thread::JoinHandle<()>
-where
-    F: Fn() -> Result<String> + Send + 'static,
-{
-    thread::spawn(move || {
+    status_fn: Arc<dyn Fn() -> Result<String> + Send + Sync + 'static>,
+) -> task::JoinHandle<()> {
+    task::spawn(async move {
         log::info!(
-            "Started status dump thread, writing to {}",
+            "Started status dump task, writing to {}",
             output_path.display()
         );
 
@@ -59,27 +56,37 @@ where
             // Check shutdown signal
             if let Some(ref signal) = shutdown_signal {
                 if signal.load(Ordering::SeqCst) {
-                    log::info!("Status dump thread shutting down");
+                    log::info!("Status dump task shutting down");
                     break;
                 }
             }
 
-            // Dump status to file
-            if let Err(e) = dump_status_with_fn(&output_path, &status_fn) {
-                log::warn!("Failed to dump status to {}: {}", output_path.display(), e);
+            // Dump status to file using blocking helper to avoid blocking the async runtime
+            let output_path_clone = output_path.clone();
+            let status_fn_clone = status_fn.clone();
+            let res = task::spawn_blocking(move || {
+                dump_status_with_fn(&output_path_clone, &*status_fn_clone)
+            })
+            .await;
+            match res {
+                Err(e) => log::warn!("Failed to spawn_blocking for status dump: {}", e),
+                Ok(Err(e)) => {
+                    log::warn!("Failed to dump status to {}: {}", output_path.display(), e)
+                }
+                Ok(Ok(())) => {}
             }
 
-            // Sleep for 500ms
-            thread::sleep(Duration::from_millis(500));
+            // Sleep using async helper (1s)
+            sleep_1s().await;
         }
     })
 }
 
 /// Dump status using the provided function (overwrites existing content)
-fn dump_status_with_fn<F>(path: &PathBuf, status_fn: &F) -> Result<()>
-where
-    F: Fn() -> Result<String>,
-{
+fn dump_status_with_fn(
+    path: &PathBuf,
+    status_fn: &(dyn Fn() -> Result<String> + Send + Sync),
+) -> Result<()> {
     let json = status_fn()?;
 
     // Write to file (overwrite mode)

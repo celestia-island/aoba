@@ -65,8 +65,8 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
         if chrono::Utc::now() - start > Duration::seconds(2) {
             return Ok(None);
         }
-        // yield briefly while keeping the lock
-        std::thread::sleep(std::time::Duration::from_millis(8));
+        // yield briefly while keeping the lock (running in dedicated thread)
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
     if collected.len() < 2 {
@@ -130,7 +130,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
         // try to read up to 1 more byte
         let target = collected.len() + 1;
         read_until(&mut **guard, &mut collected, target)?;
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        std::thread::sleep(std::time::Duration::from_secs(1));
         guessed_len_opt = determine_length(&mut collected);
     }
     let guessed_len = guessed_len_opt.unwrap();
@@ -162,7 +162,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
                 return Ok(Some(Bytes::from(collected)));
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
     if collected.len() != guessed_len {

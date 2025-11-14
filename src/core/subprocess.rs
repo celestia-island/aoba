@@ -200,7 +200,7 @@ impl ManagedSubprocess {
         let command_channel_name = get_command_channel_name(&ipc_socket_name);
         let command_connect_thread = std::thread::spawn(move || {
             // Wait a bit for CLI to set up its command listener
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_secs(1));
 
             // Try to connect with retries (increased timeout for slow subprocess startup)
             for attempt in 1..=30 {
@@ -211,7 +211,7 @@ impl ManagedSubprocess {
                     }
                     Err(e) if attempt < 30 => {
                         log::debug!("Command channel connect attempt {attempt} failed: {e}");
-                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        std::thread::sleep(std::time::Duration::from_secs(1));
                     }
                     Err(e) => {
                         log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {e}");

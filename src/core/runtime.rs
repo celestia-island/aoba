@@ -241,6 +241,6 @@ pub fn run_core_thread<C: CoreContext>(
             .send(CoreToUi::Tick)
             .map_err(|err| anyhow!("Failed to send Tick: {err}"))?;
 
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }

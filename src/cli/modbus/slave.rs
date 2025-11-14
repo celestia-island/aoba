@@ -7,6 +7,8 @@ use std::{
 
 use clap::ArgMatches;
 
+use crate::utils::sleep::{sleep_1s, sleep_3s};
+
 use super::{
     emit_modbus_ipc_log, extract_values_from_storage, open_serial_port, parse_register_mode,
     ModbusIpcLogPayload, ModbusResponse, OutputSink,
@@ -181,7 +183,7 @@ fn run_slave_poll_transaction(
 }
 
 /// Handle slave listen persist (continuous JSONL output)
-pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -227,7 +229,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
             crate::protocol::status::debug_dump::start_status_dump_thread(
                 dump_path,
                 None,
-                move || {
+                std::sync::Arc::new(move || {
                     crate::protocol::status::types::cli::CliStatus::new_slave_listen(
                         port_name.clone(),
                         station_id_copy,
@@ -236,7 +238,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
                         register_length_copy,
                     )
                     .to_json()
-                },
+                }),
             ),
         )
     } else {
@@ -287,8 +289,6 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
                 log::debug!("Cleanup handler: Flushed port {port_name_clone}");
             }
             drop(pa);
-            // Give the OS time to fully release the file descriptor
-            std::thread::sleep(Duration::from_millis(200));
             log::debug!("Cleanup handler: Port {port_name_clone} released");
         });
         log::debug!("Registered cleanup handler for port {port}");
@@ -326,14 +326,14 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
             }
             Err(err) => {
                 log::warn!("Error processing request: {err}");
-                std::thread::sleep(Duration::from_millis(100));
+                sleep_1s().await;
             }
         }
     }
 }
 
 /// Handle a single slave listen (one-shot JSON output)
-pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -375,7 +375,7 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
     drop(port_arc);
 
     // Give the OS time to fully release the port
-    std::thread::sleep(Duration::from_millis(100));
+    sleep_1s().await;
 
     // Output JSON to configured sink
     let json = serde_json::to_string(&response)?;
@@ -463,7 +463,7 @@ fn listen_for_one_request(
 }
 
 /// Handle slave poll (act as Modbus Master/Client - send request and wait for response)
-pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -509,7 +509,7 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 }
 
 /// Handle slave poll persist (continuous polling mode)
-pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -557,7 +557,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             crate::protocol::status::debug_dump::start_status_dump_thread(
                 dump_path,
                 None,
-                move || {
+                std::sync::Arc::new(move || {
                     crate::protocol::status::types::cli::CliStatus::new_slave_poll(
                         port_name.clone(),
                         station_id_copy,
@@ -566,7 +566,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                         register_length_copy,
                     )
                     .to_json()
-                },
+                }),
             ),
         )
     } else {
@@ -617,8 +617,6 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                 log::debug!("Cleanup handler: Flushed port {port_name_clone}");
             }
             drop(pa);
-            // Give the OS time to fully release the file descriptor
-            std::thread::sleep(Duration::from_millis(200));
             log::debug!("Cleanup handler: Port {port_name_clone} released");
         });
         log::debug!("Registered cleanup handler for port {port}");
@@ -794,7 +792,11 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                 last_failure_log = None;
 
                 // Wait configured request interval after successful poll
-                std::thread::sleep(Duration::from_millis(request_interval_ms as u64));
+                if request_interval_ms < 1000 {
+                    sleep_1s().await;
+                } else {
+                    sleep_3s().await;
+                }
             }
             SlavePollTransaction::Failure {
                 request_frame,
@@ -829,7 +831,11 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                 }
 
                 // Wait configured timeout duration after failure
-                std::thread::sleep(Duration::from_millis(timeout_ms as u64));
+                if timeout_ms < 1000 {
+                    sleep_1s().await;
+                } else {
+                    sleep_3s().await;
+                }
             }
         }
     }

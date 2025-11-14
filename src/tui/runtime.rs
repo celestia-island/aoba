@@ -3,6 +3,7 @@ use chrono::Local;
 use parking_lot::RwLock;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, thread, time::Duration};
 
+use crate::utils::sleep::{sleep_1s, sleep_3s};
 use crate::{
     cli::config::StationConfig,
     core::{
@@ -66,12 +67,16 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
         let dump_path = PathBuf::from("/tmp/ci_tui_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
-        start_status_dump_thread(dump_path, Some(shutdown_signal_clone), || {
-            TuiStatus::from_global_status().and_then(|status| {
-                serde_json::to_string_pretty(&status)
-                    .map_err(|e| anyhow!("Failed to serialize TUI status: {e}"))
-            })
-        });
+        start_status_dump_thread(
+            dump_path,
+            Some(shutdown_signal_clone),
+            std::sync::Arc::new(|| {
+                TuiStatus::from_global_status().and_then(|status| {
+                    serde_json::to_string_pretty(&status)
+                        .map_err(|e| anyhow!("Failed to serialize TUI status: {e}"))
+                })
+            }),
+        );
 
         Some(shutdown_signal)
     } else {
@@ -149,13 +154,16 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_handle = thread::spawn({
+    let core_task = tokio::spawn({
         let core_tx = core_tx.clone();
         let thr_tx = thr_tx.clone();
         let ui_rx = ui_rx.clone();
         let input_kill_tx = input_kill_tx.clone();
 
-        move || thr_tx.send(run_core_thread(ui_rx, core_tx, input_kill_tx))
+        async move {
+            let res = run_core_thread(ui_rx, core_tx, input_kill_tx).await;
+            let _ = thr_tx.send(res);
+        }
     });
 
     let input_handle = thread::spawn({
@@ -179,9 +187,9 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
         }
     }
 
-    core_handle
-        .join()
-        .map_err(|err| anyhow!("Failed to join core thread: {err:?}"))??;
+    core_task
+        .await
+        .map_err(|err| anyhow!("Failed to join core task: {err:?}"))?;
     render_handle
         .join()
         .map_err(|err| anyhow!("Failed to join render thread: {err:?}"))??;
@@ -199,7 +207,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn run_core_thread(
+pub async fn run_core_thread(
     ui_rx: flume::Receiver<UiToCore>,
     core_tx: flume::Sender<CoreToUi>,
     input_kill_tx: flume::Sender<()>,
@@ -304,7 +312,8 @@ pub fn run_core_thread(
                         &port_name,
                         &mut subprocess_manager,
                         &core_tx,
-                    )?;
+                    )
+                    .await?;
                 }
                 UiToCore::RestartRuntime(port_name) => {
                     log::info!("RestartRuntime requested for {port_name}");
@@ -313,7 +322,7 @@ pub fn run_core_thread(
                         &port_name,
                         &mut subprocess_manager,
                         &core_tx,
-                    )?;
+                    ).await?;
                 }
                 UiToCore::SendRegisterUpdate {
                     port_name,
@@ -400,11 +409,11 @@ pub fn run_core_thread(
         core_tx
             .send(CoreToUi::Tick)
             .map_err(|err| anyhow!("failed to send Tick: {err}"))?;
-        thread::sleep(Duration::from_millis(50));
+        sleep_1s().await;
     }
 }
 
-fn restart_runtime(
+async fn restart_runtime(
     label: &str,
     port_name: &str,
     subprocess_manager: &mut SubprocessManager,
@@ -457,7 +466,7 @@ fn restart_runtime(
     }
 
     // Start the new subprocess
-    start_runtime(label, port_name, subprocess_manager, core_tx)?;
+    start_runtime(label, port_name, subprocess_manager, core_tx).await?;
 
     Ok(())
 }
@@ -513,7 +522,7 @@ fn stop_runtime(
     Ok(false)
 }
 
-fn start_runtime(
+async fn start_runtime(
     label: &str,
     port_name: &str,
     subprocess_manager: &mut SubprocessManager,
@@ -617,7 +626,7 @@ fn start_runtime(
                                         break;
                                     }
                                     Err(_err) if attempt < 10 => {
-                                        thread::sleep(Duration::from_millis(200));
+                                        sleep_1s().await;
                                     }
                                     Err(err) => {
                                         log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
@@ -707,7 +716,7 @@ fn start_runtime(
                                         break;
                                     }
                                     Err(_err) if attempt < 10 => {
-                                        thread::sleep(Duration::from_millis(200));
+                                        sleep_1s().await;
                                     }
                                     Err(err) => {
                                         log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");

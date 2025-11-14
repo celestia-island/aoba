@@ -10,9 +10,8 @@ use std::{
 
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use clap::ArgMatches;
-use rmodbus::{server::context::ModbusContext, ModbusProto};
-// serde_json::json was previously used; keep serde available via direct calls
 use rmodbus::server::storage::ModbusStorageSmall;
+use rmodbus::{server::context::ModbusContext, ModbusProto};
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
@@ -27,10 +26,9 @@ use crate::{
     },
 };
 
-const SERIAL_PORT_OPEN_RETRIES: usize = 10;
-const SERIAL_PORT_OPEN_RETRY_DELAY_MS: u64 = 200;
+const SERIAL_PORT_OPEN_RETRIES: usize = 3;
 
-fn open_serial_port_with_retry(
+async fn open_serial_port_with_retry(
     port: &str,
     baud_rate: u32,
     timeout: Duration,
@@ -53,7 +51,7 @@ fn open_serial_port_with_retry(
                     log::warn!(
                         "Failed to open serial port {port} (attempt {attempt}/{SERIAL_PORT_OPEN_RETRIES}): {last_error}"
                     );
-                    std::thread::sleep(Duration::from_millis(SERIAL_PORT_OPEN_RETRY_DELAY_MS));
+                    sleep_1s().await;
                 }
             }
         }
@@ -73,6 +71,7 @@ struct HttpServerState {
 
 use crate::protocol::status::types::modbus::StationConfig as ProtocolStationConfig;
 use crate::protocol::status::types::modbus::StationsResponse;
+use crate::utils::sleep::sleep_1s;
 
 /// Axum handler for POST /stations endpoint
 async fn handle_stations_post(
@@ -122,7 +121,7 @@ async fn handle_stations_post(
                 break;
             }
 
-            std::thread::sleep(Duration::from_millis(50));
+            sleep_1s().await;
         }
     } else {
         // No storage available — fall back to echoing posted initial values
@@ -196,7 +195,7 @@ fn run_http_server_daemon(
 }
 
 /// Handle master provide (temporary: output once and exit)
-pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -328,14 +327,13 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     }
 
     // Open serial port and wait for one request, then respond and exit
-    let port_handle = open_serial_port_with_retry(port, baud_rate, Duration::from_secs(5))?;
+    let port_handle = open_serial_port_with_retry(port, baud_rate, Duration::from_secs(5)).await?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Wait for request and respond once
     let mut buffer = [0u8; 256];
     let mut assembling: Vec<u8> = Vec::new();
-    let frame_gap = Duration::from_millis(10);
     let start_time = std::time::Instant::now();
 
     loop {
@@ -347,7 +345,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         match port.read(&mut buffer) {
             Ok(n) if n > 0 => {
                 assembling.extend_from_slice(&buffer[..n]);
-                std::thread::sleep(frame_gap);
+                sleep_1s().await;
             }
             Ok(_) => {
                 if !assembling.is_empty() {
@@ -364,7 +362,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
 
                     // Explicitly drop port_arc to close the port
                     drop(port_arc);
-                    std::thread::sleep(Duration::from_millis(100));
+                    sleep_1s().await;
 
                     return Ok(());
                 }
@@ -384,7 +382,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
 
                     // Explicitly drop port_arc to close the port
                     drop(port_arc);
-                    std::thread::sleep(Duration::from_millis(100));
+                    sleep_1s().await;
 
                     return Ok(());
                 }
@@ -398,7 +396,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
 
 /// Handle master provide persist (continuous JSONL output)
 /// Master mode acts as Modbus Slave/Server - listens for requests and responds with data
-pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -442,7 +440,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             crate::protocol::status::debug_dump::start_status_dump_thread(
                 dump_path,
                 None,
-                move || {
+                std::sync::Arc::new(move || {
                     crate::protocol::status::types::cli::CliStatus::new_master_provide(
                         port_name.clone(),
                         station_id_copy,
@@ -451,7 +449,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                         register_length_copy,
                     )
                     .to_json()
-                },
+                }),
             ),
         )
     } else {
@@ -459,7 +457,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     };
 
     // Open serial port with longer timeout for reading requests
-    let port_handle = match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50))
+    let port_handle = match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50)).await
     {
         Ok(handle) => handle,
         Err(err) => {
@@ -493,9 +491,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     {
         let pa = port_arc.clone();
         cleanup::register_cleanup(move || {
-            // Drop the Arc to release the port and give OS time
+            // Drop the Arc to release the port
             drop(pa);
-            std::thread::sleep(Duration::from_millis(100));
         });
     }
 
@@ -1082,13 +1079,13 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             }
             Err(err) => {
                 log::warn!("Error reading from port: {err}");
-                std::thread::sleep(Duration::from_millis(10));
+                sleep_1s().await;
             }
         }
         drop(port);
 
         // Small sleep to avoid busy loop
-        std::thread::sleep(Duration::from_millis(1));
+        sleep_1s().await;
     }
 }
 
@@ -1268,7 +1265,7 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             DataSource::Manual => {
                 // Manual mode: no automatic updates, values are set via IPC or other means
                 log::debug!("Manual data source mode - sleeping");
-                std::thread::sleep(Duration::from_secs(1));
+                std::thread::sleep(std::time::Duration::from_secs(3));
                 continue;
             }
             DataSource::MqttServer(url) => {
@@ -1373,14 +1370,14 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         }
                         Err(e) => {
                             log::warn!("MQTT connection error: {}", e);
-                            std::thread::sleep(Duration::from_secs(1));
+                            std::thread::sleep(std::time::Duration::from_secs(3));
                             break; // Break inner loop to reconnect
                         }
                     }
                 }
 
                 log::warn!("MQTT connection lost, will retry...");
-                std::thread::sleep(Duration::from_secs(5));
+                std::thread::sleep(std::time::Duration::from_secs(3));
             }
             DataSource::HttpServer(_port) => {
                 // HTTP Server: receive data from HTTP daemon via channel
@@ -1514,7 +1511,7 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 }
                             }
 
-                            std::thread::sleep(Duration::from_millis(100));
+                            std::thread::sleep(std::time::Duration::from_secs(1));
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line from IPC: {err}");
@@ -1602,7 +1599,7 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                             }
 
                             // Wait a bit before next update to avoid overwhelming
-                            std::thread::sleep(Duration::from_millis(100));
+                            std::thread::sleep(std::time::Duration::from_secs(1));
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line {line_count}: {err}");
@@ -1671,7 +1668,7 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                             }
 
                             // Wait a bit before next update
-                            std::thread::sleep(Duration::from_millis(100));
+                            std::thread::sleep(std::time::Duration::from_secs(1));
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line: {err}");

@@ -27,10 +27,15 @@ async fn main() -> Result<()> {
         let _ = ctrlc::set_handler(|| {
             // Best-effort cleanup
             cleanup::run_cleanups();
-            // Give time for cleanup to complete (port release, etc.)
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            // After cleanup, exit
-            std::process::exit(130);
+            // Spawn an async task on the existing tokio runtime (main is #[tokio::main])
+            // to use the async sleep helper instead of the blocking one.
+            let _ = tokio::runtime::Handle::try_current().map(|handle| {
+                handle.spawn(async {
+                    aoba::utils::sleep::sleep_1s().await;
+                    // After cleanup, exit
+                    std::process::exit(130);
+                });
+            });
         });
     }
 
@@ -51,12 +56,9 @@ async fn main() -> Result<()> {
     // because they use synchronous MQTT clients that create their own tokio runtime.
     // We use spawn_blocking to avoid "runtime within runtime" panics.
     let matches_clone = matches.clone();
-    tokio::task::spawn_blocking(move || {
-        if actions::run_one_shot_actions(&matches_clone) {
-            std::process::exit(0);
-        }
-    })
-    .await?;
+    if actions::run_one_shot_actions(&matches_clone).await {
+        std::process::exit(0);
+    }
 
     // If TUI requested, run in this process so it inherits the terminal.
     if matches.get_flag("tui") {
