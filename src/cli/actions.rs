@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use serde::Serialize;
 
 use clap::ArgMatches;
@@ -417,7 +418,7 @@ fn compute_canonical(name: &str) -> Option<String> {
 }
 
 /// Handle configuration mode
-pub fn handle_config_mode(matches: &ArgMatches) -> bool {
+pub async fn handle_config_mode(matches: &ArgMatches) -> bool {
     // Handle configuration file
     if let Some(config_file) = matches.get_one::<String>("config") {
         println!("Loading configuration from file: {config_file}");
@@ -428,7 +429,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
                     config.port_name
                 );
                 // Start the ports defined in the configuration
-                if let Err(err) = start_configuration(&config) {
+                if let Err(err) = start_configuration(&config).await {
                     eprintln!("Error starting configuration: {err}");
                     std::process::exit(1);
                 }
@@ -452,7 +453,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
                     config.port_name
                 );
                 // Start the ports defined in the configuration
-                if let Err(err) = start_configuration(&config) {
+                if let Err(err) = start_configuration(&config).await {
                     eprintln!("Error starting configuration: {err}");
                     std::process::exit(1);
                 }
@@ -470,9 +471,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
 }
 
 /// Start the ports defined in the configuration
-fn start_configuration(
-    config: &super::config::ModbusBootConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn start_configuration(config: &super::config::ModbusBootConfig) -> anyhow::Result<()> {
     log::info!(
         "Starting port: {} with {} stations",
         config.port_name,
@@ -527,25 +526,17 @@ fn start_configuration(
     // Start the actual runtime with the config
     // Use global task manager to spawn the runtime
     let config_clone = config.clone();
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        let _ = task_manager::spawn_task(async move {
-            if let Err(e) = run_config_runtime(&config_clone).await {
-                log::error!("Config runtime error: {e}");
-            }
-        })
-        .await;
-    });
+    let task =
+        task_manager::spawn_anyhow_task(async move { run_config_runtime(&config_clone).await });
 
-    // Since we're using async tasks, we don't need to wait for thread join
-    // The task will be managed by the global task manager
+    // Wait for the task to complete
+    let _ = task.await;
+
     Ok(())
 }
 
 /// Run the configuration in an async runtime
-async fn run_config_runtime(
-    config: &super::config::ModbusBootConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> anyhow::Result<()> {
     use rmodbus::server::context::ModbusContext;
     use std::io::Write;
     use std::sync::Arc;
@@ -555,7 +546,7 @@ async fn run_config_runtime(
     let port_handle = serialport::new(&config.port_name, config.baud_rate)
         .timeout(std::time::Duration::from_millis(100))
         .open()
-        .map_err(|e| format!("Failed to open port {}: {}", config.port_name, e))?;
+        .map_err(|e| anyhow!("Failed to open port {}: {}", config.port_name, e))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 

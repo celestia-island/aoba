@@ -106,7 +106,7 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
             .enable_time()
             .build()
             .expect("failed to build runtime for test sleep");
-        rt.block_on(async { aoba::utils::sleep::sleep_1s().await });
+        rt.block_on(async { sleep_1s().await });
     }
 
     // Check after release

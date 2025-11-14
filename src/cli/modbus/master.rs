@@ -74,7 +74,7 @@ struct HttpServerState {
 
 use crate::protocol::status::types::modbus::StationConfig as ProtocolStationConfig;
 use crate::protocol::status::types::modbus::StationsResponse;
-use crate::utils::sleep::sleep_1s;
+use crate::utils::sleep::{sleep_1s, sleep_3s};
 
 /// Axum handler for POST /stations endpoint
 async fn handle_stations_post(
@@ -159,13 +159,8 @@ fn run_http_server_daemon(
         .route("/", post(handle_stations_post))
         .with_state(state);
 
-    // Create tokio runtime for axum server
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| anyhow!("Failed to create tokio runtime: {}", e))?;
-
-    runtime.block_on(async {
+    // Run HTTP server using task manager
+    let _ = crate::core::task_manager::spawn_anyhow_task(async move {
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
@@ -188,13 +183,17 @@ fn run_http_server_daemon(
         };
 
         // Run axum server with graceful shutdown
-        axum::serve(listener, app)
+        if let Err(e) = axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal)
             .await
-            .map_err(|e| anyhow!("HTTP server error: {}", e))?;
+        {
+            log::error!("HTTP server error: {}", e);
+        }
 
         Ok(())
-    })
+    });
+
+    Ok(())
 }
 
 /// Handle master provide (temporary: output once and exit)
@@ -224,7 +223,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         let port = *http_port;
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
-        let handle = crate::core::task_manager::spawn_task(async move {
+        let handle = crate::core::task_manager::spawn_blocking_task(move || {
             if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx, None) {
                 log::error!("HTTP server daemon exited with error: {}", e);
             }
@@ -568,7 +567,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
         let storage_for_thread = storage_clone.clone();
-        let handle = crate::core::task_manager::spawn_task(async move {
+        let handle = crate::core::task_manager::spawn_blocking_task(move || {
             if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread))
             {
                 log::error!("HTTP server daemon exited with error: {}", e);
@@ -605,7 +604,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         http_rx: http_rx_clone,
     };
 
-    let _update_thread = crate::core::task_manager::spawn_result_task(async move {
+    let _update_thread = crate::core::task_manager::spawn_anyhow_task(async move {
         update_storage_loop(update_args).await
     });
 
@@ -1272,7 +1271,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             DataSource::Manual => {
                 // Manual mode: no automatic updates, values are set via IPC or other means
                 log::debug!("Manual data source mode - sleeping");
-                crate::utils::sleep::sleep_3s().await;
+                sleep_3s().await;
                 continue;
             }
             DataSource::MqttServer(url) => {
@@ -1378,14 +1377,14 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         }
                         Err(e) => {
                             log::warn!("MQTT connection error: {}", e);
-                            crate::utils::sleep::sleep_3s().await;
+                            sleep_3s().await;
                             break; // Break inner loop to reconnect
                         }
                     }
                 }
 
                 log::warn!("MQTT connection lost, will retry...");
-                crate::utils::sleep::sleep_3s().await;
+                sleep_3s().await;
             }
             DataSource::HttpServer(_port) => {
                 // HTTP Server: receive data from HTTP daemon via channel
@@ -1521,7 +1520,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 }
                             }
 
-                            crate::utils::sleep::sleep_1s().await;
+                            sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line from IPC: {err}");
@@ -1610,7 +1609,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                             }
 
                             // Wait a bit before next update to avoid overwhelming
-                            crate::utils::sleep::sleep_1s().await;
+                            sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line {line_count}: {err}");
@@ -1680,7 +1679,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                             }
 
                             // Wait a bit before next update
-                            crate::utils::sleep::sleep_1s().await;
+                            sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line: {err}");

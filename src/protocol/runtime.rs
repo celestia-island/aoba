@@ -9,6 +9,7 @@ use flume::{Receiver, Sender};
 use serialport::{DataBits, Parity, SerialPort, StopBits};
 
 use super::status::types::port::{SerialConfig, SerialParity};
+use crate::utils::sleep::sleep_1s;
 
 // Read buffer and assembling limits shared by runtime implementation.
 const READ_BUF_SIZE: usize = 256;
@@ -56,7 +57,6 @@ pub struct PortRuntimeHandle {
     pub cmd_tx: Sender<RuntimeCommand>,
     pub evt_rx: Arc<Receiver<RuntimeEvent>>,
     pub current_cfg: SerialConfig,
-    pub thread_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl std::fmt::Debug for PortRuntimeHandle {
@@ -82,51 +82,27 @@ impl PortRuntimeHandle {
         let evt_rx = Arc::new(evt_rx_raw);
         let initial_cfg = initial.clone();
 
-        let thread_handle_arc = Arc::new(Mutex::new(None));
-
         let serial_clone2 = Arc::clone(&serial);
         let port_name_clone = port_name.clone();
         let initial_cfg_clone = initial_cfg.clone();
         let cmd_rx_clone = cmd_rx.clone();
         let evt_tx_clone = evt_tx.clone();
 
-        let task_handle = crate::core::task_manager::spawn_task(async move {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .build()
-                .expect("failed to build runtime for thread");
-            rt.block_on(async move {
-                match crate::core::task_manager::spawn_blocking_task(move || {
-                    boot_serial_loop(
-                        serial_clone2,
-                        port_name_clone,
-                        initial_cfg_clone,
-                        cmd_rx_clone,
-                        evt_tx_clone,
-                    )
-                })
-                .await
-                {
-                    Ok(r) => {
-                        if let Err(e) = r {
-                            log::error!("boot_serial_loop error: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("boot_serial_loop join error: {}", e);
-                    }
-                }
-            })
+        // Spawn the runtime task - it will handle its own lifecycle through the command channel
+        let _ = crate::core::task_manager::spawn_blocking_task(move || {
+            boot_serial_loop(
+                serial_clone2,
+                port_name_clone,
+                initial_cfg_clone,
+                cmd_rx_clone,
+                evt_tx_clone,
+            )
         });
-
-        // Store the task handle
-        *thread_handle_arc.lock().unwrap() = Some(task_handle);
 
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
-            thread_handle: thread_handle_arc,
         })
     }
 
@@ -140,89 +116,42 @@ impl PortRuntimeHandle {
         let evt_rx = Arc::new(evt_rx_raw);
         let initial_cfg = initial.clone();
 
-        let thread_handle_arc = Arc::new(Mutex::new(None));
-
         let serial_clone2 = Arc::clone(&serial);
         let initial_cfg_clone = initial_cfg.clone();
         let cmd_rx_clone = cmd_rx.clone();
         let evt_tx_clone = evt_tx.clone();
 
-        let task_handle = crate::core::task_manager::spawn_task(async move {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .build()
-                .expect("failed to build runtime for thread");
-            rt.block_on(async move {
-                match crate::core::task_manager::spawn_blocking_task(move || {
-                    boot_serial_loop(
-                        serial_clone2,
-                        String::new(),
-                        initial_cfg_clone,
-                        cmd_rx_clone,
-                        evt_tx_clone,
-                    )
-                })
-                .await
-                {
-                    Ok(r) => {
-                        if let Err(e) = r {
-                            log::error!("boot_serial_loop error: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("boot_serial_loop join error: {}", e);
-                    }
-                }
-            })
+        // Spawn the runtime task - it will handle its own lifecycle through the command channel
+        let _ = crate::core::task_manager::spawn_blocking_task(move || {
+            boot_serial_loop(
+                serial_clone2,
+                String::new(),
+                initial_cfg_clone,
+                cmd_rx_clone,
+                evt_tx_clone,
+            )
         });
-
-        // Store the task handle
-        *thread_handle_arc.lock().unwrap() = Some(task_handle);
 
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
-            thread_handle: thread_handle_arc,
         })
     }
 }
 
 impl Drop for PortRuntimeHandle {
     fn drop(&mut self) {
-        // Only stop the runtime when the last handle goes away
-        if Arc::strong_count(&self.thread_handle) > 1 {
-            return;
-        }
-
-        log::info!("🔴 PortRuntimeHandle dropping last clone - sending Stop command");
+        log::info!("🔴 PortRuntimeHandle dropping - sending Stop command");
         if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
             log::warn!("PortRuntimeHandle stop command send error: {err:?}");
-        }
-
-        match self.thread_handle.lock() {
-            Ok(mut thread) => {
-                if let Some(thread) = thread.take() {
-                    // For futures returned by spawn_task, we need to await them
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_time()
-                        .build()
-                        .expect("failed to build runtime for task join");
-                    rt.block_on(async {
-                        let _ = thread.await;
-                    });
-                }
-            }
-            Err(err) => {
-                log::warn!("PortRuntimeHandle failed to lock thread_handle for join: {err}");
-            }
         }
     }
 }
 
 /// Boot the serial port I/O loop
 /// Must be started in a separate thread, otherwise it will block the main thread
-fn boot_serial_loop(
+async fn boot_serial_loop(
     serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     port_name: String,
     initial: SerialConfig,
@@ -323,11 +252,7 @@ fn boot_serial_loop(
         // Only sleep if no data was received to avoid excessive CPU usage
         // When data is flowing, continue immediately to read more
         if !data_received {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .build()
-                .expect("failed to build runtime for thread-local sleep");
-            rt.block_on(async { crate::utils::sleep::sleep_1s().await });
+            sleep_1s().await;
         }
     }
 }

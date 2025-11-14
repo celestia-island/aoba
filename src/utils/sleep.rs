@@ -11,7 +11,3 @@ pub async fn sleep_1s() {
 pub async fn sleep_3s() {
     tokio::time::sleep(Duration::from_millis(3000)).await;
 }
-
-// Compatibility blocking helpers removed.
-// Note: do not add blocking helpers here. Use `std::thread::sleep` only
-// inside dedicated threads (spawned with `std::thread::spawn`).

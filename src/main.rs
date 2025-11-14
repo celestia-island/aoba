@@ -27,15 +27,8 @@ async fn main() -> Result<()> {
         let _ = ctrlc::set_handler(|| {
             // Best-effort cleanup
             cleanup::run_cleanups();
-            // Spawn an async task on the existing tokio runtime (main is #[tokio::main])
-            // to use the async sleep helper instead of the blocking one.
-            let _ = tokio::runtime::Handle::try_current().map(|handle| {
-                handle.spawn(async {
-                    aoba::utils::sleep::sleep_1s().await;
-                    // After cleanup, exit
-                    std::process::exit(130);
-                });
-            });
+            // After cleanup, exit
+            std::process::exit(130);
         });
     }
 
@@ -47,7 +40,7 @@ async fn main() -> Result<()> {
     }));
 
     // Handle configuration mode first
-    if actions::handle_config_mode(&matches) {
+    if actions::handle_config_mode(&matches).await {
         return Ok(());
     }
 
