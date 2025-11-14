@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::{process::Stdio, time::Duration};
 
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
@@ -91,8 +90,9 @@ async fn publish_mqtt_data(
 
 /// Test master mode with MQTT data source
 /// This test requires an external MQTT broker to be running (e.g., mosquitto)
+/// Tests 3 rounds of data updates to verify continuous MQTT message reception
 pub async fn test_mqtt_data_source() -> Result<()> {
-    log::info!("🧪 Testing MQTT data source mode...");
+    log::info!("🧪 Testing MQTT data source mode (3 rounds of data updates)...");
 
     // Check if mosquitto broker is available
     let broker_available = std::process::Command::new("sh")
@@ -115,9 +115,21 @@ pub async fn test_mqtt_data_source() -> Result<()> {
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
-    let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A04_u64);
-    let expected_values: Vec<u16> = (0..REGISTER_LENGTH).map(|_| rng.random::<u16>()).collect();
-    let payload = build_station_payload(&expected_values);
+    // Round 1: Sequential values
+    let round1_values: Vec<u16> = (0..REGISTER_LENGTH as u16).collect();
+    log::info!("📊 Round 1 expected values: {:?}", round1_values);
+
+    // Round 2: Reverse values
+    let round2_values: Vec<u16> = (0..REGISTER_LENGTH as u16).rev().collect();
+    log::info!("📊 Round 2 expected values: {:?}", round2_values);
+
+    // Round 3: Custom hex values
+    let round3_values: Vec<u16> = vec![
+        0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA,
+    ];
+    log::info!("📊 Round 3 expected values: {:?}", round3_values);
+
+    let payload_round1 = build_station_payload(&round1_values);
 
     let topic = "aoba/test/data_persist";
     let broker_host = "127.0.0.1";
@@ -125,10 +137,6 @@ pub async fn test_mqtt_data_source() -> Result<()> {
     let mqtt_url = format!("mqtt://{}:{}/{}", broker_host, broker_port, topic);
 
     log::info!("🧪 Using MQTT broker at {}", mqtt_url);
-
-    // Publish test data to MQTT broker
-    let serialized_payload = serde_json::to_string(&payload)?;
-    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
 
     let server_output = temp_dir.join("server_mqtt_persist_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
@@ -158,9 +166,16 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // Wait for master to be ready and receive MQTT data (minimum 5 seconds for MQTT connection)
+    // Wait for master to be ready and MQTT connection to establish
     wait_for_process_ready(&mut master, 5000).await?;
 
+    // Test Round 1: Sequential values
+    log::info!("🔄 Round 1: Publishing sequential values to MQTT topic");
+    let serialized_payload = serde_json::to_string(&payload_round1)?;
+    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 1: Polling data from slave");
     let client_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -177,7 +192,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
             "--baud-rate",
             "9600",
             "--timeout-ms",
-            "10000", // 10 second timeout to account for serial communication delays
+            "10000",
             "--json",
         ])
         .stdout(Stdio::piped())
@@ -191,21 +206,136 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
         return Err(anyhow!(
-            "Slave poll command failed: {} (stderr: {})",
+            "Round 1: Slave poll command failed: {} (stderr: {})",
             client_output.status,
             stderr
         ));
     }
 
     let response = parse_client_response(&client_output.stdout)?;
-    if response.values != expected_values {
+    log::info!("✅ Round 1: Received values: {:?}", response.values);
+    if response.values != round1_values {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
         return Err(anyhow!(
-            "Received values {:?} do not match expected {:?}",
+            "Round 1: Received values {:?} do not match expected {:?}",
             response.values,
-            expected_values
+            round1_values
+        ));
+    }
+
+    // Test Round 2: Reverse values
+    log::info!("🔄 Round 2: Publishing reverse values to MQTT topic");
+    let payload_round2 = build_station_payload(&round2_values);
+    let serialized_payload = serde_json::to_string(&payload_round2)?;
+    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 2: Polling data from slave");
+    let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            &register_length_arg,
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--timeout-ms",
+            "10000",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    if !client_output.status.success() {
+        let stderr = String::from_utf8_lossy(&client_output.stderr);
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 2: Slave poll command failed: {} (stderr: {})",
+            client_output.status,
+            stderr
+        ));
+    }
+
+    let response = parse_client_response(&client_output.stdout)?;
+    log::info!("✅ Round 2: Received values: {:?}", response.values);
+    if response.values != round2_values {
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 2: Received values {:?} do not match expected {:?}",
+            response.values,
+            round2_values
+        ));
+    }
+
+    // Test Round 3: Custom hex values
+    log::info!("🔄 Round 3: Publishing custom hex values to MQTT topic");
+    let payload_round3 = build_station_payload(&round3_values);
+    let serialized_payload = serde_json::to_string(&payload_round3)?;
+    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 3: Polling data from slave");
+    let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            &register_length_arg,
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--timeout-ms",
+            "10000",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    if !client_output.status.success() {
+        let stderr = String::from_utf8_lossy(&client_output.stderr);
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 3: Slave poll command failed: {} (stderr: {})",
+            client_output.status,
+            stderr
+        ));
+    }
+
+    let response = parse_client_response(&client_output.stdout)?;
+    log::info!("✅ Round 3: Received values: {:?}", response.values);
+    if response.values != round3_values {
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 3: Received values {:?} do not match expected {:?}",
+            response.values,
+            round3_values
         ));
     }
 
@@ -222,6 +352,6 @@ pub async fn test_mqtt_data_source() -> Result<()> {
     let _ = master.wait();
     std::fs::remove_file(&server_output).ok();
 
-    log::info!("✅ MQTT data source persistent test passed");
+    log::info!("✅ MQTT data source test passed (all 3 rounds verified)");
     Ok(())
 }

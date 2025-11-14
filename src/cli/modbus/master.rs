@@ -82,7 +82,11 @@ async fn handle_stations_post(
 ) -> Result<(StatusCode, Json<StationsResponse>), (StatusCode, String)> {
     // helper functions live in `crate::cli::modbus`
 
-    log::debug!("HTTP server received {} stations", stations.len());
+    log::info!(
+        "📥 HTTP Server: Received POST request with {} stations",
+        stations.len()
+    );
+    log::debug!("📥 HTTP Server: Station details: {:?}", stations);
 
     // Clone stations for forwarding and for building the response snapshot
     let stations_for_send = stations.clone();
@@ -1334,6 +1338,11 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                 loop {
                     match mqtt_rx.recv_timeout(Duration::from_secs(1)) {
                         Ok(payload) => {
+                            log::info!(
+                                "📥 MQTT: Received message payload (len={}): {}",
+                                payload.len(),
+                                payload
+                            );
                             if let Ok(values) = parse_data_line(
                                 &payload,
                                 station_id,
@@ -1341,9 +1350,10 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 register_address,
                                 register_length,
                             ) {
-                                log::debug!(
-                                    "Updating storage with {} values from MQTT",
-                                    values.len()
+                                log::info!(
+                                    "✅ MQTT: Updating storage with {} values from MQTT: {:?}",
+                                    values.len(),
+                                    values
                                 );
                                 {
                                     let mut context = storage.lock().unwrap();
@@ -1413,7 +1423,11 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                 loop {
                     match rx.recv_timeout(Duration::from_secs(1)) {
                         Ok(stations) => {
-                            log::debug!("Received {} stations from HTTP server", stations.len());
+                            log::info!(
+                                "📥 HTTP: Received {} stations from HTTP server",
+                                stations.len()
+                            );
+                            log::debug!("📥 HTTP: Station data: {:?}", stations);
 
                             // Extract values for this station
                             match super::extract_values_from_station_configs(
@@ -1424,9 +1438,10 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 register_length,
                             ) {
                                 Ok(values) => {
-                                    log::debug!(
-                                        "Updating storage with {} values from HTTP server",
-                                        values.len()
+                                    log::info!(
+                                        "✅ HTTP: Updating storage with {} values from HTTP server: {:?}",
+                                        values.len(),
+                                        values
                                     );
                                     {
                                         let mut context = storage.lock().unwrap();
@@ -1482,6 +1497,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::IpcPipe(path) => {
                 // IPC pipe: similar to regular Pipe
+                log::info!("📂 IPC: Opening IPC pipe at: {}", path);
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -1491,6 +1507,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         continue;
                     }
 
+                    log::info!("📥 IPC: Received line (len={}): {}", line.len(), line);
                     match parse_data_line(
                         &line,
                         station_id,
@@ -1499,7 +1516,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         register_length,
                     ) {
                         Ok(values) => {
-                            log::info!("Updating storage with values from IPC: {values:?}");
+                            log::info!("✅ IPC: Updating storage with values from IPC: {values:?}");
                             {
                                 let mut context = storage.lock().unwrap();
                                 match reg_mode {
@@ -1549,6 +1566,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
+                log::info!("📂 File: Opening file data source at: {}", path);
                 let file = match std::fs::File::open(path) {
                     Ok(f) => f,
                     Err(err) => {
@@ -1574,6 +1592,12 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     }
 
                     line_count += 1;
+                    log::info!(
+                        "📥 File: Reading line {} (len={}): {}",
+                        line_count,
+                        line.len(),
+                        line
+                    );
                     match parse_data_line(
                         &line,
                         station_id,
@@ -1582,10 +1606,11 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         register_length,
                     ) {
                         Ok(values) => {
-                            log::debug!(
-                                "Updating storage with {} values from line {}",
+                            log::info!(
+                                "✅ File: Updating storage with {} values from line {}: {:?}",
                                 values.len(),
-                                line_count
+                                line_count,
+                                values
                             );
                             {
                                 let mut context = storage.lock().unwrap();
@@ -1640,6 +1665,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it
+                log::info!("📂 Pipe: Opening named pipe at: {}", path);
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -1649,6 +1675,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         continue;
                     }
 
+                    log::info!("📥 Pipe: Received line (len={}): {}", line.len(), line);
                     match parse_data_line(
                         &line,
                         station_id,
@@ -1657,7 +1684,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         register_length,
                     ) {
                         Ok(values) => {
-                            log::info!("Updating storage with values: {values:?}");
+                            log::info!("✅ Pipe: Updating storage with values: {values:?}");
                             {
                                 let mut context = storage.lock().unwrap();
                                 match reg_mode {
