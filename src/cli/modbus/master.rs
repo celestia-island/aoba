@@ -20,9 +20,8 @@ use super::{
     ModbusIpcLogPayload, ModbusResponse,
 };
 use crate::{
-    cli::{
-        http_daemon_registry as http_registry, {actions, cleanup},
-    },
+    cli::{actions, cleanup, http_daemon_registry as http_registry},
+    core::task_manager::spawn_blocking_anyhow_task,
     protocol::modbus::{
         build_slave_coils_response, build_slave_discrete_inputs_response,
         build_slave_holdings_response, build_slave_inputs_response,
@@ -223,10 +222,9 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         let port = *http_port;
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
-        let handle = crate::core::task_manager::spawn_blocking_task(move || {
-            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx, None) {
-                log::error!("HTTP server daemon exited with error: {}", e);
-            }
+        let handle = spawn_blocking_anyhow_task(move || {
+            run_http_server_daemon(port, tx, shutdown_rx, None)?;
+            Ok(())
         });
 
         // register handle+shutdown sender in global registry for lookup/shutdown
@@ -567,11 +565,9 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
         let storage_for_thread = storage_clone.clone();
-        let handle = crate::core::task_manager::spawn_blocking_task(move || {
-            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread))
-            {
-                log::error!("HTTP server daemon exited with error: {}", e);
-            }
+        let handle = spawn_blocking_anyhow_task(move || {
+            run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread))?;
+            Ok(())
         });
 
         // Register handle+shutdown sender into global registry
@@ -699,10 +695,6 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
     loop {
-        // Check if update thread has panicked
-        // Note: spawn_result_task returns a future that resolves to JoinHandle, so we can't check is_finished directly
-        // For now, we'll skip this check since it's not critical for functionality
-
         // Check if HTTP server thread has panicked
         if let Some(port) = http_server_thread {
             if let Some(is_finished) = http_registry::is_handle_finished(port) {

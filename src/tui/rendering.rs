@@ -4,7 +4,7 @@ use std::{io, sync::Arc, time::Duration};
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
-use crate::{tui::status::Status, utils::sleep_1s};
+use crate::{core::task_manager::spawn_anyhow_task, tui::status::Status, utils::sleep_1s};
 
 /// Render UI function that only reads from Status (immutable reference)
 fn render_ui(frame: &mut Frame) -> Result<()> {
@@ -233,13 +233,11 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
 
     let (input_kill_tx, _input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_task = crate::core::task_manager::spawn_task({
+    let core_task = spawn_anyhow_task({
         let core_tx = core_tx.clone();
         let ui_rx = ui_rx.clone();
 
-        async move {
-            let _ = crate::tui::runtime::run_core_thread(ui_rx, core_tx, input_kill_tx).await;
-        }
+        async move { crate::tui::runtime::run_core_thread(ui_rx, core_tx, input_kill_tx).await }
     });
 
     let ipc_channel_id = crate::utils::IpcChannelId(channel_id.to_string());

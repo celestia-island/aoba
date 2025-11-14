@@ -7,7 +7,7 @@ use std::{
 
 use flume::Sender;
 
-type JoinOpt = Option<tokio::task::JoinHandle<()>>;
+type JoinOpt = Option<tokio::task::JoinHandle<Result<()>>>;
 
 struct Entry {
     handle: Arc<Mutex<JoinOpt>>,
@@ -25,7 +25,7 @@ static HTTP_REGISTRY: Lazy<Mutex<Registry>> = Lazy::new(|| Mutex::new(Registry::
 /// Insert a handle and shutdown sender for given port.
 pub fn register_handle(
     port: u16,
-    handle: tokio::task::JoinHandle<()>,
+    handle: tokio::task::JoinHandle<Result<()>>,
     shutdown_tx: Sender<()>,
 ) -> Arc<Mutex<JoinOpt>> {
     let arc = Arc::new(Mutex::new(Some(handle)));
@@ -61,7 +61,7 @@ pub async fn shutdown_and_join(port: u16) -> Result<()> {
     };
 
     if let Some(h) = handle_to_await {
-        h.await.unwrap_or(());
+        h.await.unwrap_or(Ok(()))?;
     }
 
     Ok(())

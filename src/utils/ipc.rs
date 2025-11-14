@@ -13,6 +13,8 @@ use interprocess::local_socket::{
     {GenericFilePath, GenericNamespaced, ListenerOptions},
 };
 
+use crate::core::task_manager::spawn_blocking_anyhow_task;
+
 use super::{
     E2EToTuiMessage, IpcChannelId, TuiToE2EMessage, CONNECT_RETRY_INTERVAL, CONNECT_TIMEOUT,
     IO_TIMEOUT,
@@ -133,19 +135,8 @@ impl IpcSender {
         );
 
         // Accept connections from TUI in a blocking task
-        let to_tui_stream = crate::core::task_manager::spawn_blocking_task(move || {
-            to_tui_listener
-                .accept()
-                .map_err(|e| anyhow!("Failed to accept connection: {e}"))
-        })
-        .await??;
-
-        let from_tui_stream = crate::core::task_manager::spawn_blocking_task(move || {
-            from_tui_listener
-                .accept()
-                .map_err(|e| anyhow!("Failed to accept connection: {e}"))
-        })
-        .await??;
+        let to_tui_stream = to_tui_listener.accept()?;
+        let from_tui_stream = from_tui_listener.accept()?;
 
         log::info!("IPC [{}] TUI connected successfully", channel_id.0);
 
@@ -165,7 +156,7 @@ impl IpcSender {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = crate::core::task_manager::spawn_blocking_task(move || {
+        let result = spawn_blocking_anyhow_task(move || {
             let start = Instant::now();
             let result = pipe.write(&message);
 
@@ -198,7 +189,7 @@ impl IpcSender {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = crate::core::task_manager::spawn_blocking_task(move || {
+        let result = spawn_blocking_anyhow_task(move || {
             let start = Instant::now();
             let result = pipe.read();
 
@@ -275,7 +266,7 @@ impl IpcReceiver {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = crate::core::task_manager::spawn_blocking_task(move || {
+        let result = spawn_blocking_anyhow_task(move || {
             let start = Instant::now();
             let result = pipe.read();
 
@@ -305,7 +296,7 @@ impl IpcReceiver {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = crate::core::task_manager::spawn_blocking_task(move || {
+        let result = spawn_blocking_anyhow_task(move || {
             let start = Instant::now();
             let result = pipe.write(&message);
 
@@ -365,21 +356,21 @@ async fn connect_with_retry(name: &str) -> Result<LocalSocketStream> {
 
     loop {
         let name_clone = name.clone();
-        let connect_result = crate::core::task_manager::spawn_blocking_task(move || {
+        let connect_result = spawn_blocking_anyhow_task(move || {
             if cfg!(unix) {
                 // On Unix, try abstract namespace first, fall back to file path
                 let name_ref = name_clone.as_str();
                 match name_ref.to_ns_name::<GenericNamespaced>() {
-                    Ok(ns) => LocalSocketStream::connect(ns),
+                    Ok(ns) => Ok(LocalSocketStream::connect(ns)?),
                     Err(_) => {
                         let path = name_ref.to_fs_name::<GenericFilePath>()?;
-                        LocalSocketStream::connect(path)
+                        Ok(LocalSocketStream::connect(path)?)
                     }
                 }
             } else {
                 // On Windows, use named pipes
                 let pipe_name = name_clone.to_ns_name::<GenericNamespaced>()?;
-                LocalSocketStream::connect(pipe_name)
+                Ok(LocalSocketStream::connect(pipe_name)?)
             }
         })
         .await?;

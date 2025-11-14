@@ -9,7 +9,7 @@ use flume::{Receiver, Sender};
 use serialport::{DataBits, Parity, SerialPort, StopBits};
 
 use super::status::types::port::{SerialConfig, SerialParity};
-use crate::utils::sleep::sleep_1s;
+use crate::{core::task_manager::spawn_anyhow_task, utils::sleep::sleep_1s};
 
 // Read buffer and assembling limits shared by runtime implementation.
 const READ_BUF_SIZE: usize = 256;
@@ -89,7 +89,7 @@ impl PortRuntimeHandle {
         let evt_tx_clone = evt_tx.clone();
 
         // Spawn the runtime task - it will handle its own lifecycle through the command channel
-        let _ = crate::core::task_manager::spawn_blocking_task(move || {
+        spawn_anyhow_task(async move {
             boot_serial_loop(
                 serial_clone2,
                 port_name_clone,
@@ -97,6 +97,7 @@ impl PortRuntimeHandle {
                 cmd_rx_clone,
                 evt_tx_clone,
             )
+            .await
         });
 
         Ok(Self {
@@ -122,7 +123,7 @@ impl PortRuntimeHandle {
         let evt_tx_clone = evt_tx.clone();
 
         // Spawn the runtime task - it will handle its own lifecycle through the command channel
-        let _ = crate::core::task_manager::spawn_blocking_task(move || {
+        spawn_anyhow_task(async move {
             boot_serial_loop(
                 serial_clone2,
                 String::new(),
@@ -130,6 +131,7 @@ impl PortRuntimeHandle {
                 cmd_rx_clone,
                 evt_tx_clone,
             )
+            .await
         });
 
         Ok(Self {

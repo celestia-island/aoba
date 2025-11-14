@@ -6,16 +6,6 @@ where
     tokio::task::spawn(future)
 }
 
-/// Spawn a task that returns a Result and add it to the global task set
-pub fn spawn_result_task<F, T, E>(future: F) -> tokio::task::JoinHandle<Result<T, E>>
-where
-    F: std::future::Future<Output = Result<T, E>> + Send + 'static,
-    T: Send + 'static,
-    E: Send + 'static,
-{
-    tokio::task::spawn(future)
-}
-
 /// Spawn a task that returns anyhow::Result and add it to the global task set
 pub fn spawn_anyhow_task<F, T>(future: F) -> tokio::task::JoinHandle<anyhow::Result<T>>
 where

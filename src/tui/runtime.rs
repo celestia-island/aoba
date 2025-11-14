@@ -8,6 +8,7 @@ use crate::{
     core::{
         bus::{Bus, CoreToUi, UiToCore},
         subprocess::{CliSubprocessConfig, SubprocessManager},
+        task_manager::spawn_anyhow_task,
     },
     protocol::status::{
         debug_dump::{enable_debug_dump, start_status_dump_thread},
@@ -18,8 +19,9 @@ use crate::{
         ipc::handle_cli_ipc_message,
         logs::*,
         status::{
+            self as types,
             port::{PortConfig, PortData, PortState, PortStatusIndicator, PortSubprocessInfo},
-            {self as types, Status, TuiStatus},
+            Status, TuiStatus,
         },
     },
     utils::{i18n::lang, sleep::sleep_1s},
@@ -156,7 +158,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_task = crate::core::task_manager::spawn_task({
+    let core_task = spawn_anyhow_task({
         let core_tx = core_tx.clone();
         let thr_tx = thr_tx.clone();
         let ui_rx = ui_rx.clone();
@@ -164,7 +166,8 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
         async move {
             let res = run_core_thread(ui_rx, core_tx, input_kill_tx).await;
-            let _ = thr_tx.send(res);
+            thr_tx.send(res)?;
+            Ok(())
         }
     });
 

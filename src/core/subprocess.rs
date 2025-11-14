@@ -13,6 +13,7 @@ use flume::Receiver;
 
 use crate::{
     cli::{config::StationConfig, status::CliMode},
+    core::task_manager::spawn_anyhow_task,
     protocol::{
         ipc::{
             generate_socket_name, get_command_channel_name, IpcClient, IpcCommandClient,
@@ -48,8 +49,8 @@ pub struct ManagedSubprocess {
     pub ipc_connection: Option<IpcConnection>,
     pub command_client: Option<IpcCommandClient>,
     // Use channels for async communication instead of thread handles
-    ipc_accept_result: Option<Receiver<Result<IpcConnection>>>,
-    command_connect_result: Option<Receiver<Result<IpcCommandClient>>>,
+    ipc_accept_result: Option<Receiver<IpcConnection>>,
+    command_connect_result: Option<Receiver<IpcCommandClient>>,
     // Log tasks are managed by task_manager and don't need explicit handles
 }
 
@@ -147,88 +148,82 @@ impl ManagedSubprocess {
         // Spawn log readers using task_manager (no need to store handles)
         if let Some(stdout) = child.stdout.take() {
             let port_label = config.port_name.clone();
-            crate::core::task_manager::spawn_task(async move {
-                let _ = crate::core::task_manager::spawn_blocking_task(move || {
-                    let mut reader = BufReader::new(stdout);
-                    let mut line = String::new();
-                    loop {
-                        line.clear();
-                        match reader.read_line(&mut line) {
-                            Ok(0) => {
-                                log::debug!("CLI[{}] stdout closed", port_label);
-                                break;
-                            }
-                            Ok(_) => {
-                                let trimmed = line.trim_end_matches(['\r', '\n']);
-                                if !trimmed.is_empty() {
-                                    log::info!("CLI[{}] stdout: {}", port_label, trimmed);
-                                }
-                            }
-                            Err(err) => {
-                                log::warn!("CLI[{}] stdout reader error: {}", port_label, err);
-                                break;
+            spawn_anyhow_task(async move {
+                let mut reader = BufReader::new(stdout);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => {
+                            log::debug!("CLI[{}] stdout closed", port_label);
+                            break;
+                        }
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(['\r', '\n']);
+                            if !trimmed.is_empty() {
+                                log::info!("CLI[{}] stdout: {}", port_label, trimmed);
                             }
                         }
+                        Err(err) => {
+                            log::warn!("CLI[{}] stdout reader error: {}", port_label, err);
+                            break;
+                        }
                     }
-                })
-                .await;
+                }
+                Ok(())
             });
         }
 
         if let Some(stderr) = child.stderr.take() {
             let port_label = config.port_name.clone();
-            crate::core::task_manager::spawn_task(async move {
-                let _ = crate::core::task_manager::spawn_blocking_task(move || {
-                    let mut reader = BufReader::new(stderr);
-                    let mut line = String::new();
-                    loop {
-                        line.clear();
-                        match reader.read_line(&mut line) {
-                            Ok(0) => {
-                                log::debug!("CLI[{}] stderr closed", port_label);
-                                break;
-                            }
-                            Ok(_) => {
-                                let trimmed = line.trim_end_matches(['\r', '\n']);
-                                if !trimmed.is_empty() {
-                                    log::warn!("CLI[{}] stderr: {}", port_label, trimmed);
-                                }
-                            }
-                            Err(err) => {
-                                log::warn!("CLI[{}] stderr reader error: {}", port_label, err);
-                                break;
+            spawn_anyhow_task(async move {
+                let mut reader = BufReader::new(stderr);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => {
+                            log::debug!("CLI[{}] stderr closed", port_label);
+                            break;
+                        }
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(['\r', '\n']);
+                            if !trimmed.is_empty() {
+                                log::warn!("CLI[{}] stderr: {}", port_label, trimmed);
                             }
                         }
+                        Err(err) => {
+                            log::warn!("CLI[{}] stderr reader error: {}", port_label, err);
+                            break;
+                        }
                     }
-                })
-                .await;
+                }
+                Ok(())
             });
         }
 
         // Use channels for IPC connection results
         let (ipc_tx, ipc_rx) = flume::bounded(1);
         let socket_name = ipc_socket_name.clone();
-        crate::core::task_manager::spawn_task(async move {
-            let result = crate::core::task_manager::spawn_blocking_task(move || {
-                // Recreate the IPC client inside the blocking task
-                match IpcClient::listen(socket_name) {
-                    Ok(client) => client.accept(),
-                    Err(e) => Err(e),
-                }
-            })
-            .await;
+        spawn_anyhow_task(async move {
+            // Recreate the IPC client inside the blocking task
+            let result = match IpcClient::listen(socket_name) {
+                Ok(client) => client.accept(),
+                Err(e) => Err(e),
+            };
             // Flatten the nested Result<Result<T, E>, JoinError> to Result<T, E>
             let flattened_result = match result {
                 Ok(inner_result) => inner_result,
-                Err(join_error) => Err(anyhow!("Task join error: {}", join_error)),
+                Err(join_error) => return Err(anyhow!("Task join error: {}", join_error)),
             };
-            let _ = ipc_tx.send(flattened_result);
+            ipc_tx.send(flattened_result)?;
+            Ok(())
         });
 
         // Use channels for command connection results
         let (cmd_tx, cmd_rx) = flume::bounded(1);
         let command_channel_name = get_command_channel_name(&ipc_socket_name);
-        crate::core::task_manager::spawn_task(async move {
+        spawn_anyhow_task(async move {
             // Wait a bit for CLI to set up its command listener
             crate::utils::sleep::sleep_1s().await;
 
@@ -241,17 +236,18 @@ impl ManagedSubprocess {
                         result = Ok(client);
                         break;
                     }
-                    Err(e) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
-                        log::debug!("Command channel connect attempt {attempt} failed: {e}");
+                    Err(err) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
+                        log::debug!("Command channel connect attempt {attempt} failed: {err}");
                         crate::utils::sleep::sleep_1s().await;
                     }
-                    Err(e) => {
-                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {e}");
-                        result = Err(e);
+                    Err(err) => {
+                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {err}");
+                        result = Err(err);
                     }
                 }
             }
-            let _ = cmd_tx.send(result);
+            cmd_tx.send(result?)?;
+            Ok(())
         });
 
         Ok(Self {
@@ -269,13 +265,9 @@ impl ManagedSubprocess {
     fn try_complete_ipc_connection(&mut self) -> Result<()> {
         if let Some(rx) = self.ipc_accept_result.take() {
             match rx.try_recv() {
-                Ok(Ok(conn)) => {
+                Ok(conn) => {
                     log::info!("Accepted IPC connection for port {}", self.config.port_name);
                     self.ipc_connection = Some(conn);
-                }
-                Ok(Err(e)) => {
-                    log::error!("IPC accept failed for {}: {}", self.config.port_name, e);
-                    return Err(e);
                 }
                 Err(flume::TryRecvError::Empty) => {
                     // Still waiting, put it back
@@ -293,20 +285,12 @@ impl ManagedSubprocess {
         // Also try to complete command client connection
         if let Some(rx) = self.command_connect_result.take() {
             match rx.try_recv() {
-                Ok(Ok(client)) => {
+                Ok(client) => {
                     log::info!(
                         "✅ Connected to command channel for port {}",
                         self.config.port_name
                     );
                     self.command_client = Some(client);
-                }
-                Ok(Err(e)) => {
-                    log::warn!(
-                        "Command channel connect failed for {}: {}",
-                        self.config.port_name,
-                        e
-                    );
-                    // Don't fail - command channel is optional for now
                 }
                 Err(flume::TryRecvError::Empty) => {
                     // Still waiting, put it back
