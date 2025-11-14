@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod cleanup;
 pub mod config;
+pub mod http_daemon_registry;
 pub mod modbus;
 pub mod status;
 

@@ -241,7 +241,7 @@ async fn test_tui_master_configuration() -> Result<()> {
 
     // 等待 TUI 初始化并开始写入状态
     // 注意：在生产测试中，更喜欢使用 wait_for_tui_page() 而不是 sleep
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    sleep_3s().await;
 
     // 等待 TUI 到达 Entry 页面
     wait_for_tui_page("Entry", 10, None).await?;
@@ -651,7 +651,7 @@ pub async fn enter_menu_with_retry<T: Expect>(
         match wait_for_tui_page(expected_page, 3, Some(300)).await {
             Ok(()) => {
                 // 验证终端也更新了
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                sleep_1s().await;
                 let screen = cap.capture(session, "verify").await?;
                 if screen.contains(expected_page) {
                     return Ok(());
@@ -659,7 +659,7 @@ pub async fn enter_menu_with_retry<T: Expect>(
             }
             Err(_) if attempt < max_attempts => {
                 log::warn!("尝试 {} 失败，重试中...", attempt);
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                sleep_1s().await;
                 continue;
             }
             Err(e) => return Err(e),

@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use aoba::{
     cli::{self, actions, cleanup},
-    init_common, start_tui,
+    init_common,
+    protocol::tty::enable_virtual_port_hint,
+    start_tui,
 };
 
 #[tokio::main]
@@ -17,7 +19,7 @@ async fn main() -> Result<()> {
     init_common();
 
     if matches.get_flag("enable-virtual-ports") {
-        aoba::protocol::tty::enable_virtual_port_hint();
+        enable_virtual_port_hint();
         log::info!("🔌 Virtual VCOM port detection enabled");
     }
 
@@ -27,8 +29,6 @@ async fn main() -> Result<()> {
         let _ = ctrlc::set_handler(|| {
             // Best-effort cleanup
             cleanup::run_cleanups();
-            // Give time for cleanup to complete (port release, etc.)
-            std::thread::sleep(std::time::Duration::from_millis(300));
             // After cleanup, exit
             std::process::exit(130);
         });
@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     }));
 
     // Handle configuration mode first
-    if actions::handle_config_mode(&matches) {
+    if actions::handle_config_mode(&matches).await {
         return Ok(());
     }
 
@@ -51,12 +51,9 @@ async fn main() -> Result<()> {
     // because they use synchronous MQTT clients that create their own tokio runtime.
     // We use spawn_blocking to avoid "runtime within runtime" panics.
     let matches_clone = matches.clone();
-    tokio::task::spawn_blocking(move || {
-        if actions::run_one_shot_actions(&matches_clone) {
-            std::process::exit(0);
-        }
-    })
-    .await?;
+    if actions::run_one_shot_actions(&matches_clone).await {
+        std::process::exit(0);
+    }
 
     // If TUI requested, run in this process so it inherits the terminal.
     if matches.get_flag("tui") {

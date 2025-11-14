@@ -1,16 +1,20 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use bytes::Bytes;
 use chrono::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use serialport::SerialPort;
 
 use super::parse_modbus_header;
+use crate::utils::sleep::sleep_1s;
 
 /// Read a Modbus RTU frame from the provided serial port wrapper.
 /// Returns Ok(Some(Bytes)) when a full frame is read, Ok(None) for timeout / no data,
 /// or Err for unexpected I / O / locking errors.
-pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Result<Option<Bytes>> {
+pub async fn read_modbus_frame(
+    usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>,
+) -> Result<Option<Bytes>> {
     // Incremental read helper: read until we have 'need' bytes or the port times out.
     fn read_until(
         port: &mut dyn SerialPort,
@@ -52,9 +56,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
     // Acquire serial lock once for the duration of this read operation. This avoids
     // interleaved lock/unlock cycles which can split incoming data across reads
     // in a way that appears to reorder bytes from the caller's perspective.
-    let mut guard = usbtty
-        .lock()
-        .map_err(|err| anyhow!("Failed to lock USBTTY port: {err}"))?;
+    let mut guard = usbtty.lock().await;
 
     // Step 1: read minimal 2 bytes (slave id + function)
     while collected.len() < 2 {
@@ -65,8 +67,9 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
         if chrono::Utc::now() - start > Duration::seconds(2) {
             return Ok(None);
         }
-        // yield briefly while keeping the lock
-        std::thread::sleep(std::time::Duration::from_millis(8));
+        // yield briefly while keeping the lock (running in dedicated thread)
+        // Use async sleep instead of blocking sleep
+        sleep_1s().await;
     }
 
     if collected.len() < 2 {
@@ -130,7 +133,8 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
         // try to read up to 1 more byte
         let target = collected.len() + 1;
         read_until(&mut **guard, &mut collected, target)?;
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        // Use async sleep instead of blocking sleep
+        sleep_1s().await;
         guessed_len_opt = determine_length(&mut collected);
     }
     let guessed_len = guessed_len_opt.unwrap();
@@ -162,7 +166,8 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
                 return Ok(Some(Bytes::from(collected)));
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        // Use async sleep instead of blocking sleep
+        sleep_1s().await;
     }
 
     if collected.len() != guessed_len {

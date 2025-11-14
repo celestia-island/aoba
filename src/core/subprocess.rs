@@ -9,8 +9,11 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+use flume::Receiver;
+
 use crate::{
     cli::{config::StationConfig, status::CliMode},
+    core::task_manager::spawn_task,
     protocol::{
         ipc::{
             generate_socket_name, get_command_channel_name, IpcClient, IpcCommandClient,
@@ -19,6 +22,9 @@ use crate::{
         status::debug_dump::is_debug_dump_enabled,
     },
 };
+
+// Named constant for command channel connect retries to avoid magic numbers
+const COMMAND_CHANNEL_CONNECT_RETRIES: usize = 3;
 
 /// Configuration for a CLI subprocess
 #[derive(Debug, Clone)]
@@ -42,10 +48,10 @@ pub struct ManagedSubprocess {
     pub ipc_socket_name: String,
     pub ipc_connection: Option<IpcConnection>,
     pub command_client: Option<IpcCommandClient>,
-    ipc_accept_thread: Option<std::thread::JoinHandle<Result<IpcConnection>>>,
-    command_connect_thread: Option<std::thread::JoinHandle<Result<IpcCommandClient>>>,
-    stdout_thread: Option<std::thread::JoinHandle<()>>,
-    stderr_thread: Option<std::thread::JoinHandle<()>>,
+    // Use channels for async communication instead of thread handles
+    ipc_accept_result: Option<Receiver<IpcConnection>>,
+    command_connect_result: Option<Receiver<IpcCommandClient>>,
+    // Log tasks are managed by task_manager and don't need explicit handles
 }
 
 /// Lightweight snapshot of a managed subprocess for reporting to Status
@@ -69,7 +75,7 @@ impl ManagedSubprocess {
         );
 
         // Setup IPC listener before spawning the process
-        let ipc_client = IpcClient::listen(ipc_socket_name.clone())?;
+        let _ipc_client = IpcClient::listen(ipc_socket_name.clone())?;
 
         // Get the current executable path
         let exe_path = std::env::current_exe()?;
@@ -139,87 +145,109 @@ impl ManagedSubprocess {
 
         log::info!("CLI subprocess spawned with PID: {:?}", child.id());
 
-        let stdout_thread = child.stdout.take().map(|stdout| {
+        // Spawn log readers using task_manager (no need to store handles)
+        if let Some(stdout) = child.stdout.take() {
             let port_label = config.port_name.clone();
-            std::thread::spawn(move || {
+            spawn_task(async move {
                 let mut reader = BufReader::new(stdout);
                 let mut line = String::new();
                 loop {
                     line.clear();
                     match reader.read_line(&mut line) {
                         Ok(0) => {
-                            log::debug!("CLI[{port_label}] stdout closed");
+                            log::debug!("CLI[{}] stdout closed", port_label);
                             break;
                         }
                         Ok(_) => {
                             let trimmed = line.trim_end_matches(['\r', '\n']);
                             if !trimmed.is_empty() {
-                                log::info!("CLI[{port_label}] stdout: {trimmed}");
+                                log::info!("CLI[{}] stdout: {}", port_label, trimmed);
                             }
                         }
                         Err(err) => {
-                            log::warn!("CLI[{port_label}] stdout reader error: {err}");
+                            log::warn!("CLI[{}] stdout reader error: {}", port_label, err);
                             break;
                         }
                     }
                 }
-            })
-        });
+                Ok(())
+            });
+        }
 
-        let stderr_thread = child.stderr.take().map(|stderr| {
+        if let Some(stderr) = child.stderr.take() {
             let port_label = config.port_name.clone();
-            std::thread::spawn(move || {
+            spawn_task(async move {
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
                 loop {
                     line.clear();
                     match reader.read_line(&mut line) {
                         Ok(0) => {
-                            log::debug!("CLI[{port_label}] stderr closed");
+                            log::debug!("CLI[{}] stderr closed", port_label);
                             break;
                         }
                         Ok(_) => {
                             let trimmed = line.trim_end_matches(['\r', '\n']);
                             if !trimmed.is_empty() {
-                                log::warn!("CLI[{port_label}] stderr: {trimmed}");
+                                log::warn!("CLI[{}] stderr: {}", port_label, trimmed);
                             }
                         }
                         Err(err) => {
-                            log::warn!("CLI[{port_label}] stderr reader error: {err}");
+                            log::warn!("CLI[{}] stderr reader error: {}", port_label, err);
                             break;
                         }
                     }
                 }
-            })
+                Ok(())
+            });
+        }
+
+        // Use channels for IPC connection results
+        let (ipc_tx, ipc_rx) = flume::bounded(1);
+        let socket_name = ipc_socket_name.clone();
+        spawn_task(async move {
+            // Recreate the IPC client inside the blocking task
+            let result = match IpcClient::listen(socket_name) {
+                Ok(client) => client.accept(),
+                Err(e) => Err(e),
+            };
+            // Flatten the nested Result<Result<T, E>, JoinError> to Result<T, E>
+            let flattened_result = match result {
+                Ok(inner_result) => inner_result,
+                Err(join_error) => return Err(anyhow!("Task join error: {}", join_error)),
+            };
+            ipc_tx.send(flattened_result)?;
+            Ok(())
         });
 
-        // Spawn thread to accept IPC connection
-        let accept_thread = std::thread::spawn(move || ipc_client.accept());
-
-        // Spawn thread to connect to command channel (with retry)
+        // Use channels for command connection results
+        let (cmd_tx, cmd_rx) = flume::bounded(1);
         let command_channel_name = get_command_channel_name(&ipc_socket_name);
-        let command_connect_thread = std::thread::spawn(move || {
+        spawn_task(async move {
             // Wait a bit for CLI to set up its command listener
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            crate::utils::sleep::sleep_1s().await;
 
-            // Try to connect with retries (increased timeout for slow subprocess startup)
-            for attempt in 1..=30 {
+            // Try to connect with retries
+            let mut result = Err(anyhow!("No connection attempts made"));
+            for attempt in 1..=COMMAND_CHANNEL_CONNECT_RETRIES {
                 match IpcCommandClient::connect(command_channel_name.clone()) {
                     Ok(client) => {
                         log::info!("Connected to CLI command channel on attempt {attempt}");
-                        return Ok(client);
+                        result = Ok(client);
+                        break;
                     }
-                    Err(e) if attempt < 30 => {
-                        log::debug!("Command channel connect attempt {attempt} failed: {e}");
-                        std::thread::sleep(std::time::Duration::from_millis(200));
+                    Err(err) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
+                        log::debug!("Command channel connect attempt {attempt} failed: {err}");
+                        crate::utils::sleep::sleep_1s().await;
                     }
-                    Err(e) => {
-                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {e}");
-                        return Err(e);
+                    Err(err) => {
+                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {err}");
+                        result = Err(err);
                     }
                 }
             }
-            Err(anyhow::anyhow!("Failed to connect to command channel"))
+            cmd_tx.send(result?)?;
+            Ok(())
         });
 
         Ok(Self {
@@ -228,71 +256,55 @@ impl ManagedSubprocess {
             ipc_socket_name,
             ipc_connection: None,
             command_client: None,
-            ipc_accept_thread: Some(accept_thread),
-            command_connect_thread: Some(command_connect_thread),
-            stdout_thread,
-            stderr_thread,
+            ipc_accept_result: Some(ipc_rx),
+            command_connect_result: Some(cmd_rx),
         })
     }
 
     /// Try to complete IPC connection if still pending
     fn try_complete_ipc_connection(&mut self) -> Result<()> {
-        if let Some(thread) = self.ipc_accept_thread.take() {
-            if thread.is_finished() {
-                match thread.join() {
-                    Ok(Ok(conn)) => {
-                        log::info!("Accepted IPC connection for port {}", self.config.port_name);
-                        self.ipc_connection = Some(conn);
-                    }
-                    Ok(Err(e)) => {
-                        log::error!("IPC accept failed for {}: {}", self.config.port_name, e);
-                        return Err(e);
-                    }
-                    Err(_) => {
-                        return Err(anyhow!("IPC accept thread panicked"));
-                    }
+        if let Some(rx) = self.ipc_accept_result.take() {
+            match rx.try_recv() {
+                Ok(conn) => {
+                    log::info!("Accepted IPC connection for port {}", self.config.port_name);
+                    self.ipc_connection = Some(conn);
                 }
-            } else {
-                // Thread still running, put it back
-                self.ipc_accept_thread = Some(thread);
+                Err(flume::TryRecvError::Empty) => {
+                    // Still waiting, put it back
+                    self.ipc_accept_result = Some(rx);
+                }
+                Err(flume::TryRecvError::Disconnected) => {
+                    log::error!(
+                        "IPC accept channel disconnected for {}",
+                        self.config.port_name
+                    );
+                }
             }
         }
 
         // Also try to complete command client connection
-        if let Some(thread) = self.command_connect_thread.take() {
-            log::debug!(
-                "🔍 Checking command_connect_thread, is_finished: {}",
-                thread.is_finished()
-            );
-            if thread.is_finished() {
-                match thread.join() {
-                    Ok(Ok(client)) => {
-                        log::info!(
-                            "✅ Connected to command channel for port {}",
-                            self.config.port_name
-                        );
-                        self.command_client = Some(client);
-                    }
-                    Ok(Err(e)) => {
-                        log::warn!(
-                            "Command channel connect failed for {}: {}",
-                            self.config.port_name,
-                            e
-                        );
-                        // Don't fail - command channel is optional for now
-                    }
-                    Err(_) => {
-                        log::warn!("Command channel connect thread panicked");
-                    }
+        if let Some(rx) = self.command_connect_result.take() {
+            match rx.try_recv() {
+                Ok(client) => {
+                    log::info!(
+                        "✅ Connected to command channel for port {}",
+                        self.config.port_name
+                    );
+                    self.command_client = Some(client);
                 }
-            } else {
-                // Thread still running, put it back
-                log::debug!("🔍 Command connect thread still running, putting it back");
-                self.command_connect_thread = Some(thread);
+                Err(flume::TryRecvError::Empty) => {
+                    // Still waiting, put it back
+                    self.command_connect_result = Some(rx);
+                }
+                Err(flume::TryRecvError::Disconnected) => {
+                    log::warn!(
+                        "Command channel connect channel disconnected for {}",
+                        self.config.port_name
+                    );
+                }
             }
-        } else {
-            log::debug!("🔍 No command_connect_thread to check");
         }
+
         Ok(())
     }
 
@@ -402,27 +414,7 @@ impl ManagedSubprocess {
                 );
             }
         }
-        self.join_log_threads();
         Ok(())
-    }
-
-    fn join_log_threads(&mut self) {
-        if let Some(handle) = self.stdout_thread.take() {
-            if let Err(err) = handle.join() {
-                log::debug!(
-                    "CLI[{}] stdout thread join error: {err:?}",
-                    self.config.port_name
-                );
-            }
-        }
-        if let Some(handle) = self.stderr_thread.take() {
-            if let Err(err) = handle.join() {
-                log::debug!(
-                    "CLI[{}] stderr thread join error: {err:?}",
-                    self.config.port_name
-                );
-            }
-        }
     }
 
     /// Snapshot current subprocess state for status updates

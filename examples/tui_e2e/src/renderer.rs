@@ -7,7 +7,7 @@ use anyhow::{bail, Result};
 
 use ratatui::{backend::TestBackend, Terminal};
 
-use aoba::utils::{E2EToTuiMessage, IpcSender, TuiToE2EMessage};
+use _main::utils::{E2EToTuiMessage, IpcSender, TuiToE2EMessage};
 
 /// Render the TUI via IPC by requesting screen content from the TUI process
 ///
@@ -43,7 +43,7 @@ pub async fn render_tui_via_ipc(sender: &mut IpcSender) -> Result<(String, u16, 
 /// **Current Limitation**: Mock state synchronization is not yet implemented.
 /// The renderer will render the default TUI state. For workflows that need specific state,
 /// mock state manipulation must be implemented through direct TUI status writes using
-/// `aoba::tui::status::write_status()`.
+/// `_main::tui::status::write_status()`.
 ///
 /// # Arguments
 /// * `width` - Terminal width in characters
@@ -67,7 +67,7 @@ pub fn render_tui_to_string(width: u16, height: u16) -> Result<String> {
     // Render the TUI
     terminal.draw(|frame| {
         // Call the main TUI render function
-        if let Err(e) = aoba::tui::render_ui_for_testing(frame) {
+        if let Err(e) = _main::tui::render_ui_for_testing(frame) {
             log::error!("Failed to render UI: {e}");
         }
     })?;
@@ -83,12 +83,12 @@ fn ensure_status_initialized() -> Result<()> {
     use std::sync::Arc;
 
     // Try to read status - if it fails, status is not initialized
-    let needs_init = aoba::tui::status::read_status(|_| Ok(())).is_err();
+    let needs_init = _main::tui::status::read_status(|_| Ok(())).is_err();
 
     if needs_init {
         // Initialize with default status
-        let app = Arc::new(RwLock::new(aoba::tui::status::Status::default()));
-        aoba::tui::status::init_status(app)?;
+        let app = Arc::new(RwLock::new(_main::tui::status::Status::default()));
+        _main::tui::status::init_status(app)?;
         log::debug!("Initialized TUI global status for testing");
     }
 

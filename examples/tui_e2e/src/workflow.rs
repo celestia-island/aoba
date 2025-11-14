@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use aoba::protocol::status::types::modbus::StationMode;
+use _main::protocol::status::types::modbus::StationMode;
 
 /// Complete workflow definition from TOML file
 #[derive(Debug, Clone, Deserialize, Serialize)]

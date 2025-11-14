@@ -1,22 +1,17 @@
-# Data Source - IPC Pipe Mode
-# Test ID: data_source_ipc_pipe
+# Data Source - MQTT Client Mode
+# Test ID: data_source_mqtt_client
 # Station: ID=1, Type=Holding, Address=0x0000, Length=10
-# Data Source: IPC Pipe with path /tmp/test_ipc_pipe
+# Data Source: MQTT Client with URL mqtt://localhost:1883/topic
 #
 # Test Focus:
-# - Configure master station with IPC pipe data source
+# - Configure master station with MQTT client data source
 # - Verify data source configuration in mock state
-# - Simulate external data source feeding data
+# - Simulate external MQTT messages feeding data
 # - Verify data appears correctly on screen (3 rounds)
-#
-# Test Data (3 Rounds - simulated as external data feed):
-# Round 1 - Sequential: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-# Round 2 - Reverse: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
-# Round 3 - Custom: [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
 [manifest]
-id = "data_source_ipc_pipe"
-description = "Master mode with IPC pipe data source"
+id = "data_source_mqtt_client"
+description = "Master mode with MQTT client data source"
 station_id = 1
 register_type = "Holding"
 start_address = 0x0000
@@ -38,7 +33,6 @@ init_order = [
 
 recycle_order = ["simulate_data_feed_round2", "simulate_data_feed_round3"]
 
-# Step 1: Navigate to Entry page
 [[workflow.navigate_to_entry]]
 description = "Initialize mock state for entry page"
 mock_path = "$.page"
@@ -56,7 +50,6 @@ verify = "/tmp/vcom1"
 [[workflow.navigate_to_entry]]
 verify = "/tmp/vcom2"
 
-# Step 2: Enter configuration panel
 [[workflow.enter_config_panel]]
 description = "Press Enter on selected port to enter config panel"
 key = "Enter"
@@ -74,7 +67,6 @@ mock_set_value = "EnablePort"
 [[workflow.enter_config_panel]]
 verify = "Enable Port"
 
-# Step 3: Navigate to business configuration
 [[workflow.navigate_to_business_config]]
 description = "Navigate down to Business Configuration menu item"
 key = "Down"
@@ -88,7 +80,6 @@ mock_set_value = "ProtocolConfig"
 [[workflow.navigate_to_business_config]]
 verify = "Enter Business Configuration"
 
-# Step 4: Enter Modbus panel
 [[workflow.enter_modbus_panel]]
 description = "Press Enter to enter Modbus dashboard"
 key = "Enter"
@@ -106,7 +97,6 @@ mock_set_value = { kind = "AddLine" }
 [[workflow.enter_modbus_panel]]
 verify = "ModBus Master/Slave Set"
 
-# Step 5: Configure Data Source
 [[workflow.configure_data_source]]
 description = "Navigate down from AddLine to ModbusMode"
 key = "Down"
@@ -138,25 +128,24 @@ description = "Enter edit mode for Data Source Kind"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Cycle to IpcPipe (Manual->MqttServer->HttpServer->IpcPipe)"
-key = "Char(h)"
-times = 3
+description = "Cycle to MqttServer (Manual->MqttServer)"
+key = "Char(m)"
 
 [[workflow.configure_data_source]]
-description = "Initialize data source in mock state to IpcPipe"
+description = "Initialize data source in mock state to MqttServer"
 mock_path = "$.ports['/tmp/vcom1'].master_source"
-mock_set_value = { type = "ipc_pipe", path = "" }
+mock_set_value = { type = "mqtt_server", url = "mqtt://localhost:1883/topic" }
 
 [[workflow.configure_data_source]]
 description = "Confirm Data Source Kind"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Verify IPC Pipe data source is selected"
-verify = "IPC Pipe"
+description = "Verify MQTT data source is selected"
+verify = "MQTT Server"
 
 [[workflow.configure_data_source]]
-description = "Navigate down to MasterSourceValue"
+description = "Navigate down to Data Source Address field"
 key = "Down"
 
 [[workflow.configure_data_source]]
@@ -165,28 +154,31 @@ mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "MasterSourceValue" }
 
 [[workflow.configure_data_source]]
-description = "Enter edit mode for data source path"
+description = "Verify Data Source Address field is visible"
+verify = "Data Source Address"
+
+[[workflow.configure_data_source]]
+description = "Enter edit mode for data source value"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Type IPC pipe path"
-input = "string"
-value = "/tmp/test_ipc_pipe"
+description = "Type MQTT url"
+input = "text"
+value = "mqtt://localhost:1883/topic"
 
 [[workflow.configure_data_source]]
-description = "Confirm data source path"
+description = "Confirm data source url"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Update data source path in mock state"
-mock_path = "$.ports['/tmp/vcom1'].master_source.path"
-mock_set_value = "/tmp/test_ipc_pipe"
+description = "Update data source url in mock state"
+mock_path = "$.ports['/tmp/vcom1'].master_source.url"
+mock_set_value = "mqtt://localhost:1883/topic"
 
 [[workflow.configure_data_source]]
-description = "Verify data source path is shown"
-verify = "/tmp/test_ipc_pipe"
+description = "Verify data source url is shown"
+verify = "localhost:1883"
 
-# Step 6: Create station
 [[workflow.create_station]]
 description = "Navigate down to AddLine (station creation)"
 key = "Down"
@@ -226,7 +218,6 @@ mock_set_value = { kind = "StationId", station_index = 0 }
 [[workflow.create_station]]
 verify = "#1 - ID: 1"
 
-# Step 7: Configure Station Fields (no register editing - data comes from external source)
 [[workflow.configure_station_fields]]
 description = "Enter edit mode for Station ID"
 key = "Enter"
@@ -253,7 +244,6 @@ description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
 mock_set_value = 1
 
-# Navigate to Register Type using absolute positioning
 [[workflow.configure_station_fields]]
 description = "Return to top with Ctrl+PageUp"
 key = "Ctrl+PageUp"
@@ -468,11 +458,11 @@ mock_verify_value = { type = "occupied_by_this" }
 [[workflow.verify_port_enabled]]
 description = "Verify data source configuration"
 mock_verify_path = "$.ports['/tmp/vcom1'].master_source"
-mock_verify_value = { type = "ipc_pipe", path = "/tmp/test_ipc_pipe" }
+mock_verify_value = { type = "mqtt_server", url = "mqtt://localhost:1883/topic" }
 
 # Step 10: Simulate external data feed - Round 1 (Sequential: 0-9)
 [[workflow.simulate_data_feed_round1]]
-description = "Simulate IPC pipe feeding data - Round 1 (Sequential)"
+description = "Simulate MQTT client feeding data - Round 1 (Sequential)"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
@@ -491,7 +481,7 @@ mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 # Step 11: Simulate external data feed - Round 2 (Reverse: 9-0)
 [[workflow.simulate_data_feed_round2]]
-description = "Simulate IPC pipe feeding data - Round 2 (Reverse)"
+description = "Simulate MQTT client feeding data - Round 2 (Reverse)"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
@@ -510,7 +500,7 @@ mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
 # Step 12: Simulate external data feed - Round 3 (Custom pattern)
 [[workflow.simulate_data_feed_round3]]
-description = "Simulate IPC pipe feeding data - Round 3 (Custom)"
+description = "Simulate MQTT client feeding data - Round 3 (Custom)"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [
   0x1111,

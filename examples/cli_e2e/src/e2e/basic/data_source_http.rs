@@ -1,56 +1,56 @@
 use anyhow::{anyhow, Result};
-use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::{net::TcpListener, process::Stdio, sync::Arc, thread, time::Duration};
-use tokio::task;
-
-use tiny_http::{Header, Response, Server};
-use ureq::Agent;
+use std::{process::Stdio, sync::Arc};
 
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
 };
-use aoba::{
+use _main::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
+    utils::sleep::{sleep_1s, sleep_3s},
 };
 
-async fn run_simple_server(payload: Arc<Vec<StationConfig>>) -> Result<String> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    let addr = listener.local_addr()?;
-    listener.set_nonblocking(false)?;
-    let server = Server::from_listener(listener, None)
-        .map_err(|err| anyhow!("Failed to start HTTP server: {err}"))?;
+// File-level constants to avoid magic numbers
+const REGISTER_LENGTH: usize = 10;
+const HTTP_SERVER_PORT_DEFAULT: u16 = 8080;
 
-    let serialized_payload = serde_json::to_string(payload.as_ref())?;
-    let response_payload = Arc::new(serialized_payload);
+/// Post JSON data to the HTTP server running in the subprocess
+async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Result<()> {
+    // Named constants to avoid magic numbers and make retry policy explicit
+    const HTTP_POST_RETRIES: usize = 3;
+    let url = format!("http://127.0.0.1:{}", port);
 
-    thread::spawn(move || {
-        for request in server.incoming_requests() {
-            let mut response = Response::from_string(response_payload.as_ref().clone());
-            if let Ok(header) = Header::from_bytes(b"Content-Type", b"application/json") {
-                response.add_header(header);
+    // Wait a bit for the server to start
+    sleep_3s().await;
+
+    // Try to POST the data with retries
+    for attempt in 0..HTTP_POST_RETRIES {
+        match ureq::post(&url).send_json(&*payload) {
+            Ok(resp) if resp.status() == 200 => {
+                log::info!(
+                    "Successfully posted data to HTTP server on attempt {}",
+                    attempt + 1
+                );
+                return Ok(());
             }
-            if let Err(err) = request.respond(response) {
-                log::error!("HTTP server respond error: {err}");
+            Ok(resp) => {
+                log::warn!("HTTP POST returned status {}, retrying...", resp.status());
+            }
+            Err(err) => {
+                log::warn!(
+                    "Failed to POST to HTTP server (attempt {}): {}",
+                    attempt + 1,
+                    err
+                );
             }
         }
-    });
+        sleep_1s().await;
+    }
 
-    let url = format!("http://{}", addr);
-    let url_clone = url.clone();
-    task::spawn_blocking(move || {
-        let agent = Agent::new_with_defaults();
-        for _ in 0..20 {
-            match agent.get(&url_clone).call() {
-                Ok(resp) if resp.status() == 200 => return Ok(()),
-                _ => thread::sleep(Duration::from_millis(50)),
-            }
-        }
-        Err(anyhow!("HTTP server failed to respond in time"))
-    })
-    .await??;
-
-    Ok(url)
+    Err(anyhow!(
+        "Failed to POST data to HTTP server after {} attempts",
+        HTTP_POST_RETRIES
+    ))
 }
 
 fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
@@ -59,7 +59,7 @@ fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
         StationMode::Master,
         RegisterMode::Holding,
         0,
-        10,
+        REGISTER_LENGTH as u16,
         Some(values.to_vec()),
     )])
 }
@@ -76,118 +76,52 @@ fn parse_client_response(stdout: &[u8]) -> Result<ModbusResponse> {
     Ok(response)
 }
 
-/// Test master mode with HTTP data source using tiny_http for the test server
+/// Test master mode with HTTP data source - master runs HTTP server in persistent mode, test POSTs data
+/// Tests 3 rounds of data updates to verify continuous data reception
 pub async fn test_http_data_source() -> Result<()> {
-    log::info!("🧪 Testing HTTP data source mode...");
+    log::info!("🧪 Testing HTTP data source mode (3 rounds of data updates)...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
-    let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A01_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
-    let payload = build_station_payload(&expected_values);
-    let server_url = run_simple_server(payload).await?;
+    // Round 1: Sequential values
+    let round1_values: Vec<u16> = (0..REGISTER_LENGTH as u16).collect();
+    log::info!("📊 Round 1 expected values: {:?}", round1_values);
 
-    log::info!("🧪 Starting HTTP test server on {}", server_url);
+    // Round 2: Reverse values
+    let round2_values: Vec<u16> = (0..REGISTER_LENGTH as u16).rev().collect();
+    log::info!("📊 Round 2 expected values: {:?}", round2_values);
 
-    let server_output = temp_dir.join("server_http_output.log");
-    let server_output_file = std::fs::File::create(&server_output)?;
+    // Round 3: Custom hex values
+    let round3_values: Vec<u16> = vec![
+        0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA,
+    ];
+    log::info!("📊 Round 3 expected values: {:?}", round3_values);
 
-    let binary = build_debug_bin("aoba")?;
-    let mut master = std::process::Command::new(&binary)
-        .arg("--enable-virtual-ports")
-        .args([
-            "--master-provide",
-            &ports.port1_name,
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "10",
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-            "--data-source",
-            &server_url,
-        ])
-        .stdout(Stdio::from(server_output_file))
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let payload_round1 = build_station_payload(&round1_values);
 
-    // Wait for master to be ready with flexible waiting (minimum 3 seconds)
-    wait_for_process_ready(&mut master, 3000).await?;
+    // Use a fixed port for the HTTP server that the master will run
+    let http_port = HTTP_SERVER_PORT_DEFAULT;
+    let data_source_arg = format!("http://{}", http_port);
 
-    let client_output = std::process::Command::new(&binary)
-        .arg("--enable-virtual-ports")
-        .args([
-            "--slave-poll",
-            &ports.port2_name,
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "10",
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-            "--timeout-ms",
-            "10000", // 10 second timeout to account for serial communication delays
-            "--json",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?
-        .wait_with_output()?;
-
-    let master_status = master.wait()?;
-    if !master_status.success() {
-        std::fs::remove_file(&server_output).ok();
-        return Err(anyhow!("Master exited with status {master_status}"));
-    }
-
-    std::fs::remove_file(&server_output).ok();
-
-    if !client_output.status.success() {
-        return Err(anyhow!(
-            "Slave poll command failed: {} (stderr: {})",
-            client_output.status,
-            String::from_utf8_lossy(&client_output.stderr)
-        ));
-    }
-
-    let response = parse_client_response(&client_output.stdout)?;
-    if response.values != expected_values {
-        return Err(anyhow!(
-            "Received values {:?} do not match expected {:?}",
-            response.values,
-            expected_values
-        ));
-    }
-
-    log::info!("✅ HTTP data source test passed");
-    Ok(())
-}
-
-/// Test master mode with HTTP data source in persistent mode using tiny_http
-pub async fn test_http_data_source_persist() -> Result<()> {
-    log::info!("🧪 Testing HTTP data source persistent mode...");
-    let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
-    let temp_dir = std::env::temp_dir();
-
-    let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A02_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
-    let payload = build_station_payload(&expected_values);
-    let server_url = run_simple_server(payload).await?;
-
-    log::info!("🧪 Starting HTTP test server on {}", server_url);
+    log::info!(
+        "🧪 Master will run HTTP server on port {}",
+        HTTP_SERVER_PORT_DEFAULT
+    );
 
     let server_output = temp_dir.join("server_http_persist_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
+    let server_stderr = temp_dir.join("server_http_persist_stderr.log");
+    let server_stderr_file = std::fs::File::create(&server_stderr)?;
 
     let binary = build_debug_bin("aoba")?;
+    let register_length_arg = REGISTER_LENGTH.to_string();
+
+    log::info!(
+        "📋 Master logs will be at: stdout={:?}, stderr={:?}",
+        server_output,
+        server_stderr
+    );
+
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -198,21 +132,30 @@ pub async fn test_http_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
             "9600",
             "--data-source",
-            &server_url,
+            &data_source_arg,
         ])
         .stdout(Stdio::from(server_output_file))
-        .stderr(Stdio::piped())
+        .stderr(Stdio::from(server_stderr_file))
         .spawn()?;
 
     // Wait for master to be ready with flexible waiting (minimum 3 seconds)
     wait_for_process_ready(&mut master, 3000).await?;
 
+    // Test Round 1: Sequential values
+    log::info!("🔄 Round 1: Posting sequential values to HTTP server");
+    let payload_clone = payload_round1.clone();
+    let post_handle =
+        tokio::spawn(async move { post_data_to_server(http_port, payload_clone).await });
+    post_handle.await??;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 1: Polling data from slave");
     let client_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -223,13 +166,13 @@ pub async fn test_http_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
             "9600",
             "--timeout-ms",
-            "10000", // 10 second timeout to account for serial communication delays
+            "10000",
             "--json",
         ])
         .stdout(Stdio::piped())
@@ -243,21 +186,140 @@ pub async fn test_http_data_source_persist() -> Result<()> {
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
         return Err(anyhow!(
-            "Slave poll command failed: {} (stderr: {})",
+            "Round 1: Slave poll command failed: {} (stderr: {})",
             client_output.status,
             stderr
         ));
     }
 
     let response = parse_client_response(&client_output.stdout)?;
-    if response.values != expected_values {
+    log::info!("✅ Round 1: Received values: {:?}", response.values);
+    if response.values != round1_values {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
         return Err(anyhow!(
-            "Received values {:?} do not match expected {:?}",
+            "Round 1: Received values {:?} do not match expected {:?}",
             response.values,
-            expected_values
+            round1_values
+        ));
+    }
+
+    // Test Round 2: Reverse values
+    log::info!("🔄 Round 2: Posting reverse values to HTTP server");
+    let payload_round2 = build_station_payload(&round2_values);
+    let payload_clone = payload_round2.clone();
+    let post_handle =
+        tokio::spawn(async move { post_data_to_server(http_port, payload_clone).await });
+    post_handle.await??;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 2: Polling data from slave");
+    let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            &register_length_arg,
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--timeout-ms",
+            "10000",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    if !client_output.status.success() {
+        let stderr = String::from_utf8_lossy(&client_output.stderr);
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 2: Slave poll command failed: {} (stderr: {})",
+            client_output.status,
+            stderr
+        ));
+    }
+
+    let response = parse_client_response(&client_output.stdout)?;
+    log::info!("✅ Round 2: Received values: {:?}", response.values);
+    if response.values != round2_values {
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 2: Received values {:?} do not match expected {:?}",
+            response.values,
+            round2_values
+        ));
+    }
+
+    // Test Round 3: Custom hex values
+    log::info!("🔄 Round 3: Posting custom hex values to HTTP server");
+    let payload_round3 = build_station_payload(&round3_values);
+    let payload_clone = payload_round3.clone();
+    let post_handle =
+        tokio::spawn(async move { post_data_to_server(http_port, payload_clone).await });
+    post_handle.await??;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 3: Polling data from slave");
+    let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            &register_length_arg,
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--timeout-ms",
+            "10000",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    if !client_output.status.success() {
+        let stderr = String::from_utf8_lossy(&client_output.stderr);
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 3: Slave poll command failed: {} (stderr: {})",
+            client_output.status,
+            stderr
+        ));
+    }
+
+    let response = parse_client_response(&client_output.stdout)?;
+    log::info!("✅ Round 3: Received values: {:?}", response.values);
+    if response.values != round3_values {
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 3: Received values {:?} do not match expected {:?}",
+            response.values,
+            round3_values
         ));
     }
 
@@ -274,6 +336,6 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     let _ = master.wait();
     std::fs::remove_file(&server_output).ok();
 
-    log::info!("✅ HTTP data source persistent test passed");
+    log::info!("✅ HTTP data source test passed (all 3 rounds verified)");
     Ok(())
 }

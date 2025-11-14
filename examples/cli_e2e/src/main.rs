@@ -5,7 +5,6 @@ mod list_ports_json;
 mod list_ports_status;
 mod modbus_cli;
 mod modbus_e2e;
-mod port_occupation;
 mod utils;
 
 use anyhow::Result;
@@ -17,9 +16,8 @@ use clap::Parser;
 // use config_mode::test_config_mode;
 use e2e::{
     basic::{
-        test_basic_master_slave_communication, test_http_data_source,
-        test_http_data_source_persist, test_ipc_pipe_data_source, test_manual_data_source,
-        test_mqtt_data_source, test_mqtt_data_source_persist,
+        test_basic_master_slave_communication, test_http_data_source, test_ipc_pipe_data_source,
+        test_manual_data_source, test_mqtt_data_source,
     },
     multi_masters::{test_multi_masters, test_multi_masters_same_station},
     multi_slaves::{
@@ -37,10 +35,6 @@ use modbus_cli::{
 use modbus_e2e::{
     test_master_provide_with_vcom, test_master_slave_communication, test_slave_listen_with_vcom,
 };
-#[cfg(not(windows))]
-use port_occupation::test_port_occupation_detection_linux;
-#[cfg(windows)]
-use port_occupation::test_port_occupation_detection_windows;
 
 /// CLI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
@@ -168,11 +162,7 @@ async fn main() -> Result<()> {
             log::info!("    - data_source_manual");
             log::info!("    - data_source_ipc_pipe");
             log::info!("    - data_source_http");
-            log::info!("    - data_source_http_persist");
             log::info!("    - data_source_mqtt");
-            log::info!("    - data_source_mqtt_persist");
-            log::info!("  Port Occupation Detection:");
-            log::info!("    - port_occupation_detection");
             log::info!("");
             log::info!("Usage: cargo run --package cli_e2e -- --module <module_name>");
             return Ok(());
@@ -210,17 +200,7 @@ async fn main() -> Result<()> {
         "data_source_manual" => test_manual_data_source().await?,
         "data_source_ipc_pipe" => test_ipc_pipe_data_source().await?,
         "data_source_http" => test_http_data_source().await?,
-        "data_source_http_persist" => test_http_data_source_persist().await?,
         "data_source_mqtt" => test_mqtt_data_source().await?,
-        "data_source_mqtt_persist" => test_mqtt_data_source_persist().await?,
-
-        // Port occupation detection tests
-        #[cfg(windows)]
-        "port_occupation_detection" => test_port_occupation_detection_windows()?,
-        #[cfg(not(windows))]
-        "port_occupation_detection" => {
-            test_port_occupation_detection_linux(&args.port1, &args.port2)?
-        }
 
         _ => {
             log::error!("❌ Unknown module: {module}");

@@ -9,6 +9,7 @@ use flume::{Receiver, Sender};
 use serialport::{DataBits, Parity, SerialPort, StopBits};
 
 use super::status::types::port::{SerialConfig, SerialParity};
+use crate::{core::task_manager::spawn_task, utils::sleep::sleep_1s};
 
 // Read buffer and assembling limits shared by runtime implementation.
 const READ_BUF_SIZE: usize = 256;
@@ -56,7 +57,6 @@ pub struct PortRuntimeHandle {
     pub cmd_tx: Sender<RuntimeCommand>,
     pub evt_rx: Arc<Receiver<RuntimeEvent>>,
     pub current_cfg: SerialConfig,
-    pub thread_handle: Arc<Mutex<Option<std::thread::JoinHandle<Result<()>>>>>,
 }
 
 impl std::fmt::Debug for PortRuntimeHandle {
@@ -80,23 +80,30 @@ impl PortRuntimeHandle {
         let (cmd_tx, cmd_rx) = flume::unbounded();
         let (evt_tx, evt_rx_raw) = flume::unbounded();
         let evt_rx = Arc::new(evt_rx_raw);
-        let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
 
-        let thread_handle_arc = Arc::new(Mutex::new(None));
+        let serial_clone2 = Arc::clone(&serial);
+        let port_name_clone = port_name.clone();
+        let initial_cfg_clone = initial_cfg.clone();
+        let cmd_rx_clone = cmd_rx.clone();
+        let evt_tx_clone = evt_tx.clone();
 
-        let handle = std::thread::spawn(move || {
-            boot_serial_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx)
+        // Spawn the runtime task - it will handle its own lifecycle through the command channel
+        spawn_task(async move {
+            boot_serial_loop(
+                serial_clone2,
+                port_name_clone,
+                initial_cfg_clone,
+                cmd_rx_clone,
+                evt_tx_clone,
+            )
+            .await
         });
-
-        // Store the thread handle
-        *thread_handle_arc.lock().unwrap() = Some(handle);
 
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
-            thread_handle: thread_handle_arc,
         })
     }
 
@@ -108,57 +115,45 @@ impl PortRuntimeHandle {
         let (cmd_tx, cmd_rx) = flume::unbounded();
         let (evt_tx, evt_rx_raw) = flume::unbounded();
         let evt_rx = Arc::new(evt_rx_raw);
-        let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
 
-        let thread_handle_arc = Arc::new(Mutex::new(None));
+        let serial_clone2 = Arc::clone(&serial);
+        let initial_cfg_clone = initial_cfg.clone();
+        let cmd_rx_clone = cmd_rx.clone();
+        let evt_tx_clone = evt_tx.clone();
 
-        let handle = std::thread::spawn(move || {
-            boot_serial_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx)
+        // Spawn the runtime task - it will handle its own lifecycle through the command channel
+        spawn_task(async move {
+            boot_serial_loop(
+                serial_clone2,
+                String::new(),
+                initial_cfg_clone,
+                cmd_rx_clone,
+                evt_tx_clone,
+            )
+            .await
         });
-
-        // Store the thread handle
-        *thread_handle_arc.lock().unwrap() = Some(handle);
 
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
-            thread_handle: thread_handle_arc,
         })
     }
 }
 
 impl Drop for PortRuntimeHandle {
     fn drop(&mut self) {
-        // Only stop the runtime when the last handle goes away
-        if Arc::strong_count(&self.thread_handle) > 1 {
-            return;
-        }
-
-        log::info!("🔴 PortRuntimeHandle dropping last clone - sending Stop command");
+        log::info!("🔴 PortRuntimeHandle dropping - sending Stop command");
         if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
             log::warn!("PortRuntimeHandle stop command send error: {err:?}");
-        }
-
-        match self.thread_handle.lock() {
-            Ok(mut thread) => {
-                if let Some(thread) = thread.take() {
-                    if let Err(err) = thread.join() {
-                        log::warn!("PortRuntimeHandle thread join error: {err:?}");
-                    }
-                }
-            }
-            Err(err) => {
-                log::warn!("PortRuntimeHandle failed to lock thread_handle for join: {err}");
-            }
         }
     }
 }
 
 /// Boot the serial port I/O loop
 /// Must be started in a separate thread, otherwise it will block the main thread
-fn boot_serial_loop(
+async fn boot_serial_loop(
     serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     port_name: String,
     initial: SerialConfig,
@@ -259,7 +254,7 @@ fn boot_serial_loop(
         // Only sleep if no data was received to avoid excessive CPU usage
         // When data is flowing, continue immediately to read more
         if !data_received {
-            std::thread::sleep(Duration::from_millis(1));
+            sleep_1s().await;
         }
     }
 }

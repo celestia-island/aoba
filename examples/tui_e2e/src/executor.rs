@@ -3,7 +3,7 @@
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
 use anyhow::{bail, Result};
-use std::{fmt, time::Duration};
+use std::fmt;
 
 use crate::{
     mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
@@ -11,7 +11,7 @@ use crate::{
     retry_state_machine::{group_steps, is_verification_step, StepGroup},
     workflow::{Workflow, WorkflowStep},
 };
-use aoba::utils::{
+use _main::utils::{
     {sleep_1s, sleep_3s}, {E2EToTuiMessage, IpcChannelId, IpcSender},
 };
 
@@ -215,7 +215,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
 /// For master mode tests, CLI acts as slave.
 /// For slave mode tests, CLI acts as master.
 async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Result<()> {
-    use aoba::protocol::status::types::modbus::StationMode;
+    use _main::protocol::status::types::modbus::StationMode;
     use serde_json::json;
 
     // Determine TUI mode (default to Master if not specified)
@@ -725,7 +725,11 @@ async fn execute_single_step(
 
     // Handle sleep - use explicit sleep_ms if provided, otherwise no extra sleep
     if let Some(sleep_ms) = step.sleep_ms {
-        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+        if sleep_ms <= 1000 {
+            sleep_1s().await;
+        } else {
+            sleep_3s().await;
+        }
     }
 
     Ok(())
