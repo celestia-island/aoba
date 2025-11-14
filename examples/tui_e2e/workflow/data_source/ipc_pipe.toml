@@ -141,9 +141,9 @@ description = "Enter edit mode for Data Source Kind"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Cycle to IpcPipe (Manual->TransparentForward->MqttServer->HttpServer->IpcPipe)"
+description = "Cycle to IpcPipe (Manual->MqttServer->HttpServer->IpcPipe)"
 key = "Char(h)"
-times = 4
+times = 3
 
 [[workflow.configure_data_source]]
 description = "Initialize data source in mock state to IpcPipe"

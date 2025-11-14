@@ -141,14 +141,14 @@ description = "Enter edit mode for Data Source Kind"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Cycle to HttpServer (Manual->TransparentForward->MqttServer->HttpServer->HttpServer)"
+description = "Cycle to HttpServer (Manual->MqttServer->HttpServer)"
 key = "Char(h)"
-times = 3
+times = 2
 
 [[workflow.configure_data_source]]
 description = "Initialize data source in mock state to HttpServer"
 mock_path = "$.ports['/tmp/vcom1'].master_source"
-mock_set_value = { type = "http_server", url = "" }
+mock_set_value = { type = "http_server", port = 8080 }
 
 [[workflow.configure_data_source]]
 description = "Confirm Data Source Kind"
@@ -168,26 +168,34 @@ mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "MasterSourceValue" }
 
 [[workflow.configure_data_source]]
-description = "Enter edit mode for data source path"
+description = "Enter edit mode for data source port"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Type IPC pipe path"
-input = "string"
-value = "http://localhost:8080/modbus"
+description = "Clear existing value"
+key = "Ctrl+a"
 
 [[workflow.configure_data_source]]
-description = "Confirm data source path"
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_data_source]]
+description = "Type HTTP port number"
+input = "decimal"
+value = 8080
+
+[[workflow.configure_data_source]]
+description = "Confirm data source port"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Update data source path in mock state"
-mock_path = "$.ports['/tmp/vcom1'].master_source.url"
-mock_set_value = "http://localhost:8080/modbus"
+description = "Update data source port in mock state"
+mock_path = "$.ports['/tmp/vcom1'].master_source.port"
+mock_set_value = 8080
 
 [[workflow.configure_data_source]]
-description = "Verify data source path is shown"
-verify = "http://localhost:8080/modbus"
+description = "Verify data source port is shown"
+verify = "8080"
 
 # Step 6: Create station
 [[workflow.create_station]]
@@ -460,7 +468,7 @@ mock_verify_value = { type = "occupied_by_this" }
 [[workflow.verify_port_enabled]]
 description = "Verify data source configuration"
 mock_verify_path = "$.ports['/tmp/vcom1'].master_source"
-mock_verify_value = { type = "http_server", url = "http://localhost:8080/modbus" }
+mock_verify_value = { type = "http_server", port = 8080 }
 
 # Step 10: Simulate external data feed - Round 1 (Sequential: 0-9)
 [[workflow.simulate_data_feed_round1]]

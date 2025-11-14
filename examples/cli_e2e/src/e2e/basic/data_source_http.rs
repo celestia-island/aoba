@@ -1,10 +1,6 @@
 use anyhow::{anyhow, Result};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::{net::TcpListener, process::Stdio, sync::Arc, thread, time::Duration};
-use tokio::task;
-
-use tiny_http::{Header, Response, Server};
-use ureq::Agent;
+use std::{process::Stdio, sync::Arc, thread, time::Duration};
 
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
@@ -14,43 +10,31 @@ use aoba::{
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
 };
 
-async fn run_simple_server(payload: Arc<Vec<StationConfig>>) -> Result<String> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    let addr = listener.local_addr()?;
-    listener.set_nonblocking(false)?;
-    let server = Server::from_listener(listener, None)
-        .map_err(|err| anyhow!("Failed to start HTTP server: {err}"))?;
-
-    let serialized_payload = serde_json::to_string(payload.as_ref())?;
-    let response_payload = Arc::new(serialized_payload);
-
-    thread::spawn(move || {
-        for request in server.incoming_requests() {
-            let mut response = Response::from_string(response_payload.as_ref().clone());
-            if let Ok(header) = Header::from_bytes(b"Content-Type", b"application/json") {
-                response.add_header(header);
+/// Post JSON data to the HTTP server running in the subprocess
+async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Result<()> {
+    let url = format!("http://127.0.0.1:{}", port);
+    
+    // Wait a bit for the server to start
+    thread::sleep(Duration::from_secs(1));
+    
+    // Try to POST the data with retries
+    for attempt in 0..10 {
+        match ureq::post(&url).send_json(&*payload) {
+            Ok(resp) if resp.status() == 200 => {
+                log::info!("Successfully posted data to HTTP server on attempt {}", attempt + 1);
+                return Ok(());
             }
-            if let Err(err) = request.respond(response) {
-                log::error!("HTTP server respond error: {err}");
+            Ok(resp) => {
+                log::warn!("HTTP POST returned status {}, retrying...", resp.status());
             }
-        }
-    });
-
-    let url = format!("http://{}", addr);
-    let url_clone = url.clone();
-    task::spawn_blocking(move || {
-        let agent = Agent::new_with_defaults();
-        for _ in 0..20 {
-            match agent.get(&url_clone).call() {
-                Ok(resp) if resp.status() == 200 => return Ok(()),
-                _ => thread::sleep(Duration::from_millis(50)),
+            Err(err) => {
+                log::warn!("Failed to POST to HTTP server (attempt {}): {}", attempt + 1, err);
             }
         }
-        Err(anyhow!("HTTP server failed to respond in time"))
-    })
-    .await??;
-
-    Ok(url)
+        thread::sleep(Duration::from_millis(500));
+    }
+    
+    Err(anyhow!("Failed to POST data to HTTP server after 10 attempts"))
 }
 
 fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
@@ -76,7 +60,7 @@ fn parse_client_response(stdout: &[u8]) -> Result<ModbusResponse> {
     Ok(response)
 }
 
-/// Test master mode with HTTP data source using tiny_http for the test server
+/// Test master mode with HTTP data source - master runs HTTP server, test POSTs data
 pub async fn test_http_data_source() -> Result<()> {
     log::info!("🧪 Testing HTTP data source mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
@@ -85,9 +69,12 @@ pub async fn test_http_data_source() -> Result<()> {
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A01_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
-    let server_url = run_simple_server(payload).await?;
+    
+    // Use a fixed port for the HTTP server that the master will run
+    let http_port = 18080;
+    let data_source_arg = format!("http://{}", http_port);
 
-    log::info!("🧪 Starting HTTP test server on {}", server_url);
+    log::info!("🧪 Master will run HTTP server on port {}", http_port);
 
     let server_output = temp_dir.join("server_http_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
@@ -109,7 +96,7 @@ pub async fn test_http_data_source() -> Result<()> {
             "--baud-rate",
             "9600",
             "--data-source",
-            &server_url,
+            &data_source_arg,
         ])
         .stdout(Stdio::from(server_output_file))
         .stderr(Stdio::piped())
@@ -117,6 +104,18 @@ pub async fn test_http_data_source() -> Result<()> {
 
     // Wait for master to be ready with flexible waiting (minimum 3 seconds)
     wait_for_process_ready(&mut master, 3000).await?;
+
+    // POST data to the master's HTTP server in a separate thread
+    let payload_clone = payload.clone();
+    let post_handle = tokio::spawn(async move {
+        post_data_to_server(http_port, payload_clone).await
+    });
+
+    // Wait for POST to complete
+    post_handle.await??;
+    
+    // Give the master time to process the HTTP data
+    thread::sleep(Duration::from_millis(500));
 
     let client_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
@@ -171,7 +170,7 @@ pub async fn test_http_data_source() -> Result<()> {
     Ok(())
 }
 
-/// Test master mode with HTTP data source in persistent mode using tiny_http
+/// Test master mode with HTTP data source in persistent mode - master runs HTTP server, test POSTs data
 pub async fn test_http_data_source_persist() -> Result<()> {
     log::info!("🧪 Testing HTTP data source persistent mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
@@ -180,9 +179,12 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A02_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
-    let server_url = run_simple_server(payload).await?;
+    
+    // Use a different fixed port for persistent mode test
+    let http_port = 18081;
+    let data_source_arg = format!("http://{}", http_port);
 
-    log::info!("🧪 Starting HTTP test server on {}", server_url);
+    log::info!("🧪 Master will run HTTP server on port {}", http_port);
 
     let server_output = temp_dir.join("server_http_persist_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
@@ -204,7 +206,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
             "--baud-rate",
             "9600",
             "--data-source",
-            &server_url,
+            &data_source_arg,
         ])
         .stdout(Stdio::from(server_output_file))
         .stderr(Stdio::piped())
@@ -212,6 +214,18 @@ pub async fn test_http_data_source_persist() -> Result<()> {
 
     // Wait for master to be ready with flexible waiting (minimum 3 seconds)
     wait_for_process_ready(&mut master, 3000).await?;
+
+    // POST data to the master's HTTP server in a separate thread
+    let payload_clone = payload.clone();
+    let post_handle = tokio::spawn(async move {
+        post_data_to_server(http_port, payload_clone).await
+    });
+
+    // Wait for POST to complete
+    post_handle.await??;
+    
+    // Give the master time to process the HTTP data
+    thread::sleep(Duration::from_millis(500));
 
     let client_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
