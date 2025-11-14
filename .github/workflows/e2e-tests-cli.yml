@@ -21,9 +21,8 @@ jobs:
           - list_ports_json
           - list_ports_status
           - modbus_basic_master_slave
-          - data_source_manual
-          - data_source_ipc_pipe
           - data_source_http
+          - data_source_manual
           - data_source_mqtt
 
     steps:
