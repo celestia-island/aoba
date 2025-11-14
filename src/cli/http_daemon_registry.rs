@@ -7,7 +7,7 @@ use std::{
 
 use flume::Sender;
 
-type JoinOpt = Option<std::thread::JoinHandle<()>>;
+type JoinOpt = Option<tokio::task::JoinHandle<()>>;
 
 struct Entry {
     handle: Arc<Mutex<JoinOpt>>,
@@ -25,7 +25,7 @@ static HTTP_REGISTRY: Lazy<Mutex<Registry>> = Lazy::new(|| Mutex::new(Registry::
 /// Insert a handle and shutdown sender for given port.
 pub fn register_handle(
     port: u16,
-    handle: std::thread::JoinHandle<()>,
+    handle: tokio::task::JoinHandle<()>,
     shutdown_tx: Sender<()>,
 ) -> Arc<Mutex<JoinOpt>> {
     let arc = Arc::new(Mutex::new(Some(handle)));
@@ -39,7 +39,7 @@ pub fn register_handle(
 }
 
 /// Attempt to shutdown the HTTP daemon by sending shutdown on channel and join the thread.
-pub fn shutdown_and_join(port: u16) -> Result<()> {
+pub async fn shutdown_and_join(port: u16) -> Result<()> {
     // send shutdown (best-effort)
     let maybe_entry = {
         let reg = HTTP_REGISTRY.lock().unwrap();
@@ -51,15 +51,17 @@ pub fn shutdown_and_join(port: u16) -> Result<()> {
     }
 
     // take and join the handle if present
-    let maybe_entry = {
+    let handle_to_await = {
         let mut reg = HTTP_REGISTRY.lock().unwrap();
-        reg.map.remove(&port)
+        if let Some(entry) = reg.map.remove(&port) {
+            entry.handle.lock().unwrap().take()
+        } else {
+            None
+        }
     };
 
-    if let Some(entry) = maybe_entry {
-        if let Some(h) = entry.handle.lock().unwrap().take() {
-            let _ = h.join();
-        }
+    if let Some(h) = handle_to_await {
+        let _ = h.await;
     }
 
     Ok(())
@@ -73,7 +75,7 @@ pub fn shutdown_all_and_join() {
     };
 
     for p in ports {
-        let _ = shutdown_and_join(p);
+        std::mem::drop(shutdown_and_join(p));
     }
 }
 

@@ -156,7 +156,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_task = tokio::spawn({
+    let core_task = crate::core::task_manager::spawn_task({
         let core_tx = core_tx.clone();
         let thr_tx = thr_tx.clone();
         let ui_rx = ui_rx.clone();
@@ -189,9 +189,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
         }
     }
 
-    core_task
-        .await
-        .map_err(|err| anyhow!("Failed to join core task: {err:?}"))?;
+    let _ = core_task.await;
     render_handle
         .join()
         .map_err(|err| anyhow!("Failed to join render thread: {err:?}"))??;

@@ -133,14 +133,14 @@ impl IpcSender {
         );
 
         // Accept connections from TUI in a blocking task
-        let to_tui_stream = tokio::task::spawn_blocking(move || {
+        let to_tui_stream = crate::core::task_manager::spawn_blocking_task(move || {
             to_tui_listener
                 .accept()
                 .map_err(|e| anyhow!("Failed to accept connection: {e}"))
         })
         .await??;
 
-        let from_tui_stream = tokio::task::spawn_blocking(move || {
+        let from_tui_stream = crate::core::task_manager::spawn_blocking_task(move || {
             from_tui_listener
                 .accept()
                 .map_err(|e| anyhow!("Failed to accept connection: {e}"))
@@ -165,7 +165,7 @@ impl IpcSender {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = tokio::task::spawn_blocking(move || {
+        let result = crate::core::task_manager::spawn_blocking_task(move || {
             let start = Instant::now();
             let result = pipe.write(&message);
 
@@ -198,7 +198,7 @@ impl IpcSender {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = tokio::task::spawn_blocking(move || {
+        let result = crate::core::task_manager::spawn_blocking_task(move || {
             let start = Instant::now();
             let result = pipe.read();
 
@@ -275,7 +275,7 @@ impl IpcReceiver {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = tokio::task::spawn_blocking(move || {
+        let result = crate::core::task_manager::spawn_blocking_task(move || {
             let start = Instant::now();
             let result = pipe.read();
 
@@ -305,7 +305,7 @@ impl IpcReceiver {
             .take()
             .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        let result = tokio::task::spawn_blocking(move || {
+        let result = crate::core::task_manager::spawn_blocking_task(move || {
             let start = Instant::now();
             let result = pipe.write(&message);
 
@@ -365,7 +365,7 @@ async fn connect_with_retry(name: &str) -> Result<LocalSocketStream> {
 
     loop {
         let name_clone = name.clone();
-        let connect_result = tokio::task::spawn_blocking(move || {
+        let connect_result = crate::core::task_manager::spawn_blocking_task(move || {
             if cfg!(unix) {
                 // On Unix, try abstract namespace first, fall back to file path
                 let name_ref = name_clone.as_str();

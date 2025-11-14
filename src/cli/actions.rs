@@ -3,6 +3,7 @@ use serde::Serialize;
 use clap::ArgMatches;
 
 use crate::{
+    core::task_manager,
     protocol::ipc::{self, IpcCommandListener, IpcServer},
     utils::sleep::sleep_1s,
 };
@@ -524,23 +525,21 @@ fn start_configuration(
     log::info!("Configuration started successfully");
 
     // Start the actual runtime with the config
-    // We need to spawn a blocking task since we're already in an async context
+    // Use global task manager to spawn the runtime
     let config_clone = config.clone();
-    let handle = std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let _ = task_manager::spawn_task(async move {
             if let Err(e) = run_config_runtime(&config_clone).await {
                 log::error!("Config runtime error: {e}");
             }
-        });
+        })
+        .await;
     });
 
-    // Wait for the runtime thread to exit. This blocks the current thread
-    // without relying on the removed `blocking::sleep` helpers.
-    match handle.join() {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Config runtime thread panicked: {:?}", e).into()),
-    }
+    // Since we're using async tasks, we don't need to wait for thread join
+    // The task will be managed by the global task manager
+    Ok(())
 }
 
 /// Run the configuration in an async runtime

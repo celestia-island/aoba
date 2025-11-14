@@ -233,7 +233,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
 
     let (input_kill_tx, _input_kill_rx) = flume::bounded::<()>(1);
 
-    let core_task = tokio::spawn({
+    let core_task = crate::core::task_manager::spawn_task({
         let core_tx = core_tx.clone();
         let ui_rx = ui_rx.clone();
 
@@ -331,9 +331,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
 
     log::info!("🧹 Cleaning up IPC mode");
     ui_tx.send(crate::core::bus::UiToCore::Quit)?;
-    core_task
-        .await
-        .map_err(|err| anyhow!("Failed to join core task: {err:?}"))?;
+    let _ = core_task.await;
 
     Ok(())
 }

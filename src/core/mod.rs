@@ -18,6 +18,7 @@ pub mod logs;
 pub mod persistence;
 pub mod runtime;
 pub mod subprocess;
+pub mod task_manager;
 
 // Note: port_scan and ipc modules remain in TUI for now as they have tight
 // coupling with TUI-specific status types. They will be refactored in a future iteration.

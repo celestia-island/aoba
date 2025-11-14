@@ -38,7 +38,7 @@ impl CliStatusDumper {
             .unwrap_or("unknown_port")
             .to_string();
 
-        let task_handle = tokio::spawn(async move {
+        let task_handle = crate::core::task_manager::spawn_task(async move {
             let status_path = PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
             loop {
                 if should_stop_clone.load(Ordering::Relaxed) {
