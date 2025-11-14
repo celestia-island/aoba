@@ -11,15 +11,21 @@ use aoba::{
     utils::sleep::{sleep_1s, sleep_3s},
 };
 
+// File-level constants to avoid magic numbers
+const REGISTER_LENGTH: usize = 10;
+const HTTP_SERVER_PORT_DEFAULT: u16 = 8080;
+
 /// Post JSON data to the HTTP server running in the subprocess
 async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Result<()> {
+    // Named constants to avoid magic numbers and make retry policy explicit
+    const HTTP_POST_RETRIES: usize = 3;
     let url = format!("http://127.0.0.1:{}", port);
 
     // Wait a bit for the server to start
     sleep_3s().await;
 
     // Try to POST the data with retries
-    for attempt in 0..10 {
+    for attempt in 0..HTTP_POST_RETRIES {
         match ureq::post(&url).send_json(&*payload) {
             Ok(resp) if resp.status() == 200 => {
                 log::info!(
@@ -43,7 +49,8 @@ async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Res
     }
 
     Err(anyhow!(
-        "Failed to POST data to HTTP server after 10 attempts"
+        "Failed to POST data to HTTP server after {} attempts",
+        HTTP_POST_RETRIES
     ))
 }
 
@@ -53,7 +60,7 @@ fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
         StationMode::Master,
         RegisterMode::Holding,
         0,
-        10,
+        REGISTER_LENGTH as u16,
         Some(values.to_vec()),
     )])
 }
@@ -77,19 +84,24 @@ pub async fn test_http_data_source() -> Result<()> {
     let temp_dir = std::env::temp_dir();
 
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A01_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
+    let expected_values: Vec<u16> = (0..REGISTER_LENGTH).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
 
     // Use a fixed port for the HTTP server that the master will run
-    let http_port = 8080;
+    let http_port = HTTP_SERVER_PORT_DEFAULT;
     let data_source_arg = format!("http://{}", http_port);
 
-    log::info!("🧪 Master will run HTTP server on port {}", http_port);
+    log::info!(
+        "🧪 Master will run HTTP server on port {}",
+        HTTP_SERVER_PORT_DEFAULT
+    );
 
     let server_output = temp_dir.join("server_http_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
 
     let binary = build_debug_bin("aoba")?;
+    let register_length_arg = REGISTER_LENGTH.to_string();
+
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -100,7 +112,7 @@ pub async fn test_http_data_source() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
@@ -136,7 +148,7 @@ pub async fn test_http_data_source() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
@@ -186,19 +198,24 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     let temp_dir = std::env::temp_dir();
 
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A02_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
+    let expected_values: Vec<u16> = (0..REGISTER_LENGTH).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
 
     // Use a fixed port for the HTTP server that the master will run
-    let http_port = 8080;
+    let http_port = HTTP_SERVER_PORT_DEFAULT;
     let data_source_arg = format!("http://{}", http_port);
 
-    log::info!("🧪 Master will run HTTP server on port {}", http_port);
+    log::info!(
+        "🧪 Master will run HTTP server on port {}",
+        HTTP_SERVER_PORT_DEFAULT
+    );
 
     let server_output = temp_dir.join("server_http_persist_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
 
     let binary = build_debug_bin("aoba")?;
+    let register_length_arg = REGISTER_LENGTH.to_string();
+
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -209,7 +226,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
@@ -245,7 +262,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",

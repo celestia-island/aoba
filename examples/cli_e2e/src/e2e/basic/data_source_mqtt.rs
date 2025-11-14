@@ -13,13 +13,16 @@ use aoba::{
     utils::{sleep_1s, sleep_3s},
 };
 
+// File-level constant for register length used in tests
+const REGISTER_LENGTH: usize = 10;
+
 fn build_station_payload(values: &[u16]) -> Vec<StationConfig> {
     vec![StationConfig::single_range(
         1,
         StationMode::Master,
         RegisterMode::Holding,
         0,
-        10,
+        REGISTER_LENGTH as u16,
         Some(values.to_vec()),
     )]
 }
@@ -113,7 +116,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
     let temp_dir = std::env::temp_dir();
 
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A03_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
+    let expected_values: Vec<u16> = (0..REGISTER_LENGTH).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
 
     let topic = "aoba/test/data";
@@ -131,6 +134,8 @@ pub async fn test_mqtt_data_source() -> Result<()> {
     let server_output_file = std::fs::File::create(&server_output)?;
 
     let binary = build_debug_bin("aoba")?;
+    let register_length_arg = REGISTER_LENGTH.to_string();
+
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -141,7 +146,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
@@ -166,7 +171,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
@@ -235,7 +240,7 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
     let temp_dir = std::env::temp_dir();
 
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A04_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
+    let expected_values: Vec<u16> = (0..REGISTER_LENGTH).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
 
     let topic = "aoba/test/data_persist";
@@ -253,6 +258,8 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
     let server_output_file = std::fs::File::create(&server_output)?;
 
     let binary = build_debug_bin("aoba")?;
+    let register_length_arg = REGISTER_LENGTH.to_string();
+
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -263,7 +270,7 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
@@ -288,7 +295,7 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",

@@ -20,6 +20,9 @@ use crate::{
     },
 };
 
+// Named constant for command channel connect retries to avoid magic numbers
+const COMMAND_CHANNEL_CONNECT_RETRIES: usize = 3;
+
 /// Configuration for a CLI subprocess
 #[derive(Debug, Clone)]
 pub struct CliSubprocessConfig {
@@ -203,13 +206,13 @@ impl ManagedSubprocess {
             std::thread::sleep(std::time::Duration::from_secs(1));
 
             // Try to connect with retries (increased timeout for slow subprocess startup)
-            for attempt in 1..=30 {
+            for attempt in 1..=COMMAND_CHANNEL_CONNECT_RETRIES {
                 match IpcCommandClient::connect(command_channel_name.clone()) {
                     Ok(client) => {
                         log::info!("Connected to CLI command channel on attempt {attempt}");
                         return Ok(client);
                     }
-                    Err(e) if attempt < 30 => {
+                    Err(e) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
                         log::debug!("Command channel connect attempt {attempt} failed: {e}");
                         std::thread::sleep(std::time::Duration::from_secs(1));
                     }

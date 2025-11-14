@@ -37,6 +37,9 @@ fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
     })
 }
 
+// Named constant for initial stations send retries to avoid magic numbers
+const INITIAL_STATIONS_SEND_RETRIES: usize = 3;
+
 pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
@@ -616,7 +619,7 @@ async fn start_runtime(
 
                             log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
                             let mut stations_sent = false;
-                            for attempt in 1..=10 {
+                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
                                 match subprocess_manager.send_stations_update_for_port(
                                     port_name,
                                     get_stations_from_status,
@@ -625,7 +628,7 @@ async fn start_runtime(
                                         stations_sent = true;
                                         break;
                                     }
-                                    Err(_err) if attempt < 10 => {
+                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
                                         sleep_1s().await;
                                     }
                                     Err(err) => {
@@ -706,7 +709,7 @@ async fn start_runtime(
 
                             log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
                             let mut stations_sent = false;
-                            for attempt in 1..=10 {
+                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
                                 match subprocess_manager.send_stations_update_for_port(
                                     port_name,
                                     get_stations_from_status,
@@ -715,7 +718,7 @@ async fn start_runtime(
                                         stations_sent = true;
                                         break;
                                     }
-                                    Err(_err) if attempt < 10 => {
+                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
                                         sleep_1s().await;
                                     }
                                     Err(err) => {
