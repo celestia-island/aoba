@@ -158,14 +158,8 @@ fn run_http_server_daemon(
         .route("/", post(handle_stations_post))
         .with_state(state);
 
-    // Create a tokio runtime for this thread
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| anyhow!("Failed to create tokio runtime: {}", e))?;
-
-    // Block on the async server - this will run until shutdown
-    runtime.block_on(async move {
+    // Use task_manager to spawn the async HTTP server daemon
+    let handle = spawn_task(async move {
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
@@ -191,7 +185,11 @@ fn run_http_server_daemon(
             .map_err(|e| anyhow!("HTTP server error: {}", e))?;
 
         Ok(())
-    })
+    });
+
+    // Block on the spawned task to ensure it completes
+    // This keeps the blocking thread alive until the HTTP server shuts down
+    futures::executor::block_on(async { handle.await.map_err(|e| anyhow!("Task join error: {}", e))? })
 }
 
 /// Handle master provide (temporary: output once and exit)
