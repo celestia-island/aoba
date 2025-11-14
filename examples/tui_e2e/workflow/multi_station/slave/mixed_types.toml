@@ -168,7 +168,18 @@ description = "Initialize first master station structure"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_stations]]
@@ -184,30 +195,52 @@ description = "Initialize second master station structure"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [false, false, false, false, false, false, false, false, false, false] },
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+  ] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 # Step 6: Configure Station 1 Fields
-[[workflow.configure_station1_fields]]
-description = "Navigate to Station 1 - Start from top"
-key = "Ctrl+PageUp"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
-[[workflow.configure_station1_fields]]
-description = "Jump to Station 1 (AddLine -> ModbusMode)"
-key = "PageDown"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
-[[workflow.configure_station1_fields]]
-description = "Jump to Station 1 (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
-[[workflow.configure_station1_fields]]
-description = "Enter edit mode for Station ID"
-key = "Enter"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Delete cleared content"
@@ -291,7 +324,7 @@ key = "Enter"
 
 [[workflow.configure_station1_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Delete cleared content"
@@ -343,7 +376,7 @@ key = "Enter"
 
 [[workflow.configure_station1_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Delete cleared content"
@@ -368,7 +401,18 @@ mock_set_value = 10
 description = "Ensure registers array matches length"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers"
-mock_set_value = [false, false, false, false, false, false, false, false, false, false]
+mock_set_value = [
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+]
 
 # Step XXX: Edit Station 1 Registers - Round 1
 [[workflow.edit_station1_round1]]
@@ -554,7 +598,7 @@ key = "Enter"
 
 [[workflow.configure_station2_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station2_fields]]
 description = "Delete cleared content"
@@ -646,7 +690,7 @@ key = "Enter"
 
 [[workflow.configure_station2_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station2_fields]]
 description = "Delete cleared content"
@@ -702,7 +746,7 @@ key = "Enter"
 
 [[workflow.configure_station2_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station2_fields]]
 description = "Delete cleared content"
@@ -947,7 +991,7 @@ key = "Ctrl+PageUp"
 # Step 10: Save configuration
 [[workflow.save_configuration]]
 description = "Save configuration with Ctrl+S"
-key = "Ctrl+s"
+key = "Ctrl+S"
 
 [[workflow.save_configuration]]
 description = "Enable port in mock state"

@@ -16,7 +16,7 @@
 
 [manifest]
 id = "data_source_http_server"
-description = "Master mode with IPC pipe data source"
+description = "Master mode with HTTP server data source"
 station_id = 1
 register_type = "Holding"
 start_address = 0x0000
@@ -36,10 +36,7 @@ init_order = [
   "simulate_data_feed_round1",
 ]
 
-recycle_order = [
-  "simulate_data_feed_round2",
-  "simulate_data_feed_round3",
-]
+recycle_order = ["simulate_data_feed_round2", "simulate_data_feed_round3"]
 
 # Step 1: Navigate to Entry page
 [[workflow.navigate_to_entry]]
@@ -141,14 +138,14 @@ description = "Enter edit mode for Data Source Kind"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Cycle to HttpServer (Manual->TransparentForward->MqttServer->HttpServer->HttpServer)"
+description = "Cycle to HttpServer (Manual->MqttServer->HttpServer)"
 key = "Char(h)"
-times = 3
+times = 2
 
 [[workflow.configure_data_source]]
 description = "Initialize data source in mock state to HttpServer"
 mock_path = "$.ports['/tmp/vcom1'].master_source"
-mock_set_value = { type = "http_server", url = "" }
+mock_set_value = { type = "http_server", port = 8080 }
 
 [[workflow.configure_data_source]]
 description = "Confirm Data Source Kind"
@@ -156,7 +153,7 @@ key = "Enter"
 
 [[workflow.configure_data_source]]
 description = "Verify HTTP Server data source is selected"
-verify = "HTTP Server"
+verify = "HTTP Receive Port"
 
 [[workflow.configure_data_source]]
 description = "Navigate down to MasterSourceValue"
@@ -168,26 +165,34 @@ mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "MasterSourceValue" }
 
 [[workflow.configure_data_source]]
-description = "Enter edit mode for data source path"
+description = "Enter edit mode for data source port"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Type IPC pipe path"
-input = "string"
-value = "http://localhost:8080/modbus"
+description = "Clear existing value"
+key = "Ctrl+A"
 
 [[workflow.configure_data_source]]
-description = "Confirm data source path"
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_data_source]]
+description = "Type HTTP port number"
+input = "decimal"
+value = 8080
+
+[[workflow.configure_data_source]]
+description = "Confirm data source port"
 key = "Enter"
 
 [[workflow.configure_data_source]]
-description = "Update data source path in mock state"
-mock_path = "$.ports['/tmp/vcom1'].master_source.url"
-mock_set_value = "http://localhost:8080/modbus"
+description = "Update data source port in mock state"
+mock_path = "$.ports['/tmp/vcom1'].master_source.port"
+mock_set_value = 8080
 
 [[workflow.configure_data_source]]
-description = "Verify data source path is shown"
-verify = "http://localhost:8080/modbus"
+description = "Verify data source port is shown"
+verify = "8080"
 
 # Step 6: Create station
 [[workflow.create_station]]
@@ -207,7 +212,18 @@ key = "Enter"
 description = "Initialize master station structure with empty registers"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_station]]
@@ -225,7 +241,7 @@ key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station_fields]]
 description = "Delete cleared content"
@@ -322,7 +338,7 @@ key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station_fields]]
 description = "Delete cleared content"
@@ -385,7 +401,7 @@ key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station_fields]]
 description = "Delete cleared content"
@@ -460,7 +476,7 @@ mock_verify_value = { type = "occupied_by_this" }
 [[workflow.verify_port_enabled]]
 description = "Verify data source configuration"
 mock_verify_path = "$.ports['/tmp/vcom1'].master_source"
-mock_verify_value = { type = "http_server", url = "http://localhost:8080/modbus" }
+mock_verify_value = { type = "http_server", port = 8080 }
 
 # Step 10: Simulate external data feed - Round 1 (Sequential: 0-9)
 [[workflow.simulate_data_feed_round1]]
@@ -509,7 +525,18 @@ mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 [[workflow.simulate_data_feed_round3]]
 description = "Simulate HTTP server feeding data - Round 3 (Custom)"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+mock_set_value = [
+  0x1111,
+  0x2222,
+  0x3333,
+  0x4444,
+  0x5555,
+  0x6666,
+  0x7777,
+  0x8888,
+  0x9999,
+  0xAAAA,
+]
 
 [[workflow.simulate_data_feed_round3]]
 description = "Verify data appears on screen (partial)"
@@ -521,4 +548,15 @@ description = "Verify data on 0x0008 row (partial)"
 [[workflow.simulate_data_feed_round3]]
 description = "Verify all register values in mock state"
 mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_verify_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+mock_verify_value = [
+  0x1111,
+  0x2222,
+  0x3333,
+  0x4444,
+  0x5555,
+  0x6666,
+  0x7777,
+  0x8888,
+  0x9999,
+  0xAAAA,
+]

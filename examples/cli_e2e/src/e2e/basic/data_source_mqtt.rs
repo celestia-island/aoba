@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::{process::Stdio, time::Duration};
 
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
@@ -7,11 +6,14 @@ use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
 };
-use aoba::{
+use _main::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
     utils::{sleep_1s, sleep_3s},
 };
+
+// File-level constant for register length used in tests
+const REGISTER_LENGTH: usize = 10;
 
 fn build_station_payload(values: &[u16]) -> Vec<StationConfig> {
     vec![StationConfig::single_range(
@@ -19,7 +21,7 @@ fn build_station_payload(values: &[u16]) -> Vec<StationConfig> {
         StationMode::Master,
         RegisterMode::Holding,
         0,
-        10,
+        REGISTER_LENGTH as u16,
         Some(values.to_vec()),
     )]
 }
@@ -86,10 +88,11 @@ async fn publish_mqtt_data(
     Ok(())
 }
 
-/// Test master mode with MQTT data source (non-persistent mode)
+/// Test master mode with MQTT data source
 /// This test requires an external MQTT broker to be running (e.g., mosquitto)
+/// Tests 3 rounds of data updates to verify continuous MQTT message reception
 pub async fn test_mqtt_data_source() -> Result<()> {
-    log::info!("🧪 Testing MQTT data source mode...");
+    log::info!("🧪 Testing MQTT data source mode (3 rounds of data updates)...");
 
     // Check if mosquitto broker is available
     let broker_available = std::process::Command::new("sh")
@@ -112,131 +115,21 @@ pub async fn test_mqtt_data_source() -> Result<()> {
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
-    let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A03_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
-    let payload = build_station_payload(&expected_values);
+    // Round 1: Sequential values
+    let round1_values: Vec<u16> = (0..REGISTER_LENGTH as u16).collect();
+    log::info!("📊 Round 1 expected values: {:?}", round1_values);
 
-    let topic = "aoba/test/data";
-    let broker_host = "127.0.0.1";
-    let broker_port = 1883;
-    let mqtt_url = format!("mqtt://{}:{}/{}", broker_host, broker_port, topic);
+    // Round 2: Reverse values
+    let round2_values: Vec<u16> = (0..REGISTER_LENGTH as u16).rev().collect();
+    log::info!("📊 Round 2 expected values: {:?}", round2_values);
 
-    log::info!("🧪 Using MQTT broker at {}", mqtt_url);
+    // Round 3: Custom hex values
+    let round3_values: Vec<u16> = vec![
+        0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA,
+    ];
+    log::info!("📊 Round 3 expected values: {:?}", round3_values);
 
-    // Publish test data to MQTT broker
-    let serialized_payload = serde_json::to_string(&payload)?;
-    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
-
-    let server_output = temp_dir.join("server_mqtt_output.log");
-    let server_output_file = std::fs::File::create(&server_output)?;
-
-    let binary = build_debug_bin("aoba")?;
-    let mut master = std::process::Command::new(&binary)
-        .arg("--enable-virtual-ports")
-        .args([
-            "--master-provide",
-            &ports.port1_name,
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "10",
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-            "--data-source",
-            &mqtt_url,
-        ])
-        .stdout(Stdio::from(server_output_file))
-        .stderr(Stdio::piped())
-        .spawn()?;
-
-    // Wait for master to be ready and receive MQTT data (minimum 5 seconds for MQTT connection)
-    wait_for_process_ready(&mut master, 5000).await?;
-
-    let client_output = std::process::Command::new(&binary)
-        .arg("--enable-virtual-ports")
-        .args([
-            "--slave-poll",
-            &ports.port2_name,
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "10",
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-            "--timeout-ms",
-            "10000", // 10 second timeout to account for serial communication delays
-            "--json",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?
-        .wait_with_output()?;
-
-    let master_status = master.wait()?;
-    if !master_status.success() {
-        std::fs::remove_file(&server_output).ok();
-        return Err(anyhow!("Master exited with status {master_status}"));
-    }
-
-    std::fs::remove_file(&server_output).ok();
-
-    if !client_output.status.success() {
-        return Err(anyhow!(
-            "Slave poll command failed: {} (stderr: {})",
-            client_output.status,
-            String::from_utf8_lossy(&client_output.stderr)
-        ));
-    }
-
-    let response = parse_client_response(&client_output.stdout)?;
-    if response.values != expected_values {
-        return Err(anyhow!(
-            "Received values {:?} do not match expected {:?}",
-            response.values,
-            expected_values
-        ));
-    }
-
-    log::info!("✅ MQTT data source test passed");
-    Ok(())
-}
-
-/// Test master mode with MQTT data source in persistent mode
-pub async fn test_mqtt_data_source_persist() -> Result<()> {
-    log::info!("🧪 Testing MQTT data source persistent mode...");
-
-    // Check if mosquitto broker is available
-    let broker_available = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("pgrep mosquitto || command -v mosquitto")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-
-    if !broker_available {
-        log::warn!("⚠️ Mosquitto MQTT broker not found. Installing or starting it...");
-        // Try to start mosquitto in the background
-        let _ = std::process::Command::new("sh")
-            .arg("-c")
-            .arg("mosquitto -d -p 1883 2>/dev/null || true")
-            .spawn();
-        sleep_3s().await;
-    }
-
-    let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
-    let temp_dir = std::env::temp_dir();
-
-    let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A04_u64);
-    let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
-    let payload = build_station_payload(&expected_values);
+    let payload_round1 = build_station_payload(&round1_values);
 
     let topic = "aoba/test/data_persist";
     let broker_host = "127.0.0.1";
@@ -245,14 +138,12 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
 
     log::info!("🧪 Using MQTT broker at {}", mqtt_url);
 
-    // Publish test data to MQTT broker
-    let serialized_payload = serde_json::to_string(&payload)?;
-    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
-
     let server_output = temp_dir.join("server_mqtt_persist_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
 
     let binary = build_debug_bin("aoba")?;
+    let register_length_arg = REGISTER_LENGTH.to_string();
+
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -263,7 +154,7 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
@@ -275,9 +166,16 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // Wait for master to be ready and receive MQTT data (minimum 5 seconds for MQTT connection)
+    // Wait for master to be ready and MQTT connection to establish
     wait_for_process_ready(&mut master, 5000).await?;
 
+    // Test Round 1: Sequential values
+    log::info!("🔄 Round 1: Publishing sequential values to MQTT topic");
+    let serialized_payload = serde_json::to_string(&payload_round1)?;
+    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 1: Polling data from slave");
     let client_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -288,13 +186,13 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
             "--register-address",
             "0",
             "--register-length",
-            "10",
+            &register_length_arg,
             "--register-mode",
             "holding",
             "--baud-rate",
             "9600",
             "--timeout-ms",
-            "10000", // 10 second timeout to account for serial communication delays
+            "10000",
             "--json",
         ])
         .stdout(Stdio::piped())
@@ -308,21 +206,136 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
         return Err(anyhow!(
-            "Slave poll command failed: {} (stderr: {})",
+            "Round 1: Slave poll command failed: {} (stderr: {})",
             client_output.status,
             stderr
         ));
     }
 
     let response = parse_client_response(&client_output.stdout)?;
-    if response.values != expected_values {
+    log::info!("✅ Round 1: Received values: {:?}", response.values);
+    if response.values != round1_values {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
         return Err(anyhow!(
-            "Received values {:?} do not match expected {:?}",
+            "Round 1: Received values {:?} do not match expected {:?}",
             response.values,
-            expected_values
+            round1_values
+        ));
+    }
+
+    // Test Round 2: Reverse values
+    log::info!("🔄 Round 2: Publishing reverse values to MQTT topic");
+    let payload_round2 = build_station_payload(&round2_values);
+    let serialized_payload = serde_json::to_string(&payload_round2)?;
+    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 2: Polling data from slave");
+    let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            &register_length_arg,
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--timeout-ms",
+            "10000",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    if !client_output.status.success() {
+        let stderr = String::from_utf8_lossy(&client_output.stderr);
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 2: Slave poll command failed: {} (stderr: {})",
+            client_output.status,
+            stderr
+        ));
+    }
+
+    let response = parse_client_response(&client_output.stdout)?;
+    log::info!("✅ Round 2: Received values: {:?}", response.values);
+    if response.values != round2_values {
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 2: Received values {:?} do not match expected {:?}",
+            response.values,
+            round2_values
+        ));
+    }
+
+    // Test Round 3: Custom hex values
+    log::info!("🔄 Round 3: Publishing custom hex values to MQTT topic");
+    let payload_round3 = build_station_payload(&round3_values);
+    let serialized_payload = serde_json::to_string(&payload_round3)?;
+    publish_mqtt_data(broker_host, broker_port, topic, &serialized_payload).await?;
+    sleep_1s().await;
+
+    log::info!("🔍 Round 3: Polling data from slave");
+    let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            &register_length_arg,
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--timeout-ms",
+            "10000",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    if !client_output.status.success() {
+        let stderr = String::from_utf8_lossy(&client_output.stderr);
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 3: Slave poll command failed: {} (stderr: {})",
+            client_output.status,
+            stderr
+        ));
+    }
+
+    let response = parse_client_response(&client_output.stdout)?;
+    log::info!("✅ Round 3: Received values: {:?}", response.values);
+    if response.values != round3_values {
+        master.kill().ok();
+        let _ = master.wait();
+        std::fs::remove_file(&server_output).ok();
+        return Err(anyhow!(
+            "Round 3: Received values {:?} do not match expected {:?}",
+            response.values,
+            round3_values
         ));
     }
 
@@ -339,6 +352,6 @@ pub async fn test_mqtt_data_source_persist() -> Result<()> {
     let _ = master.wait();
     std::fs::remove_file(&server_output).ok();
 
-    log::info!("✅ MQTT data source persistent test passed");
+    log::info!("✅ MQTT data source test passed (all 3 rounds verified)");
     Ok(())
 }

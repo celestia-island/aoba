@@ -8,7 +8,7 @@ use std::{
 use crate::utils::{
     build_debug_bin, create_modbus_command, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
-use aoba::utils::{sleep_1s, sleep_3s};
+use _main::utils::{sleep_1s, sleep_3s};
 
 /// Test master-slave communication with virtual serial ports
 /// Server = Modbus Master (provides data, responds to requests) on port1

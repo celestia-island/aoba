@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use _main::utils::sleep::sleep_1s;
+
 /// Platform-specific default port names as constants
 #[cfg(windows)]
 pub const DEFAULT_PORT1: &str = "COM1";
@@ -227,8 +229,7 @@ pub async fn wait_for_process_ready(
     let start = Instant::now();
     let timeout = Duration::from_secs(MAX_WAIT_TIMEOUT_SECS);
     let min_wait = Duration::from_millis(min_wait_ms);
-    let poll_interval = Duration::from_millis(100);
-
+    let _poll_interval = Duration::from_millis(100);
     // Wait at least the minimum time
     while start.elapsed() < min_wait {
         if start.elapsed() > timeout {
@@ -239,7 +240,7 @@ pub async fn wait_for_process_ready(
             return Err(anyhow!("Process exited prematurely with status {}", status));
         }
 
-        tokio::time::sleep(poll_interval).await;
+        sleep_1s().await;
     }
 
     // Final check after minimum wait
