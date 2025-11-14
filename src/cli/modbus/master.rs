@@ -238,7 +238,8 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         reg_mode,
         register_address,
         register_length,
-    )?;
+    )
+    .await?;
 
     // Initialize modbus storage with values
     use rmodbus::server::storage::ModbusStorageSmall;
@@ -507,7 +508,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         reg_mode,
         register_address,
         register_length,
-    )?;
+    )
+    .await?;
     log::info!("Loaded initial values: {initial_values:?}");
     {
         let mut context = storage.lock().unwrap();
@@ -1268,9 +1270,9 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     }
                 };
 
-                let host = parsed_url.host_str().unwrap_or("localhost");
+                let host = parsed_url.host_str().unwrap_or("localhost").to_string();
                 let port = parsed_url.port().unwrap_or(1883);
-                let topic = parsed_url.path().trim_start_matches('/');
+                let topic = parsed_url.path().trim_start_matches('/').to_string();
 
                 if topic.is_empty() {
                     log::error!("MQTT URL must include a topic path");
@@ -1279,30 +1281,59 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
 
                 log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
 
-                // Create a unique client ID
-                let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
+                // Create channel to receive MQTT messages from blocking thread
+                let (mqtt_tx, mqtt_rx) = flume::unbounded::<String>();
 
-                // Create MQTT options
-                let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
+                // Spawn blocking task for MQTT connection
+                let mqtt_task = tokio::task::spawn_blocking(move || {
+                    // Create a unique client ID
+                    let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
 
-                // Create client
-                let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
+                    // Create MQTT options
+                    let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
 
-                // Subscribe to topic
-                if let Err(e) = client.subscribe(topic, rumqttc::QoS::AtMostOnce) {
-                    log::error!("Failed to subscribe to MQTT topic: {}", e);
-                    return Err(anyhow!("Failed to subscribe: {}", e));
-                }
+                    // Create client
+                    let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
 
-                log::info!("MQTT: subscribed to topic '{}'", topic);
+                    // Subscribe to topic
+                    if let Err(e) = client.subscribe(&topic, rumqttc::QoS::AtMostOnce) {
+                        log::error!("Failed to subscribe to MQTT topic: {}", e);
+                        return Err(anyhow!("Failed to subscribe: {}", e));
+                    }
 
-                // Process incoming messages
-                for notification in connection.iter() {
-                    match notification {
-                        Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
-                            let payload = String::from_utf8_lossy(&publish.payload);
-                            log::debug!("Received MQTT message: {}", payload);
+                    log::info!("MQTT: subscribed to topic '{}'", topic);
 
+                    // Process incoming messages and send via channel
+                    for notification in connection.iter() {
+                        match notification {
+                            Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
+                                let payload = String::from_utf8_lossy(&publish.payload).to_string();
+                                log::debug!("Received MQTT message: {}", payload);
+
+                                // Send to async loop
+                                if mqtt_tx.send(payload).is_err() {
+                                    log::warn!("MQTT receiver dropped, stopping");
+                                    break;
+                                }
+                            }
+                            Ok(_) => {
+                                // Other events, ignore
+                            }
+                            Err(e) => {
+                                log::warn!("MQTT connection error: {}", e);
+                                break;
+                            }
+                        }
+                    }
+
+                    log::warn!("MQTT connection closed");
+                    Ok::<(), anyhow::Error>(())
+                });
+
+                // Receive MQTT messages and update storage
+                loop {
+                    match mqtt_rx.recv_timeout(Duration::from_secs(1)) {
+                        Ok(payload) => {
                             if let Ok(values) = parse_data_line(
                                 &payload,
                                 station_id,
@@ -1353,19 +1384,23 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 log::warn!("Failed to parse MQTT message data");
                             }
                         }
-                        Ok(_) => {
-                            // Other events, ignore
+                        Err(flume::RecvTimeoutError::Timeout) => {
+                            // Check if blocking task finished
+                            if mqtt_task.is_finished() {
+                                log::warn!("MQTT task finished, reconnecting...");
+                                sleep_3s().await;
+                                break;
+                            }
+                            // Continue waiting
+                            continue;
                         }
-                        Err(e) => {
-                            log::warn!("MQTT connection error: {}", e);
+                        Err(flume::RecvTimeoutError::Disconnected) => {
+                            log::warn!("MQTT connection lost, will retry...");
                             sleep_3s().await;
-                            break; // Break inner loop to reconnect
+                            break;
                         }
                     }
                 }
-
-                log::warn!("MQTT connection lost, will retry...");
-                sleep_3s().await;
             }
             DataSource::HttpServer(_port) => {
                 // HTTP Server: receive data from HTTP daemon via channel
@@ -1720,7 +1755,7 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
 }
 
 /// Read one data update from source
-fn read_one_data_update(
+async fn read_one_data_update(
     source: &DataSource,
     station_id: u8,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
@@ -1757,41 +1792,49 @@ fn read_one_data_update(
         }
         DataSource::MqttServer(url) => {
             // MQTT: connect and wait for a single publish
-            log::debug!("Connecting to MQTT broker: {}", url);
-            let parsed_url =
-                url::Url::parse(url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
-            let host = parsed_url
-                .host_str()
-                .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
-            let port = parsed_url.port().unwrap_or(1883);
-            let topic = parsed_url.path().trim_start_matches('/');
-            if topic.is_empty() {
-                return Err(anyhow!("MQTT URL must include a topic path"));
-            }
-
-            let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
-            let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
-            let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
-            client
-                .subscribe(topic, rumqttc::QoS::AtMostOnce)
-                .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
-
-            for notification in connection.iter() {
-                if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
-                    notification
-                {
-                    let payload = String::from_utf8_lossy(&publish.payload);
-                    return parse_data_line(
-                        &payload,
-                        station_id,
-                        reg_mode,
-                        register_address,
-                        register_length,
-                    );
+            // Use spawn_blocking to avoid blocking the async runtime
+            let url = url.clone();
+            let join_result = tokio::task::spawn_blocking(move || {
+                log::debug!("Connecting to MQTT broker: {}", url);
+                let parsed_url =
+                    url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
+                let host = parsed_url
+                    .host_str()
+                    .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
+                let port = parsed_url.port().unwrap_or(1883);
+                let topic = parsed_url.path().trim_start_matches('/');
+                if topic.is_empty() {
+                    return Err(anyhow!("MQTT URL must include a topic path"));
                 }
-            }
 
-            Err(anyhow!("MQTT connection closed before receiving a message"))
+                let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
+                let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
+                let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
+                client
+                    .subscribe(topic, rumqttc::QoS::AtMostOnce)
+                    .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
+
+                for notification in connection.iter() {
+                    if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
+                        notification
+                    {
+                        let payload = String::from_utf8_lossy(&publish.payload);
+                        return parse_data_line(
+                            &payload,
+                            station_id,
+                            reg_mode,
+                            register_address,
+                            register_length,
+                        );
+                    }
+                }
+
+                Err(anyhow!("MQTT connection closed before receiving a message"))
+            })
+            .await
+            .map_err(|e| anyhow!("MQTT task panicked: {}", e))?;
+
+            join_result
         }
         DataSource::HttpServer(_) => {
             // HTTP server sends updates via a separate daemon; return empty initial values
