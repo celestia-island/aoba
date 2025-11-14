@@ -66,7 +66,14 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
             return Ok(None);
         }
         // yield briefly while keeping the lock (running in dedicated thread)
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        // Run async sleep by creating a small current-thread tokio runtime
+        {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .expect("failed to build runtime for thread-local sleep");
+            rt.block_on(async { crate::utils::sleep::sleep_1s().await });
+        }
     }
 
     if collected.len() < 2 {
@@ -130,7 +137,11 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
         // try to read up to 1 more byte
         let target = collected.len() + 1;
         read_until(&mut **guard, &mut collected, target)?;
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("failed to build runtime for thread-local sleep");
+        rt.block_on(async { crate::utils::sleep::sleep_1s().await });
         guessed_len_opt = determine_length(&mut collected);
     }
     let guessed_len = guessed_len_opt.unwrap();
@@ -162,7 +173,11 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
                 return Ok(Some(Bytes::from(collected)));
             }
         }
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("failed to build runtime for thread-local sleep");
+        rt.block_on(async { crate::utils::sleep::sleep_1s().await });
     }
 
     if collected.len() != guessed_len {

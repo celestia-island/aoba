@@ -145,65 +145,116 @@ impl ManagedSubprocess {
         let stdout_thread = child.stdout.take().map(|stdout| {
             let port_label = config.port_name.clone();
             std::thread::spawn(move || {
-                let mut reader = BufReader::new(stdout);
-                let mut line = String::new();
-                loop {
-                    line.clear();
-                    match reader.read_line(&mut line) {
-                        Ok(0) => {
-                            log::debug!("CLI[{port_label}] stdout closed");
-                            break;
-                        }
-                        Ok(_) => {
-                            let trimmed = line.trim_end_matches(['\r', '\n']);
-                            if !trimmed.is_empty() {
-                                log::info!("CLI[{port_label}] stdout: {trimmed}");
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .expect("failed to build runtime for stdout thread");
+                // Clone label for use inside spawn_blocking closure so we don't
+                // move the outer `port_label` away (we still want to use it
+                // after awaiting the join handle).
+                let inner_label = port_label.clone();
+                // Run the blocking reader inside tokio's spawn_blocking so the
+                // thread has an async environment available.
+                rt.block_on(async move {
+                    let res = tokio::task::spawn_blocking(move || {
+                        let mut reader = BufReader::new(stdout);
+                        let mut line = String::new();
+                        loop {
+                            line.clear();
+                            match reader.read_line(&mut line) {
+                                Ok(0) => {
+                                    log::debug!("CLI[{inner_label}] stdout closed");
+                                    break;
+                                }
+                                Ok(_) => {
+                                    let trimmed = line.trim_end_matches(['\r', '\n']);
+                                    if !trimmed.is_empty() {
+                                        log::info!("CLI[{inner_label}] stdout: {trimmed}");
+                                    }
+                                }
+                                Err(err) => {
+                                    log::warn!("CLI[{inner_label}] stdout reader error: {err}");
+                                    break;
+                                }
                             }
                         }
-                        Err(err) => {
-                            log::warn!("CLI[{port_label}] stdout reader error: {err}");
-                            break;
-                        }
+                    })
+                    .await;
+
+                    if let Err(e) = res {
+                        log::warn!("CLI[{port_label}] stdout spawn_blocking join error: {e:?}");
                     }
-                }
+                });
             })
         });
 
         let stderr_thread = child.stderr.take().map(|stderr| {
             let port_label = config.port_name.clone();
             std::thread::spawn(move || {
-                let mut reader = BufReader::new(stderr);
-                let mut line = String::new();
-                loop {
-                    line.clear();
-                    match reader.read_line(&mut line) {
-                        Ok(0) => {
-                            log::debug!("CLI[{port_label}] stderr closed");
-                            break;
-                        }
-                        Ok(_) => {
-                            let trimmed = line.trim_end_matches(['\r', '\n']);
-                            if !trimmed.is_empty() {
-                                log::warn!("CLI[{port_label}] stderr: {trimmed}");
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .expect("failed to build runtime for stderr thread");
+                let inner_label = port_label.clone();
+                rt.block_on(async move {
+                    let res = tokio::task::spawn_blocking(move || {
+                        let mut reader = BufReader::new(stderr);
+                        let mut line = String::new();
+                        loop {
+                            line.clear();
+                            match reader.read_line(&mut line) {
+                                Ok(0) => {
+                                    log::debug!("CLI[{inner_label}] stderr closed");
+                                    break;
+                                }
+                                Ok(_) => {
+                                    let trimmed = line.trim_end_matches(['\r', '\n']);
+                                    if !trimmed.is_empty() {
+                                        log::warn!("CLI[{inner_label}] stderr: {trimmed}");
+                                    }
+                                }
+                                Err(err) => {
+                                    log::warn!("CLI[{inner_label}] stderr reader error: {err}");
+                                    break;
+                                }
                             }
                         }
-                        Err(err) => {
-                            log::warn!("CLI[{port_label}] stderr reader error: {err}");
-                            break;
-                        }
+                    })
+                    .await;
+
+                    if let Err(e) = res {
+                        log::warn!("CLI[{port_label}] stderr spawn_blocking join error: {e:?}");
                     }
-                }
+                });
             })
         });
 
         // Spawn thread to accept IPC connection
-        let accept_thread = std::thread::spawn(move || ipc_client.accept());
+        let accept_thread = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .expect("failed to build runtime for accept thread");
+            rt.block_on(async move {
+                match tokio::task::spawn_blocking(move || ipc_client.accept()).await {
+                    Ok(r) => r,
+                    Err(e) => Err(anyhow!("IPC accept join error: {}", e)),
+                }
+            })
+        });
 
         // Spawn thread to connect to command channel (with retry)
         let command_channel_name = get_command_channel_name(&ipc_socket_name);
         let command_connect_thread = std::thread::spawn(move || {
             // Wait a bit for CLI to set up its command listener
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            // Create a small current-thread tokio runtime to run the async sleep
+            {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .expect("failed to build runtime for thread-local sleep");
+                rt.block_on(async { crate::utils::sleep::sleep_1s().await });
+            }
 
             // Try to connect with retries (increased timeout for slow subprocess startup)
             for attempt in 1..=COMMAND_CHANNEL_CONNECT_RETRIES {
@@ -214,7 +265,11 @@ impl ManagedSubprocess {
                     }
                     Err(e) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
                         log::debug!("Command channel connect attempt {attempt} failed: {e}");
-                        std::thread::sleep(std::time::Duration::from_secs(1));
+                        let rt = tokio::runtime::Builder::new_current_thread()
+                            .enable_time()
+                            .build()
+                            .expect("failed to build runtime for thread-local sleep");
+                        rt.block_on(async { crate::utils::sleep::sleep_1s().await });
                     }
                     Err(e) => {
                         log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {e}");

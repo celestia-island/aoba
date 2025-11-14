@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
+use std::process::Command;
 #[cfg(not(windows))]
 use std::process::Stdio;
-use std::{process::Command, thread::sleep, time::Duration};
 
 #[cfg(not(windows))]
 use crate::utils::build_debug_bin;
@@ -69,7 +69,13 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
         .args(["-Command", &ps_script])
         .spawn()?;
 
-    sleep(Duration::from_secs(2));
+    {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("failed to build runtime for test sleep");
+        rt.block_on(async { aoba::utils::sleep::sleep_3s().await });
+    }
 
     // Check while occupied
     log::info!("Checking occupied port...");
@@ -95,7 +101,13 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
 
     // Wait for PowerShell to finish
     occupy_process.wait()?;
-    sleep(Duration::from_secs(1));
+    {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("failed to build runtime for test sleep");
+        rt.block_on(async { aoba::utils::sleep::sleep_1s().await });
+    }
 
     // Check after release
     log::info!("Checking port after release...");
@@ -159,7 +171,13 @@ pub fn test_port_occupation_detection_linux(port1: &str, port2: &str) -> Result<
         .stderr(Stdio::null())
         .spawn()?;
 
-    sleep(Duration::from_secs(2));
+    {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("failed to build runtime for test sleep");
+        rt.block_on(async { aoba::utils::sleep::sleep_3s().await });
+    }
     log::info!("✅ Slave process started (PID: {})", slave_process.id());
 
     if let Some(status) = slave_process.try_wait()? {
@@ -204,7 +222,13 @@ pub fn test_port_occupation_detection_linux(port1: &str, port2: &str) -> Result<
     log::info!("Releasing port and checking...");
     slave_process.kill()?;
     slave_process.wait()?;
-    sleep(Duration::from_secs(3));
+    {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("failed to build runtime for test sleep");
+        rt.block_on(async { aoba::utils::sleep::sleep_3s().await });
+    }
 
     let check5 = Command::new(&bin_path)
         .args(["--check-port", port1])

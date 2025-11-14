@@ -241,6 +241,13 @@ pub fn run_core_thread<C: CoreContext>(
             .send(CoreToUi::Tick)
             .map_err(|err| anyhow!("Failed to send Tick: {err}"))?;
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        // Run async sleep by creating a small current-thread tokio runtime
+        {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .expect("failed to build runtime for thread-local sleep");
+            rt.block_on(async { crate::utils::sleep::sleep_1s().await });
+        }
     }
 }

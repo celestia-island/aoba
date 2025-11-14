@@ -605,7 +605,15 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         http_rx: http_rx_clone,
     };
 
-    let update_thread = std::thread::spawn(move || update_storage_loop(update_args));
+    let update_thread = std::thread::spawn(move || {
+        // Run the update loop in a small tokio current-thread runtime so the loop
+        // can use async sleeps via `sleep_1s().await` / `sleep_3s().await`.
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("failed to build runtime for update thread");
+        rt.block_on(async move { update_storage_loop(update_args).await })
+    });
 
     // Parse optional debounce seconds argument (floating seconds). Default 1.0s
     // Single-precision seconds argument
@@ -1255,7 +1263,7 @@ struct UpdateStorageArgs {
 }
 
 /// Update storage loop - continuously reads data from source and updates storage
-fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
+async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
     let UpdateStorageArgs {
         storage,
         data_source,
@@ -1271,7 +1279,7 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             DataSource::Manual => {
                 // Manual mode: no automatic updates, values are set via IPC or other means
                 log::debug!("Manual data source mode - sleeping");
-                std::thread::sleep(std::time::Duration::from_secs(3));
+                crate::utils::sleep::sleep_3s().await;
                 continue;
             }
             DataSource::MqttServer(url) => {
@@ -1366,6 +1374,7 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     while cr.len() > 1000 {
                                         cr.remove(0);
                                     }
+                                    drop(cr);
                                 }
                             } else {
                                 log::warn!("Failed to parse MQTT message data");
@@ -1376,14 +1385,14 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         }
                         Err(e) => {
                             log::warn!("MQTT connection error: {}", e);
-                            std::thread::sleep(std::time::Duration::from_secs(3));
+                            crate::utils::sleep::sleep_3s().await;
                             break; // Break inner loop to reconnect
                         }
                     }
                 }
 
                 log::warn!("MQTT connection lost, will retry...");
-                std::thread::sleep(std::time::Duration::from_secs(3));
+                crate::utils::sleep::sleep_3s().await;
             }
             DataSource::HttpServer(_port) => {
                 // HTTP Server: receive data from HTTP daemon via channel
@@ -1517,7 +1526,7 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 }
                             }
 
-                            std::thread::sleep(std::time::Duration::from_secs(1));
+                            crate::utils::sleep::sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line from IPC: {err}");
@@ -1602,10 +1611,11 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 while cr.len() > 1000 {
                                     cr.remove(0);
                                 }
+                                drop(cr);
                             }
 
                             // Wait a bit before next update to avoid overwhelming
-                            std::thread::sleep(std::time::Duration::from_secs(1));
+                            crate::utils::sleep::sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line {line_count}: {err}");
@@ -1671,10 +1681,11 @@ fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 while cr.len() > 1000 {
                                     cr.remove(0);
                                 }
+                                drop(cr);
                             }
 
                             // Wait a bit before next update
-                            std::thread::sleep(std::time::Duration::from_secs(1));
+                            crate::utils::sleep::sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line: {err}");
@@ -1742,10 +1753,7 @@ fn read_one_data_update(
     register_length: u16,
 ) -> Result<Vec<u16>> {
     match source {
-        DataSource::Manual => {
-            // Manual mode: return empty values, will be set via TUI or other means
-            Ok(vec![])
-        }
+        DataSource::Manual => Ok(vec![]),
         DataSource::File(path) => {
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
@@ -1760,7 +1768,6 @@ fn read_one_data_update(
             )
         }
         DataSource::Pipe(path) => {
-            // Open named pipe (FIFO) for reading
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();
@@ -1774,48 +1781,31 @@ fn read_one_data_update(
             )
         }
         DataSource::MqttServer(url) => {
-            // MQTT: connect to broker and wait for one message
+            // MQTT: connect and wait for a single publish
             log::debug!("Connecting to MQTT broker: {}", url);
-
-            // Parse MQTT URL to extract broker and topic
             let parsed_url =
                 url::Url::parse(url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
-
             let host = parsed_url
                 .host_str()
                 .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
             let port = parsed_url.port().unwrap_or(1883);
             let topic = parsed_url.path().trim_start_matches('/');
-
             if topic.is_empty() {
-                return Err(anyhow!(
-                    "MQTT URL must include a topic path (e.g., mqtt://host:port/topic)"
-                ));
+                return Err(anyhow!("MQTT URL must include a topic path"));
             }
 
-            log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
-
-            // Create a unique client ID
             let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
-
-            // Create MQTT options
             let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
-
-            // Create client
             let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
-
-            // Subscribe to topic
             client
                 .subscribe(topic, rumqttc::QoS::AtMostOnce)
                 .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
 
-            // Wait for one message
             for notification in connection.iter() {
                 if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
                     notification
                 {
                     let payload = String::from_utf8_lossy(&publish.payload);
-                    log::debug!("Received MQTT message: {}", payload);
                     return parse_data_line(
                         &payload,
                         station_id,
@@ -1826,16 +1816,14 @@ fn read_one_data_update(
                 }
             }
 
-            Err(anyhow!("MQTT connection closed without receiving data"))
+            Err(anyhow!("MQTT connection closed before receiving a message"))
         }
-        DataSource::HttpServer(_port) => {
-            // HTTP Server: For initial setup, return empty values
-            // Actual updates come via the HTTP daemon thread
+        DataSource::HttpServer(_) => {
+            // HTTP server sends updates via a separate daemon; return empty initial values
             log::debug!("HTTP Server mode - returning empty initial values");
             Ok(vec![])
         }
         DataSource::IpcPipe(path) => {
-            // IPC pipe: similar to Pipe but for inter-process communication
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();

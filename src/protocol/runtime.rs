@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},
@@ -86,7 +86,20 @@ impl PortRuntimeHandle {
         let thread_handle_arc = Arc::new(Mutex::new(None));
 
         let handle = std::thread::spawn(move || {
-            boot_serial_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx)
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .expect("failed to build runtime for thread");
+            rt.block_on(async move {
+                match tokio::task::spawn_blocking(move || {
+                    boot_serial_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx)
+                })
+                .await
+                {
+                    Ok(r) => r,
+                    Err(e) => Err(anyhow!("boot_serial_loop join error: {}", e)),
+                }
+            })
         });
 
         // Store the thread handle
@@ -114,7 +127,20 @@ impl PortRuntimeHandle {
         let thread_handle_arc = Arc::new(Mutex::new(None));
 
         let handle = std::thread::spawn(move || {
-            boot_serial_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx)
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .expect("failed to build runtime for thread");
+            rt.block_on(async move {
+                match tokio::task::spawn_blocking(move || {
+                    boot_serial_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx)
+                })
+                .await
+                {
+                    Ok(r) => r,
+                    Err(e) => Err(anyhow!("boot_serial_loop join error: {}", e)),
+                }
+            })
         });
 
         // Store the thread handle
@@ -259,7 +285,11 @@ fn boot_serial_loop(
         // Only sleep if no data was received to avoid excessive CPU usage
         // When data is flowing, continue immediately to read more
         if !data_received {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .build()
+                .expect("failed to build runtime for thread-local sleep");
+            rt.block_on(async { crate::utils::sleep::sleep_1s().await });
         }
     }
 }
