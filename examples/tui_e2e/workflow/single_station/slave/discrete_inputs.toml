@@ -251,7 +251,7 @@ key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station_fields]]
 description = "Delete cleared content"
@@ -337,7 +337,7 @@ key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station_fields]]
 description = "Delete cleared content"
@@ -392,7 +392,7 @@ key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station_fields]]
 description = "Delete cleared content"
@@ -567,7 +567,7 @@ mock_set_value = { kind = "StationId", station_index = 0 }
 # Step 8: Save configuration
 [[workflow.save_configuration]]
 description = "Save configuration with Ctrl+S"
-key = "Ctrl+s"
+key = "Ctrl+S"
 
 [[workflow.save_configuration]]
 description = "Enable port in mock state"

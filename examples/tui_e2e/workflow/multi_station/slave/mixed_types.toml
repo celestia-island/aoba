@@ -189,25 +189,25 @@ mock_set_value = [
 ]
 
 # Step 6: Configure Station 1 Fields
-[[workflow.configure_station1_fields]]
-description = "Navigate to Station 1 - Start from top"
-key = "Ctrl+PageUp"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
-[[workflow.configure_station1_fields]]
-description = "Jump to Station 1 (AddLine -> ModbusMode)"
-key = "PageDown"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
-[[workflow.configure_station1_fields]]
-description = "Jump to Station 1 (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
-[[workflow.configure_station1_fields]]
-description = "Enter edit mode for Station ID"
-key = "Enter"
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Delete cleared content"
@@ -291,7 +291,7 @@ key = "Enter"
 
 [[workflow.configure_station1_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Delete cleared content"
@@ -343,7 +343,7 @@ key = "Enter"
 
 [[workflow.configure_station1_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station1_fields]]
 description = "Delete cleared content"
@@ -554,7 +554,7 @@ key = "Enter"
 
 [[workflow.configure_station2_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station2_fields]]
 description = "Delete cleared content"
@@ -646,7 +646,7 @@ key = "Enter"
 
 [[workflow.configure_station2_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station2_fields]]
 description = "Delete cleared content"
@@ -702,7 +702,7 @@ key = "Enter"
 
 [[workflow.configure_station2_fields]]
 description = "Clear existing value"
-key = "Ctrl+a"
+key = "Ctrl+A"
 
 [[workflow.configure_station2_fields]]
 description = "Delete cleared content"
@@ -947,7 +947,7 @@ key = "Ctrl+PageUp"
 # Step 10: Save configuration
 [[workflow.save_configuration]]
 description = "Save configuration with Ctrl+S"
-key = "Ctrl+s"
+key = "Ctrl+S"
 
 [[workflow.save_configuration]]
 description = "Enable port in mock state"
