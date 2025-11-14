@@ -10,16 +10,19 @@ use std::{
 
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use clap::ArgMatches;
-use rmodbus::server::storage::ModbusStorageSmall;
-use rmodbus::{server::context::ModbusContext, ModbusProto};
+use rmodbus::{
+    server::{context::ModbusContext, storage::ModbusStorageSmall},
+    ModbusProto,
+};
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
     ModbusIpcLogPayload, ModbusResponse,
 };
-use crate::cli::http_daemon_registry as http_registry;
 use crate::{
-    cli::{actions, cleanup},
+    cli::{
+        http_daemon_registry as http_registry, {actions, cleanup},
+    },
     protocol::modbus::{
         build_slave_coils_response, build_slave_discrete_inputs_response,
         build_slave_holdings_response, build_slave_inputs_response,
@@ -341,54 +344,63 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
             return Err(anyhow!("Timeout waiting for request"));
         }
 
-        let mut port = port_arc.lock().unwrap();
-        match port.read(&mut buffer) {
-            Ok(n) if n > 0 => {
-                assembling.extend_from_slice(&buffer[..n]);
+        enum ReadAction {
+            Data,
+            FrameReady,
+            Timeout,
+            Error(String),
+            NoData,
+        }
+
+        let action = {
+            let mut port = port_arc.lock().unwrap();
+            match port.read(&mut buffer) {
+                Ok(n) if n > 0 => {
+                    assembling.extend_from_slice(&buffer[..n]);
+                    ReadAction::Data
+                }
+                Ok(_) => {
+                    if !assembling.is_empty() {
+                        ReadAction::FrameReady
+                    } else {
+                        ReadAction::NoData
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    if !assembling.is_empty() {
+                        ReadAction::FrameReady
+                    } else {
+                        ReadAction::Timeout
+                    }
+                }
+                Err(err) => ReadAction::Error(err.to_string()),
+            }
+        };
+
+        match action {
+            ReadAction::Data => {
                 sleep_1s().await;
             }
-            Ok(_) => {
-                if !assembling.is_empty() {
-                    // Frame complete - process it
-                    drop(port);
-
-                    let request = assembling.clone();
-                    let (response, _) =
-                        respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
-
-                    // Output JSON
-                    let json = serde_json::to_string(&response)?;
-                    println!("{json}");
-
-                    // Explicitly drop port_arc to close the port
-                    drop(port_arc);
-                    sleep_1s().await;
-
-                    return Ok(());
-                }
+            ReadAction::FrameReady => {
+                let request = assembling.clone();
+                let (response, _) =
+                    respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
+                let json = serde_json::to_string(&response)?;
+                println!("{json}");
+                drop(port_arc);
+                sleep_1s().await;
+                return Ok(());
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                if !assembling.is_empty() {
-                    // Frame complete - process it
-                    drop(port);
-
-                    let request = assembling.clone();
-                    let (response, _) =
-                        respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
-
-                    // Output JSON
-                    let json = serde_json::to_string(&response)?;
-                    println!("{json}");
-
-                    // Explicitly drop port_arc to close the port
-                    drop(port_arc);
-                    sleep_1s().await;
-
-                    return Ok(());
-                }
+            ReadAction::Timeout => {
+                sleep_1s().await;
             }
-            Err(err) => {
-                return Err(anyhow!("Error reading from port: {err}"));
+            ReadAction::Error(e) => {
+                log::warn!("Error reading from port: {e}");
+                sleep_1s().await;
+                return Err(anyhow!("Error reading from port: {e}"));
+            }
+            ReadAction::NoData => {
+                // nothing to do
             }
         }
     }
@@ -457,22 +469,22 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     };
 
     // Open serial port with longer timeout for reading requests
-    let port_handle = match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50)).await
-    {
-        Ok(handle) => handle,
-        Err(err) => {
-            if let Some(ref mut ipc_conns) = ipc_connections {
-                let _ = ipc_conns
-                    .status
-                    .send(&crate::protocol::ipc::IpcMessage::PortError {
-                        port_name: port.to_string(),
-                        error: format!("Failed to open port: {err}"),
-                        timestamp: None,
-                    });
+    let port_handle =
+        match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50)).await {
+            Ok(handle) => handle,
+            Err(err) => {
+                if let Some(ref mut ipc_conns) = ipc_connections {
+                    let _ = ipc_conns
+                        .status
+                        .send(&crate::protocol::ipc::IpcMessage::PortError {
+                            port_name: port.to_string(),
+                            error: format!("Failed to open port: {err}"),
+                            timestamp: None,
+                        });
+                }
+                return Err(err);
             }
-            return Err(err);
-        }
-    };
+        };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -824,265 +836,259 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             }
         }
 
-        let mut port = port_arc.lock().unwrap();
-        match port.read(&mut buffer) {
-            Ok(n) if n > 0 => {
-                log::info!(
-                    "CLI Master: Read {n} bytes from port: {:02X?}",
-                    &buffer[..n]
-                );
-                assembling.extend_from_slice(&buffer[..n]);
-                last_byte_time = Some(std::time::Instant::now());
-            }
-            Ok(_) => {
-                // No data available, check if we have a complete frame
-                if !assembling.is_empty() {
-                    if let Some(last_time) = last_byte_time {
-                        if last_time.elapsed() >= frame_gap {
-                            // Frame complete - process it
-                            log::info!(
-                                "CLI Master: Frame complete ({} bytes), processing request",
-                                assembling.len()
-                            );
-                            drop(port); // Release port lock before processing
-
-                            let request = assembling.clone();
-                            assembling.clear();
-                            last_byte_time = None;
-
-                            // Process the request and generate response
-                            // Try to parse request range from raw bytes (func at index 1)
-                            let parsed_range = if request.len() >= 8 {
-                                let func = request[1];
-                                match func {
-                                    0x01 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                    }
-                                    0x02 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                    }
-                                    0x03 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                    }
-                                    0x04 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                    }
-                                    _ => None,
-                                }
-                            } else {
-                                None
-                            };
-
-                            match respond_to_request(
-                                port_arc.clone(),
-                                &request,
-                                station_id,
-                                &storage,
-                            ) {
-                                Ok((response, response_frame)) => {
-                                    let mut hasher = DefaultHasher::new();
-                                    hasher.write(&request);
-                                    let request_key = hasher.finish();
-
-                                    // Determine overlap with recent changes
-                                    let mut force = false;
-                                    if let Some((start, qty, _mode)) = parsed_range {
-                                        let now = Instant::now();
-                                        let cr = changed_ranges.lock().unwrap();
-                                        for (cstart, clen, t) in cr.iter() {
-                                            if now.duration_since(*t) > cache_ttl {
-                                                continue;
-                                            }
-                                            let a1 = start as u32;
-                                            let a2 = (start + qty) as u32;
-                                            let b1 = *cstart as u32;
-                                            let b2 = (cstart + clen) as u32;
-                                            if a1 < b2 && b1 < a2 {
-                                                force = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    if let Err(e) = print_response(request_key, &response, force) {
-                                        log::warn!("Failed to print response: {e}");
-                                    }
-
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &response_frame,
-                                            station_id: Some(response.station_id),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(true),
-                                            error: None,
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("Error responding to request: {err}");
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &request,
-                                            station_id: request.first().copied(),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(false),
-                                            error: Some(format!("{err:#}")),
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                            }
-
-                            continue; // Re-acquire lock in next iteration
-                        }
-                    }
-                }
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout is normal, check for frame completion
-                if !assembling.is_empty() {
-                    if let Some(last_time) = last_byte_time {
-                        if last_time.elapsed() >= frame_gap {
-                            // Frame complete - process it
-                            drop(port); // Release port lock before processing
-
-                            let request = assembling.clone();
-                            assembling.clear();
-                            last_byte_time = None;
-
-                            // Process the request and generate response
-                            // Try to parse request range from raw bytes (func at index 1)
-                            let parsed_range = if request.len() >= 8 {
-                                let func = request[1];
-                                match func {
-                                    0x01 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                    }
-                                    0x02 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                    }
-                                    0x03 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                    }
-                                    0x04 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                    }
-                                    _ => None,
-                                }
-                            } else {
-                                None
-                            };
-
-                            match respond_to_request(
-                                port_arc.clone(),
-                                &request,
-                                station_id,
-                                &storage,
-                            ) {
-                                Ok((response, response_frame)) => {
-                                    // Build a stable key from the request bytes to use for debounce
-                                    let mut hasher = DefaultHasher::new();
-                                    hasher.write(&request);
-                                    let request_key = hasher.finish();
-
-                                    // Determine overlap with recent changes
-                                    let mut force = false;
-                                    if let Some((start, qty, _mode)) = parsed_range {
-                                        let now = Instant::now();
-                                        let cr = changed_ranges.lock().unwrap();
-                                        for (cstart, clen, t) in cr.iter() {
-                                            if now.duration_since(*t) > cache_ttl {
-                                                continue;
-                                            }
-                                            let a1 = start as u32;
-                                            let a2 = (start + qty) as u32;
-                                            let b1 = *cstart as u32;
-                                            let b2 = (cstart + clen) as u32;
-                                            if a1 < b2 && b1 < a2 {
-                                                force = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    if let Err(e) = print_response(request_key, &response, force) {
-                                        log::warn!("Failed to print response: {e}");
-                                    }
-
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &response_frame,
-                                            station_id: Some(response.station_id),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(true),
-                                            error: None,
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("Error responding to request: {err}");
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &request,
-                                            station_id: request.first().copied(),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(false),
-                                            error: Some(format!("{err:#}")),
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                            }
-
-                            continue; // Re-acquire lock in next iteration
-                        }
-                    }
-                }
-            }
-            Err(err) => {
-                log::warn!("Error reading from port: {err}");
-                sleep_1s().await;
-            }
+        enum ReadAction2 {
+            Data,
+            FrameReady(
+                Option<(
+                    u16,
+                    u16,
+                    crate::protocol::status::types::modbus::RegisterMode,
+                )>,
+            ),
+            Timeout,
+            Error(String),
+            NoData,
         }
-        drop(port);
+
+        let action2 = {
+            let mut port = port_arc.lock().unwrap();
+            match port.read(&mut buffer) {
+                Ok(n) if n > 0 => {
+                    log::info!(
+                        "CLI Master: Read {n} bytes from port: {:02X?}",
+                        &buffer[..n]
+                    );
+                    assembling.extend_from_slice(&buffer[..n]);
+                    last_byte_time = Some(std::time::Instant::now());
+                    ReadAction2::Data
+                }
+                Ok(_) => {
+                    if !assembling.is_empty() {
+                        if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                // Determine parsed_range without holding lock
+                                let request_preview = assembling.clone();
+                                let parsed_range = if request_preview.len() >= 8 {
+                                    let func = request_preview[1];
+                                    match func {
+                                        0x01 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                        }
+                                        0x02 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        }
+                                        0x03 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        }
+                                        0x04 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        }
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
+                                };
+                                ReadAction2::FrameReady(parsed_range)
+                            } else {
+                                ReadAction2::NoData
+                            }
+                        } else {
+                            ReadAction2::NoData
+                        }
+                    } else {
+                        ReadAction2::NoData
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    if !assembling.is_empty() {
+                        if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                let request_preview = assembling.clone();
+                                let parsed_range = if request_preview.len() >= 8 {
+                                    let func = request_preview[1];
+                                    match func {
+                                        0x01 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                        }
+                                        0x02 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        }
+                                        0x03 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        }
+                                        0x04 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        }
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
+                                };
+                                ReadAction2::FrameReady(parsed_range)
+                            } else {
+                                ReadAction2::Timeout
+                            }
+                        } else {
+                            ReadAction2::Timeout
+                        }
+                    } else {
+                        ReadAction2::Timeout
+                    }
+                }
+                Err(err) => ReadAction2::Error(err.to_string()),
+            }
+        };
+
+        match action2 {
+            ReadAction2::Data => {}
+            ReadAction2::FrameReady(parsed_range) => {
+                log::info!(
+                    "CLI Master: Frame complete ({} bytes), processing request",
+                    assembling.len()
+                );
+                let request = assembling.clone();
+                assembling.clear();
+                last_byte_time = None;
+
+                match respond_to_request(port_arc.clone(), &request, station_id, &storage) {
+                    Ok((response, response_frame)) => {
+                        let mut hasher = DefaultHasher::new();
+                        hasher.write(&request);
+                        let request_key = hasher.finish();
+
+                        // Determine overlap with recent changes
+                        let mut force = false;
+                        if let Some((start, qty, _mode)) = parsed_range {
+                            let now = Instant::now();
+                            let cr = changed_ranges.lock().unwrap();
+                            for (cstart, clen, t) in cr.iter() {
+                                if now.duration_since(*t) > cache_ttl {
+                                    continue;
+                                }
+                                let a1 = start as u32;
+                                let a2 = (start + qty) as u32;
+                                let b1 = *cstart as u32;
+                                let b2 = (cstart + clen) as u32;
+                                if a1 < b2 && b1 < a2 {
+                                    force = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if let Err(e) = print_response(request_key, &response, force) {
+                            log::warn!("Failed to print response: {e}");
+                        }
+
+                        emit_modbus_ipc_log(
+                            &mut ipc_connections,
+                            ModbusIpcLogPayload {
+                                port: port_name,
+                                direction: "tx",
+                                frame: &response_frame,
+                                station_id: Some(response.station_id),
+                                register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                start_address: parsed_range.map(|(start, _, _)| start),
+                                quantity: parsed_range.map(|(_, qty, _)| qty),
+                                success: Some(true),
+                                error: None,
+                                config_index: None,
+                            },
+                        );
+                    }
+                    Err(err) => {
+                        log::warn!("Error responding to request: {err}");
+                        emit_modbus_ipc_log(
+                            &mut ipc_connections,
+                            ModbusIpcLogPayload {
+                                port: port_name,
+                                direction: "tx",
+                                frame: &request,
+                                station_id: request.first().copied(),
+                                register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                start_address: parsed_range.map(|(start, _, _)| start),
+                                quantity: parsed_range.map(|(_, qty, _)| qty),
+                                success: Some(false),
+                                error: Some(format!("{err:#}")),
+                                config_index: None,
+                            },
+                        );
+                    }
+                }
+            }
+            ReadAction2::Timeout => {}
+            ReadAction2::Error(e) => {
+                log::warn!("CLI Master read error: {e}");
+                sleep_1s().await;
+                continue;
+            }
+            ReadAction2::NoData => {}
+        }
+        // No explicit drop needed here; ensure we don't mistakenly drop the `port` parameter (a &str)
 
         // Small sleep to avoid busy loop
         sleep_1s().await;

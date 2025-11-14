@@ -1,8 +1,11 @@
 use anyhow::Result;
-use flume::Sender;
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
+use flume::Sender;
 
 type JoinOpt = Option<std::thread::JoinHandle<()>>;
 

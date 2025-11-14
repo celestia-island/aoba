@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
-use std::{io, sync::Arc, thread, time::Duration};
+use std::{io, sync::Arc, time::Duration};
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 

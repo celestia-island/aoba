@@ -7,13 +7,14 @@ use std::{
 
 use clap::ArgMatches;
 
-use crate::utils::sleep::{sleep_1s, sleep_3s};
-
 use super::{
     emit_modbus_ipc_log, extract_values_from_storage, open_serial_port, parse_register_mode,
     ModbusIpcLogPayload, ModbusResponse, OutputSink,
 };
-use crate::cli::{actions, cleanup};
+use crate::{
+    cli::{actions, cleanup},
+    utils::sleep::{sleep_1s, sleep_3s},
+};
 
 /// Outcome of a slave polling transaction.
 enum SlavePollTransaction {

@@ -3,7 +3,6 @@ use chrono::Local;
 use parking_lot::RwLock;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, thread, time::Duration};
 
-use crate::utils::sleep::{sleep_1s, sleep_3s};
 use crate::{
     cli::config::StationConfig,
     core::{
@@ -23,7 +22,7 @@ use crate::{
             {self as types, Status, TuiStatus},
         },
     },
-    utils::i18n::lang,
+    utils::{i18n::lang, sleep::sleep_1s},
 };
 
 /// Helper function to get stations configuration from TUI status
@@ -322,7 +321,8 @@ pub async fn run_core_thread(
                         &port_name,
                         &mut subprocess_manager,
                         &core_tx,
-                    ).await?;
+                    )
+                    .await?;
                 }
                 UiToCore::SendRegisterUpdate {
                     port_name,

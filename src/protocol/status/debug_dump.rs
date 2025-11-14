@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::utils::sleep::sleep_1s;
+
 /// Debug dump utilities for CI/E2E testing
 ///
 /// This module provides functionality to periodically dump the global status tree

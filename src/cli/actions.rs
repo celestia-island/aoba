@@ -2,7 +2,10 @@ use serde::Serialize;
 
 use clap::ArgMatches;
 
-use crate::protocol::ipc::{self, IpcCommandListener, IpcServer};
+use crate::{
+    protocol::ipc::{self, IpcCommandListener, IpcServer},
+    utils::sleep::sleep_1s,
+};
 
 /// IPC connections for CLI subprocess (bidirectional)
 pub struct IpcConnections {
@@ -633,17 +636,17 @@ async fn run_config_runtime(
             Ok(_) => {
                 // No data, sleep briefly
                 drop(port);
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                sleep_1s().await;
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
                 // Timeout is expected, just continue
                 drop(port);
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                sleep_1s().await;
             }
             Err(e) => {
                 log::error!("Error reading from port: {e}");
                 drop(port);
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                sleep_1s().await;
             }
         }
     }

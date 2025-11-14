@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::{process::Stdio, sync::Arc, thread, time::Duration};
+use std::{process::Stdio, sync::Arc};
 
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
@@ -8,9 +8,8 @@ use crate::utils::{
 use aoba::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
+    utils::sleep::{sleep_1s, sleep_3s},
 };
-
-use aoba::utils::sleep::{sleep_1s, sleep_3s};
 
 /// Post JSON data to the HTTP server running in the subprocess
 async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Result<()> {

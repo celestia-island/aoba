@@ -3,7 +3,7 @@
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
 use anyhow::{bail, Result};
-use std::{fmt, time::Duration};
+use std::fmt;
 
 use crate::{
     mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
@@ -725,7 +725,11 @@ async fn execute_single_step(
 
     // Handle sleep - use explicit sleep_ms if provided, otherwise no extra sleep
     if let Some(sleep_ms) = step.sleep_ms {
-        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+        if sleep_ms <= 1000 {
+            sleep_1s().await;
+        } else {
+            sleep_3s().await;
+        }
     }
 
     Ok(())
