@@ -79,13 +79,13 @@ crossterm = "^0.29"
 ratatui = "^0.29"
 unicode-width = "^0.2"
 
-rmodbus = { version = "^0.11", features = ["with_serde"] }
+rmodbus = { version = "^0.12", features = ["with_serde"] }
 libc = "^0.2"
 serialport = "^4"
 interprocess = "^2"
 ureq = { version = "^3", features = ["json"] }
-tiny_http = "^0.11"
 rumqttc = "^0.25"
+axum = "^0.7"
 
 expectrl = "^0.8"
 regex = "^1"
@@ -126,9 +126,9 @@ tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 
 flume.workspace = true
-tokio.workspace = true
 futures.workspace = true
 oneshot.workspace = true
+tokio.workspace = true
 
 whoami.workspace = true
 crossterm.workspace = true
@@ -143,6 +143,7 @@ serialport.workspace = true
 interprocess.workspace = true
 ureq.workspace = true
 rumqttc.workspace = true
+axum.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true

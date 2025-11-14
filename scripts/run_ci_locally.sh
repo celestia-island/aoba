@@ -174,6 +174,9 @@ declare -a TUI_RENDERING_MODULES=(
     "multi_station_slave_mixed_types"
     "multi_station_slave_spaced_addresses"
     "multi_station_slave_mixed_ids"
+    "data_source_http_server"
+    "data_source_ipc_pipe"
+    "data_source_mqtt_client"
 )
 
 declare -a TUI_DRILLDOWN_MODULES=("${TUI_RENDERING_MODULES[@]}")
@@ -185,7 +188,8 @@ declare -a CLI_MODULES=(
     "list_ports_status"
     "modbus_basic_master_slave"
     "data_source_http"
-    "data_source_http_persist"
+    "data_source_manual"
+    "data_source_mqtt"
 )
 
 ## Docker support removed: this script runs tests locally only.

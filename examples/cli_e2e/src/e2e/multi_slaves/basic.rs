@@ -1,13 +1,13 @@
 use anyhow::Result;
-use std::{
-    process::{Command, Stdio},
-    time::Duration,
-};
+use std::process::{Command, Stdio};
 
 use crate::utils::build_debug_bin;
-use aoba::cli::config::{
-    CommunicationMethod, CommunicationParams, ModbusBootConfig, PersistenceMode, RegisterMap,
-    RegisterRange, StationConfig, StationMode,
+use _main::{
+    cli::config::{
+        CommunicationMethod, CommunicationParams, ModbusBootConfig, PersistenceMode, RegisterMap,
+        RegisterRange, StationConfig, StationMode,
+    },
+    utils::sleep::sleep_3s,
 };
 
 /// Test multiple slaves configuration
@@ -91,7 +91,7 @@ pub async fn test_multi_slaves() -> Result<()> {
         .spawn()?;
 
     // Wait a bit to allow the process to start and initialize
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    sleep_3s().await;
 
     // Check if process is still running (config mode runs persistently)
     match process.try_wait()? {

@@ -131,22 +131,16 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
                     let master_source_serialized = if mode.is_master() {
                         match master_source {
                             ModbusMasterDataSource::Manual => None,
-                            ModbusMasterDataSource::TransparentForward { port } => {
-                                Some(SerializableMasterSource {
-                                    kind: "transparent_forward".to_string(),
-                                    value: port.clone(),
-                                })
-                            }
                             ModbusMasterDataSource::MqttServer { url } => {
                                 Some(SerializableMasterSource {
                                     kind: "mqtt".to_string(),
                                     value: Some(url.clone()),
                                 })
                             }
-                            ModbusMasterDataSource::HttpServer { url } => {
+                            ModbusMasterDataSource::HttpServer { port } => {
                                 Some(SerializableMasterSource {
                                     kind: "http".to_string(),
-                                    value: Some(url.clone()),
+                                    value: Some(port.to_string()),
                                 })
                             }
                             ModbusMasterDataSource::IpcPipe { path } => {
@@ -256,14 +250,11 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
                         .and_then(|src| {
                             let SerializableMasterSource { kind, value } = src;
                             match kind.as_str() {
-                                "transparent_forward" => {
-                                    Some(ModbusMasterDataSource::TransparentForward { port: value })
-                                }
                                 "mqtt" => Some(ModbusMasterDataSource::MqttServer {
                                     url: value.unwrap_or_default(),
                                 }),
                                 "http" => Some(ModbusMasterDataSource::HttpServer {
-                                    url: value.unwrap_or_default(),
+                                    port: value.and_then(|v| v.parse().ok()).unwrap_or(8080),
                                 }),
                                 "ipc" => Some(ModbusMasterDataSource::IpcPipe {
                                     path: value.unwrap_or_default(),

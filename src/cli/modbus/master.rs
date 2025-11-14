@@ -3,30 +3,34 @@ use std::{
     cell::RefCell,
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hasher,
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader, Read, Write},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use clap::ArgMatches;
-use rmodbus::{server::context::ModbusContext, ModbusProto};
+use rmodbus::{
+    server::{context::ModbusContext, storage::ModbusStorageSmall},
+    ModbusProto,
+};
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
     ModbusIpcLogPayload, ModbusResponse,
 };
 use crate::{
-    cli::{actions, cleanup},
+    cli::{actions, cleanup, http_daemon_registry as http_registry},
+    core::task_manager::spawn_task,
     protocol::modbus::{
         build_slave_coils_response, build_slave_discrete_inputs_response,
         build_slave_holdings_response, build_slave_inputs_response,
     },
 };
 
-const SERIAL_PORT_OPEN_RETRIES: usize = 10;
-const SERIAL_PORT_OPEN_RETRY_DELAY_MS: u64 = 200;
+const SERIAL_PORT_OPEN_RETRIES: usize = 3;
 
-fn open_serial_port_with_retry(
+async fn open_serial_port_with_retry(
     port: &str,
     baud_rate: u32,
     timeout: Duration,
@@ -49,7 +53,7 @@ fn open_serial_port_with_retry(
                     log::warn!(
                         "Failed to open serial port {port} (attempt {attempt}/{SERIAL_PORT_OPEN_RETRIES}): {last_error}"
                     );
-                    std::thread::sleep(Duration::from_millis(SERIAL_PORT_OPEN_RETRY_DELAY_MS));
+                    sleep_1s().await;
                 }
             }
         }
@@ -60,8 +64,134 @@ fn open_serial_port_with_retry(
     ))
 }
 
+/// Shared state for axum HTTP server
+#[derive(Clone)]
+struct HttpServerState {
+    tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
+    storage: Option<Arc<Mutex<ModbusStorageSmall>>>,
+}
+
+use crate::protocol::status::types::modbus::StationConfig as ProtocolStationConfig;
+use crate::protocol::status::types::modbus::StationsResponse;
+use crate::utils::sleep::{sleep_1s, sleep_3s};
+
+/// Axum handler for POST /stations endpoint
+async fn handle_stations_post(
+    State(state): State<HttpServerState>,
+    Json(stations): Json<Vec<crate::protocol::status::types::modbus::StationConfig>>,
+) -> Result<(StatusCode, Json<StationsResponse>), (StatusCode, String)> {
+    // helper functions live in `crate::cli::modbus`
+
+    log::info!(
+        "📥 HTTP Server: Received POST request with {} stations",
+        stations.len()
+    );
+    log::debug!("📥 HTTP Server: Station details: {:?}", stations);
+
+    // Clone stations for forwarding and for building the response snapshot
+    let stations_for_send = stations.clone();
+
+    // Forward stations to the update thread
+    state.tx.send_async(stations_for_send).await.map_err(|e| {
+        log::error!("Failed to send stations to update thread: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Internal Server Error: {}", e),
+        )
+    })?;
+
+    // Attempt to read current values from storage (if available). We poll
+    // briefly (up to 3s) for the update thread to apply the changes.
+    let mut stations_snapshot: Vec<ProtocolStationConfig> = Vec::new();
+
+    if let Some(ref storage) = state.storage {
+        let start_wait = Instant::now();
+        let timeout = Duration::from_secs(3);
+
+        // Try to read updated values; if storage hasn't been populated yet,
+        // keep retrying until timeout.
+        loop {
+            stations_snapshot.clear();
+            let mut ok = true;
+            for station in &stations {
+                match crate::cli::modbus::build_station_snapshot_from_storage(storage, station) {
+                    Ok(sc) => stations_snapshot.push(sc),
+                    Err(_) => {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+
+            if ok || start_wait.elapsed() >= timeout {
+                break;
+            }
+
+            sleep_1s().await;
+        }
+    } else {
+        // No storage available — fall back to echoing posted initial values
+        for station in &stations {
+            stations_snapshot.push(station.clone());
+        }
+    }
+
+    let resp = StationsResponse {
+        success: true,
+        message: "Stations queued".to_string(),
+        stations: stations_snapshot,
+    };
+
+    Ok((StatusCode::OK, Json(resp)))
+}
+
+/// Run HTTP server daemon using axum
+async fn run_http_server_daemon(
+    port: u16,
+    tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
+    shutdown_rx: flume::Receiver<()>,
+    storage: Option<Arc<Mutex<ModbusStorageSmall>>>,
+) -> Result<()> {
+    let addr = format!("127.0.0.1:{}", port);
+    log::info!("Starting HTTP server daemon on {}", addr);
+
+    let state = HttpServerState { tx, storage };
+
+    // Build axum router with POST endpoint
+    let app = Router::new()
+        .route("/", post(handle_stations_post))
+        .with_state(state);
+
+    // Use task_manager to spawn the async HTTP server daemon
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
+
+    log::info!("HTTP server daemon listening on {}", addr);
+
+    // Create shutdown signal from channel
+    let shutdown_signal = async move {
+        match shutdown_rx.recv_async().await {
+            Ok(()) => {
+                log::info!("HTTP server daemon received shutdown signal, exiting");
+            }
+            Err(_) => {
+                log::info!("HTTP server shutdown channel closed, exiting");
+            }
+        }
+    };
+
+    // Run axum server with graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await
+        .map_err(|e| anyhow!("HTTP server error: {}", e))?;
+
+    Ok(())
+}
+
 /// Handle master provide (temporary: output once and exit)
-pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -78,6 +208,33 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         "Starting master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
+    // Start HTTP server daemon if using HTTP data source. Register the join
+    // handle in a global registry so other code (mode switches) can shut it
+    // down later.
+    let (http_tx, http_rx) =
+        flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
+    let _http_server_thread_port = if let DataSource::HttpServer(http_port) = &data_source {
+        let port = *http_port;
+        let tx = http_tx.clone();
+        let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
+        let handle = spawn_task(async move {
+            run_http_server_daemon(port, tx, shutdown_rx, None).await?;
+            Ok(())
+        });
+
+        // register handle+shutdown sender in global registry for lookup/shutdown
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+
+        // Ensure cleanup on program exit also shuts down the daemon
+        cleanup::register_cleanup(move || {
+            std::mem::drop(http_registry::shutdown_and_join(port));
+        });
+
+        Some(port)
+    } else {
+        None
+    };
+
     // Read one line of data
     let values = read_one_data_update(
         &data_source,
@@ -85,11 +242,13 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         reg_mode,
         register_address,
         register_length,
-    )?;
+    )
+    .await?;
 
     // Initialize modbus storage with values
     use rmodbus::server::storage::ModbusStorageSmall;
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
+    let storage_clone = storage.clone();
     {
         let mut context = storage.lock().unwrap();
         match reg_mode {
@@ -116,15 +275,61 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         }
     }
 
+    // If HTTP server mode, check for incoming data before serial port opens
+    if matches!(&data_source, DataSource::HttpServer(_)) {
+        // Wait for HTTP POST data (with timeout)
+        match http_rx.recv_timeout(Duration::from_secs(15)) {
+            Ok(stations) => {
+                log::info!("Received HTTP POST with {} stations", stations.len());
+                // Update storage with received data
+                let mut context = storage_clone.lock().unwrap();
+                for station in &stations {
+                    if station.station_id == station_id {
+                        // Update holding registers
+                        for range in &station.map.holding {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_holding(addr, val)?;
+                            }
+                        }
+                        // Update coils
+                        for range in &station.map.coils {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_coil(addr, val != 0)?;
+                            }
+                        }
+                        // Update discrete inputs
+                        for range in &station.map.discrete_inputs {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_discrete(addr, val != 0)?;
+                            }
+                        }
+                        // Update input registers
+                        for range in &station.map.input {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_input(addr, val)?;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Timeout waiting for HTTP POST data: {}", e);
+            }
+        }
+    }
+
     // Open serial port and wait for one request, then respond and exit
-    let port_handle = open_serial_port_with_retry(port, baud_rate, Duration::from_secs(5))?;
+    let port_handle = open_serial_port_with_retry(port, baud_rate, Duration::from_secs(5)).await?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Wait for request and respond once
     let mut buffer = [0u8; 256];
     let mut assembling: Vec<u8> = Vec::new();
-    let frame_gap = Duration::from_millis(10);
     let start_time = std::time::Instant::now();
 
     loop {
@@ -132,54 +337,63 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
             return Err(anyhow!("Timeout waiting for request"));
         }
 
-        let mut port = port_arc.lock().unwrap();
-        match port.read(&mut buffer) {
-            Ok(n) if n > 0 => {
-                assembling.extend_from_slice(&buffer[..n]);
-                std::thread::sleep(frame_gap);
-            }
-            Ok(_) => {
-                if !assembling.is_empty() {
-                    // Frame complete - process it
-                    drop(port);
+        enum ReadAction {
+            Data,
+            FrameReady,
+            Timeout,
+            Error(String),
+            NoData,
+        }
 
-                    let request = assembling.clone();
-                    let (response, _) =
-                        respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
-
-                    // Output JSON
-                    let json = serde_json::to_string(&response)?;
-                    println!("{json}");
-
-                    // Explicitly drop port_arc to close the port
-                    drop(port_arc);
-                    std::thread::sleep(Duration::from_millis(100));
-
-                    return Ok(());
+        let action = {
+            let mut port = port_arc.lock().unwrap();
+            match port.read(&mut buffer) {
+                Ok(n) if n > 0 => {
+                    assembling.extend_from_slice(&buffer[..n]);
+                    ReadAction::Data
                 }
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                if !assembling.is_empty() {
-                    // Frame complete - process it
-                    drop(port);
-
-                    let request = assembling.clone();
-                    let (response, _) =
-                        respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
-
-                    // Output JSON
-                    let json = serde_json::to_string(&response)?;
-                    println!("{json}");
-
-                    // Explicitly drop port_arc to close the port
-                    drop(port_arc);
-                    std::thread::sleep(Duration::from_millis(100));
-
-                    return Ok(());
+                Ok(_) => {
+                    if !assembling.is_empty() {
+                        ReadAction::FrameReady
+                    } else {
+                        ReadAction::NoData
+                    }
                 }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    if !assembling.is_empty() {
+                        ReadAction::FrameReady
+                    } else {
+                        ReadAction::Timeout
+                    }
+                }
+                Err(err) => ReadAction::Error(err.to_string()),
             }
-            Err(err) => {
-                return Err(anyhow!("Error reading from port: {err}"));
+        };
+
+        match action {
+            ReadAction::Data => {
+                sleep_1s().await;
+            }
+            ReadAction::FrameReady => {
+                let request = assembling.clone();
+                let (response, _) =
+                    respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
+                let json = serde_json::to_string(&response)?;
+                println!("{json}");
+                drop(port_arc);
+                sleep_1s().await;
+                return Ok(());
+            }
+            ReadAction::Timeout => {
+                sleep_1s().await;
+            }
+            ReadAction::Error(e) => {
+                log::warn!("Error reading from port: {e}");
+                sleep_1s().await;
+                return Err(anyhow!("Error reading from port: {e}"));
+            }
+            ReadAction::NoData => {
+                // nothing to do
             }
         }
     }
@@ -187,7 +401,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
 
 /// Handle master provide persist (continuous JSONL output)
 /// Master mode acts as Modbus Slave/Server - listens for requests and responds with data
-pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result<()> {
+pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -231,7 +445,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             crate::protocol::status::debug_dump::start_status_dump_thread(
                 dump_path,
                 None,
-                move || {
+                std::sync::Arc::new(move || {
                     crate::protocol::status::types::cli::CliStatus::new_master_provide(
                         port_name.clone(),
                         station_id_copy,
@@ -240,7 +454,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                         register_length_copy,
                     )
                     .to_json()
-                },
+                }),
             ),
         )
     } else {
@@ -248,22 +462,22 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     };
 
     // Open serial port with longer timeout for reading requests
-    let port_handle = match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50))
-    {
-        Ok(handle) => handle,
-        Err(err) => {
-            if let Some(ref mut ipc_conns) = ipc_connections {
-                let _ = ipc_conns
-                    .status
-                    .send(&crate::protocol::ipc::IpcMessage::PortError {
-                        port_name: port.to_string(),
-                        error: format!("Failed to open port: {err}"),
-                        timestamp: None,
-                    });
+    let port_handle =
+        match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50)).await {
+            Ok(handle) => handle,
+            Err(err) => {
+                if let Some(ref mut ipc_conns) = ipc_connections {
+                    let _ = ipc_conns
+                        .status
+                        .send(&crate::protocol::ipc::IpcMessage::PortError {
+                            port_name: port.to_string(),
+                            error: format!("Failed to open port: {err}"),
+                            timestamp: None,
+                        });
+                }
+                return Err(err);
             }
-            return Err(err);
-        }
-    };
+        };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -282,9 +496,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     {
         let pa = port_arc.clone();
         cleanup::register_cleanup(move || {
-            // Drop the Arc to release the port and give OS time
+            // Drop the Arc to release the port
             drop(pa);
-            std::thread::sleep(Duration::from_millis(100));
         });
     }
 
@@ -299,7 +512,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         reg_mode,
         register_address,
         register_length,
-    )?;
+    )
+    .await?;
     log::info!("Loaded initial values: {initial_values:?}");
     {
         let mut context = storage.lock().unwrap();
@@ -338,17 +552,52 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     // request overlaps a recently-updated register range.
     let changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>> = Arc::new(Mutex::new(Vec::new()));
     let changed_ranges_clone = changed_ranges.clone();
-    let update_thread = std::thread::spawn(move || {
-        update_storage_loop(
-            storage_clone,
-            data_source_clone,
-            station_id,
-            reg_mode,
-            register_address,
-            register_length,
-            changed_ranges_clone,
-        )
-    });
+
+    // Create HTTP server daemon if needed. Keep handle in shared container and
+    // register cleanup so it can be shutdown/joined on cleanup.
+    let (http_tx, http_rx) =
+        flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
+    let http_server_thread: Option<u16> = if let DataSource::HttpServer(port) = &data_source {
+        let port = *port;
+        let tx = http_tx.clone();
+        let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
+        let storage_for_thread = storage_clone.clone();
+        let handle = spawn_task(async move {
+            run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread)).await?;
+            Ok(())
+        });
+
+        // Register handle+shutdown sender into global registry
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+
+        // ensure cleanup will shutdown and join
+        cleanup::register_cleanup(move || {
+            std::mem::drop(http_registry::shutdown_and_join(port));
+        });
+
+        Some(port)
+    } else {
+        None
+    };
+
+    let http_rx_clone = if matches!(&data_source, DataSource::HttpServer(_)) {
+        Some(http_rx.clone())
+    } else {
+        None
+    };
+
+    let update_args = UpdateStorageArgs {
+        storage: storage_clone,
+        data_source: data_source_clone,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+        changed_ranges: changed_ranges_clone,
+        http_rx: http_rx_clone,
+    };
+
+    let _update_thread = spawn_task(async move { update_storage_loop(update_args).await });
 
     // Parse optional debounce seconds argument (floating seconds). Default 1.0s
     // Single-precision seconds argument
@@ -441,9 +690,13 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
     loop {
-        // Check if update thread has panicked
-        if update_thread.is_finished() {
-            return Err(anyhow!("Data update thread terminated unexpectedly"));
+        // Check if HTTP server thread has panicked
+        if let Some(port) = http_server_thread {
+            if let Some(is_finished) = http_registry::is_handle_finished(port) {
+                if is_finished {
+                    return Err(anyhow!("HTTP server thread terminated unexpectedly"));
+                }
+            }
         }
 
         // Accept command connection if not yet connected
@@ -570,268 +823,262 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             }
         }
 
-        let mut port = port_arc.lock().unwrap();
-        match port.read(&mut buffer) {
-            Ok(n) if n > 0 => {
-                log::info!(
-                    "CLI Master: Read {n} bytes from port: {:02X?}",
-                    &buffer[..n]
-                );
-                assembling.extend_from_slice(&buffer[..n]);
-                last_byte_time = Some(std::time::Instant::now());
-            }
-            Ok(_) => {
-                // No data available, check if we have a complete frame
-                if !assembling.is_empty() {
-                    if let Some(last_time) = last_byte_time {
-                        if last_time.elapsed() >= frame_gap {
-                            // Frame complete - process it
-                            log::info!(
-                                "CLI Master: Frame complete ({} bytes), processing request",
-                                assembling.len()
-                            );
-                            drop(port); // Release port lock before processing
-
-                            let request = assembling.clone();
-                            assembling.clear();
-                            last_byte_time = None;
-
-                            // Process the request and generate response
-                            // Try to parse request range from raw bytes (func at index 1)
-                            let parsed_range = if request.len() >= 8 {
-                                let func = request[1];
-                                match func {
-                                    0x01 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                    }
-                                    0x02 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                    }
-                                    0x03 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                    }
-                                    0x04 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                    }
-                                    _ => None,
-                                }
-                            } else {
-                                None
-                            };
-
-                            match respond_to_request(
-                                port_arc.clone(),
-                                &request,
-                                station_id,
-                                &storage,
-                            ) {
-                                Ok((response, response_frame)) => {
-                                    let mut hasher = DefaultHasher::new();
-                                    hasher.write(&request);
-                                    let request_key = hasher.finish();
-
-                                    // Determine overlap with recent changes
-                                    let mut force = false;
-                                    if let Some((start, qty, _mode)) = parsed_range {
-                                        let now = Instant::now();
-                                        let cr = changed_ranges.lock().unwrap();
-                                        for (cstart, clen, t) in cr.iter() {
-                                            if now.duration_since(*t) > cache_ttl {
-                                                continue;
-                                            }
-                                            let a1 = start as u32;
-                                            let a2 = (start + qty) as u32;
-                                            let b1 = *cstart as u32;
-                                            let b2 = (cstart + clen) as u32;
-                                            if a1 < b2 && b1 < a2 {
-                                                force = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    if let Err(e) = print_response(request_key, &response, force) {
-                                        log::warn!("Failed to print response: {e}");
-                                    }
-
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &response_frame,
-                                            station_id: Some(response.station_id),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(true),
-                                            error: None,
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("Error responding to request: {err}");
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &request,
-                                            station_id: request.first().copied(),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(false),
-                                            error: Some(format!("{err:#}")),
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                            }
-
-                            continue; // Re-acquire lock in next iteration
-                        }
-                    }
-                }
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout is normal, check for frame completion
-                if !assembling.is_empty() {
-                    if let Some(last_time) = last_byte_time {
-                        if last_time.elapsed() >= frame_gap {
-                            // Frame complete - process it
-                            drop(port); // Release port lock before processing
-
-                            let request = assembling.clone();
-                            assembling.clear();
-                            last_byte_time = None;
-
-                            // Process the request and generate response
-                            // Try to parse request range from raw bytes (func at index 1)
-                            let parsed_range = if request.len() >= 8 {
-                                let func = request[1];
-                                match func {
-                                    0x01 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                    }
-                                    0x02 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                    }
-                                    0x03 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                    }
-                                    0x04 => {
-                                        let start = u16::from_be_bytes([request[2], request[3]]);
-                                        let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                    }
-                                    _ => None,
-                                }
-                            } else {
-                                None
-                            };
-
-                            match respond_to_request(
-                                port_arc.clone(),
-                                &request,
-                                station_id,
-                                &storage,
-                            ) {
-                                Ok((response, response_frame)) => {
-                                    // Build a stable key from the request bytes to use for debounce
-                                    let mut hasher = DefaultHasher::new();
-                                    hasher.write(&request);
-                                    let request_key = hasher.finish();
-
-                                    // Determine overlap with recent changes
-                                    let mut force = false;
-                                    if let Some((start, qty, _mode)) = parsed_range {
-                                        let now = Instant::now();
-                                        let cr = changed_ranges.lock().unwrap();
-                                        for (cstart, clen, t) in cr.iter() {
-                                            if now.duration_since(*t) > cache_ttl {
-                                                continue;
-                                            }
-                                            let a1 = start as u32;
-                                            let a2 = (start + qty) as u32;
-                                            let b1 = *cstart as u32;
-                                            let b2 = (cstart + clen) as u32;
-                                            if a1 < b2 && b1 < a2 {
-                                                force = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    if let Err(e) = print_response(request_key, &response, force) {
-                                        log::warn!("Failed to print response: {e}");
-                                    }
-
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &response_frame,
-                                            station_id: Some(response.station_id),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(true),
-                                            error: None,
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("Error responding to request: {err}");
-                                    emit_modbus_ipc_log(
-                                        &mut ipc_connections,
-                                        ModbusIpcLogPayload {
-                                            port: port_name,
-                                            direction: "tx",
-                                            frame: &request,
-                                            station_id: request.first().copied(),
-                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
-                                            start_address: parsed_range.map(|(start, _, _)| start),
-                                            quantity: parsed_range.map(|(_, qty, _)| qty),
-                                            success: Some(false),
-                                            error: Some(format!("{err:#}")),
-                                            config_index: None,
-                                        },
-                                    );
-                                }
-                            }
-
-                            continue; // Re-acquire lock in next iteration
-                        }
-                    }
-                }
-            }
-            Err(err) => {
-                log::warn!("Error reading from port: {err}");
-                std::thread::sleep(Duration::from_millis(10));
-            }
+        enum ReadAction2 {
+            Data,
+            FrameReady(
+                Option<(
+                    u16,
+                    u16,
+                    crate::protocol::status::types::modbus::RegisterMode,
+                )>,
+            ),
+            Timeout,
+            Error(String),
+            NoData,
         }
-        drop(port);
+
+        let action2 = {
+            let mut port = port_arc.lock().unwrap();
+            match port.read(&mut buffer) {
+                Ok(n) if n > 0 => {
+                    log::info!(
+                        "CLI Master: Read {n} bytes from port: {:02X?}",
+                        &buffer[..n]
+                    );
+                    assembling.extend_from_slice(&buffer[..n]);
+                    last_byte_time = Some(std::time::Instant::now());
+                    ReadAction2::Data
+                }
+                Ok(_) => {
+                    if !assembling.is_empty() {
+                        if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                // Determine parsed_range without holding lock
+                                let request_preview = assembling.clone();
+                                let parsed_range = if request_preview.len() >= 8 {
+                                    let func = request_preview[1];
+                                    match func {
+                                        0x01 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                        }
+                                        0x02 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        }
+                                        0x03 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        }
+                                        0x04 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        }
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
+                                };
+                                ReadAction2::FrameReady(parsed_range)
+                            } else {
+                                ReadAction2::NoData
+                            }
+                        } else {
+                            ReadAction2::NoData
+                        }
+                    } else {
+                        ReadAction2::NoData
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    if !assembling.is_empty() {
+                        if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                let request_preview = assembling.clone();
+                                let parsed_range = if request_preview.len() >= 8 {
+                                    let func = request_preview[1];
+                                    match func {
+                                        0x01 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                        }
+                                        0x02 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        }
+                                        0x03 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        }
+                                        0x04 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        }
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
+                                };
+                                ReadAction2::FrameReady(parsed_range)
+                            } else {
+                                ReadAction2::Timeout
+                            }
+                        } else {
+                            ReadAction2::Timeout
+                        }
+                    } else {
+                        ReadAction2::Timeout
+                    }
+                }
+                Err(err) => ReadAction2::Error(err.to_string()),
+            }
+        };
+
+        match action2 {
+            ReadAction2::Data => {}
+            ReadAction2::FrameReady(parsed_range) => {
+                log::info!(
+                    "CLI Master: Frame complete ({} bytes), processing request",
+                    assembling.len()
+                );
+                let request = assembling.clone();
+                assembling.clear();
+                last_byte_time = None;
+
+                match respond_to_request(port_arc.clone(), &request, station_id, &storage) {
+                    Ok((response, response_frame)) => {
+                        let mut hasher = DefaultHasher::new();
+                        hasher.write(&request);
+                        let request_key = hasher.finish();
+
+                        // Determine overlap with recent changes
+                        let mut force = false;
+                        if let Some((start, qty, _mode)) = parsed_range {
+                            let now = Instant::now();
+                            let cr = changed_ranges.lock().unwrap();
+                            for (cstart, clen, t) in cr.iter() {
+                                if now.duration_since(*t) > cache_ttl {
+                                    continue;
+                                }
+                                let a1 = start as u32;
+                                let a2 = (start + qty) as u32;
+                                let b1 = *cstart as u32;
+                                let b2 = (cstart + clen) as u32;
+                                if a1 < b2 && b1 < a2 {
+                                    force = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if let Err(e) = print_response(request_key, &response, force) {
+                            log::warn!("Failed to print response: {e}");
+                        }
+
+                        emit_modbus_ipc_log(
+                            &mut ipc_connections,
+                            ModbusIpcLogPayload {
+                                port: port_name,
+                                direction: "tx",
+                                frame: &response_frame,
+                                station_id: Some(response.station_id),
+                                register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                start_address: parsed_range.map(|(start, _, _)| start),
+                                quantity: parsed_range.map(|(_, qty, _)| qty),
+                                success: Some(true),
+                                error: None,
+                                config_index: None,
+                            },
+                        );
+                    }
+                    Err(err) => {
+                        log::warn!("Error responding to request: {err}");
+                        emit_modbus_ipc_log(
+                            &mut ipc_connections,
+                            ModbusIpcLogPayload {
+                                port: port_name,
+                                direction: "tx",
+                                frame: &request,
+                                station_id: request.first().copied(),
+                                register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                start_address: parsed_range.map(|(start, _, _)| start),
+                                quantity: parsed_range.map(|(_, qty, _)| qty),
+                                success: Some(false),
+                                error: Some(format!("{err:#}")),
+                                config_index: None,
+                            },
+                        );
+                    }
+                }
+            }
+            ReadAction2::Timeout => {}
+            ReadAction2::Error(e) => {
+                log::warn!("CLI Master read error: {e}");
+                sleep_1s().await;
+                continue;
+            }
+            ReadAction2::NoData => {}
+        }
+        // No explicit drop needed here; ensure we don't mistakenly drop the `port` parameter (a &str)
 
         // Small sleep to avoid busy loop
-        std::thread::sleep(Duration::from_millis(1));
+        sleep_1s().await;
     }
 }
 
@@ -982,8 +1229,8 @@ fn respond_to_request(
     ))
 }
 
-/// Update storage loop - continuously reads data from source and updates storage
-fn update_storage_loop(
+/// Arguments for the update storage loop.
+struct UpdateStorageArgs {
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     data_source: DataSource,
     station_id: u8,
@@ -991,50 +1238,124 @@ fn update_storage_loop(
     register_address: u16,
     register_length: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
-) -> Result<()> {
+    http_rx: Option<flume::Receiver<Vec<crate::protocol::status::types::modbus::StationConfig>>>,
+}
+
+/// Update storage loop - continuously reads data from source and updates storage
+async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
+    let UpdateStorageArgs {
+        storage,
+        data_source,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+        changed_ranges,
+        http_rx,
+    } = args;
     loop {
         match &data_source {
             DataSource::Manual => {
                 // Manual mode: no automatic updates, values are set via IPC or other means
                 log::debug!("Manual data source mode - sleeping");
-                std::thread::sleep(Duration::from_secs(1));
+                sleep_3s().await;
                 continue;
             }
-            DataSource::TransparentForward(port) => {
-                // Transparent forwarding: continuously read from IPC channel
-                let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
+            DataSource::MqttServer(url) => {
+                // MQTT: subscribe to broker and continuously update on new messages
+                log::info!("Starting MQTT subscription loop for: {}", url);
 
-                log::info!("TransparentForward: monitoring channel {}", channel_name);
+                // Parse MQTT URL
+                let parsed_url = match url::Url::parse(url) {
+                    Ok(u) => u,
+                    Err(e) => {
+                        log::error!("Invalid MQTT URL: {}", e);
+                        return Err(anyhow!("Invalid MQTT URL: {}", e));
+                    }
+                };
 
-                loop {
-                    match std::fs::File::open(&channel_name) {
-                        Ok(file) => {
-                            let reader = BufReader::new(file);
+                let host = parsed_url.host_str().unwrap_or("localhost").to_string();
+                let port = parsed_url.port().unwrap_or(1883);
+                let topic = parsed_url.path().trim_start_matches('/').to_string();
 
-                            for line in reader.lines() {
-                                let line = match line {
-                                    Ok(l) => l,
-                                    Err(e) => {
-                                        log::warn!("Error reading from forward channel: {}", e);
-                                        break;
-                                    }
-                                };
+                if topic.is_empty() {
+                    log::error!("MQTT URL must include a topic path");
+                    return Err(anyhow!("MQTT URL must include a topic path"));
+                }
 
-                                if line.trim().is_empty() {
-                                    continue;
+                log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
+
+                // Create channel to receive MQTT messages from blocking thread
+                let (mqtt_tx, mqtt_rx) = flume::unbounded::<String>();
+
+                // Spawn blocking task for MQTT connection
+                let mqtt_task = tokio::task::spawn_blocking(move || {
+                    // Create a unique client ID
+                    let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
+
+                    // Create MQTT options
+                    let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
+
+                    // Create client
+                    let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
+
+                    // Subscribe to topic
+                    if let Err(e) = client.subscribe(&topic, rumqttc::QoS::AtMostOnce) {
+                        log::error!("Failed to subscribe to MQTT topic: {}", e);
+                        return Err(anyhow!("Failed to subscribe: {}", e));
+                    }
+
+                    log::info!("MQTT: subscribed to topic '{}'", topic);
+
+                    // Process incoming messages and send via channel
+                    for notification in connection.iter() {
+                        match notification {
+                            Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
+                                let payload = String::from_utf8_lossy(&publish.payload).to_string();
+                                log::debug!("Received MQTT message: {}", payload);
+
+                                // Send to async loop
+                                if mqtt_tx.send(payload).is_err() {
+                                    log::warn!("MQTT receiver dropped, stopping");
+                                    break;
                                 }
+                            }
+                            Ok(_) => {
+                                // Other events, ignore
+                            }
+                            Err(e) => {
+                                log::warn!("MQTT connection error: {}", e);
+                                break;
+                            }
+                        }
+                    }
 
-                                if let Ok(values) = parse_data_line(
-                                    &line,
-                                    station_id,
-                                    reg_mode,
-                                    register_address,
-                                    register_length,
-                                ) {
-                                    log::debug!(
-                                        "Updating storage with {} values from transparent forward",
-                                        values.len()
-                                    );
+                    log::warn!("MQTT connection closed");
+                    Ok::<(), anyhow::Error>(())
+                });
+
+                // Receive MQTT messages and update storage
+                loop {
+                    match mqtt_rx.recv_timeout(Duration::from_secs(1)) {
+                        Ok(payload) => {
+                            log::info!(
+                                "📥 MQTT: Received message payload (len={}): {}",
+                                payload.len(),
+                                payload
+                            );
+                            if let Ok(values) = parse_data_line(
+                                &payload,
+                                station_id,
+                                reg_mode,
+                                register_address,
+                                register_length,
+                            ) {
+                                log::info!(
+                                    "✅ MQTT: Updating storage with {} values from MQTT: {:?}",
+                                    values.len(),
+                                    values
+                                );
+                                {
                                     let mut context = storage.lock().unwrap();
                                     match reg_mode {
                                         crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -1058,115 +1379,7 @@ fn update_storage_loop(
                                             }
                                         }
                                     }
-                                    drop(context);
-
-                                    // Record changed range
-                                    {
-                                        let len = values.len() as u16;
-                                        let mut cr = changed_ranges.lock().unwrap();
-                                        cr.push((register_address, len, Instant::now()));
-                                        while cr.len() > 1000 {
-                                            cr.remove(0);
-                                        }
-                                    }
-                                } else {
-                                    log::warn!("Failed to parse forward channel data");
                                 }
-                            }
-
-                            log::debug!("Forward channel closed, reopening...");
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to open forward channel {}: {}", channel_name, e);
-                            log::info!("Waiting for source port to start...");
-                            std::thread::sleep(Duration::from_secs(5));
-                        }
-                    }
-                }
-            }
-            DataSource::MqttServer(url) => {
-                // MQTT: subscribe to broker and continuously update on new messages
-                log::info!("Starting MQTT subscription loop for: {}", url);
-
-                // Parse MQTT URL
-                let parsed_url = match url::Url::parse(url) {
-                    Ok(u) => u,
-                    Err(e) => {
-                        log::error!("Invalid MQTT URL: {}", e);
-                        return Err(anyhow!("Invalid MQTT URL: {}", e));
-                    }
-                };
-
-                let host = parsed_url.host_str().unwrap_or("localhost");
-                let port = parsed_url.port().unwrap_or(1883);
-                let topic = parsed_url.path().trim_start_matches('/');
-
-                if topic.is_empty() {
-                    log::error!("MQTT URL must include a topic path");
-                    return Err(anyhow!("MQTT URL must include a topic path"));
-                }
-
-                log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
-
-                // Create a unique client ID
-                let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
-
-                // Create MQTT options
-                let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
-
-                // Create client
-                let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
-
-                // Subscribe to topic
-                if let Err(e) = client.subscribe(topic, rumqttc::QoS::AtMostOnce) {
-                    log::error!("Failed to subscribe to MQTT topic: {}", e);
-                    return Err(anyhow!("Failed to subscribe: {}", e));
-                }
-
-                log::info!("MQTT: subscribed to topic '{}'", topic);
-
-                // Process incoming messages
-                for notification in connection.iter() {
-                    match notification {
-                        Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
-                            let payload = String::from_utf8_lossy(&publish.payload);
-                            log::debug!("Received MQTT message: {}", payload);
-
-                            if let Ok(values) = parse_data_line(
-                                &payload,
-                                station_id,
-                                reg_mode,
-                                register_address,
-                                register_length,
-                            ) {
-                                log::debug!(
-                                    "Updating storage with {} values from MQTT",
-                                    values.len()
-                                );
-                                let mut context = storage.lock().unwrap();
-                                match reg_mode {
-                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_holding(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_coil(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_discrete(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_input(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                }
-                                drop(context);
 
                                 // Record changed range
                                 {
@@ -1181,38 +1394,56 @@ fn update_storage_loop(
                                 log::warn!("Failed to parse MQTT message data");
                             }
                         }
-                        Ok(_) => {
-                            // Other events, ignore
+                        Err(flume::RecvTimeoutError::Timeout) => {
+                            // Check if blocking task finished
+                            if mqtt_task.is_finished() {
+                                log::warn!("MQTT task finished, reconnecting...");
+                                sleep_3s().await;
+                                break;
+                            }
+                            // Continue waiting
+                            continue;
                         }
-                        Err(e) => {
-                            log::warn!("MQTT connection error: {}", e);
-                            std::thread::sleep(Duration::from_secs(1));
-                            break; // Break inner loop to reconnect
+                        Err(flume::RecvTimeoutError::Disconnected) => {
+                            log::warn!("MQTT connection lost, will retry...");
+                            sleep_3s().await;
+                            break;
                         }
                     }
                 }
-
-                log::warn!("MQTT connection lost, will retry...");
-                std::thread::sleep(Duration::from_secs(5));
             }
-            DataSource::HttpServer(url) => {
-                // HTTP: poll server periodically for updates
+            DataSource::HttpServer(_port) => {
+                // HTTP Server: receive data from HTTP daemon via channel
+                let rx = http_rx
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("HTTP receiver channel not initialized"))?;
+
+                log::info!("HTTP Server: waiting for data from HTTP daemon...");
+
                 loop {
-                    match ureq::get(url).call() {
-                        Ok(mut response) => {
-                            match response.body_mut().read_to_string() {
-                                Ok(text) => {
-                                    if let Ok(values) = parse_data_line(
-                                        &text,
-                                        station_id,
-                                        reg_mode,
-                                        register_address,
-                                        register_length,
-                                    ) {
-                                        log::debug!(
-                                            "Updating storage with {} values from HTTP",
-                                            values.len()
-                                        );
+                    match rx.recv_timeout(Duration::from_secs(1)) {
+                        Ok(stations) => {
+                            log::info!(
+                                "📥 HTTP: Received {} stations from HTTP server",
+                                stations.len()
+                            );
+                            log::debug!("📥 HTTP: Station data: {:?}", stations);
+
+                            // Extract values for this station
+                            match super::extract_values_from_station_configs(
+                                &stations,
+                                station_id,
+                                reg_mode,
+                                register_address,
+                                register_length,
+                            ) {
+                                Ok(values) => {
+                                    log::info!(
+                                        "✅ HTTP: Updating storage with {} values from HTTP server: {:?}",
+                                        values.len(),
+                                        values
+                                    );
+                                    {
                                         let mut context = storage.lock().unwrap();
                                         match reg_mode {
                                             crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -1236,37 +1467,37 @@ fn update_storage_loop(
                                                 }
                                             }
                                         }
-                                        drop(context);
+                                    }
 
-                                        // Record changed range
-                                        {
-                                            let len = values.len() as u16;
-                                            let mut cr = changed_ranges.lock().unwrap();
-                                            cr.push((register_address, len, Instant::now()));
-                                            while cr.len() > 1000 {
-                                                cr.remove(0);
-                                            }
+                                    // Record changed range
+                                    {
+                                        let len = values.len() as u16;
+                                        let mut cr = changed_ranges.lock().unwrap();
+                                        cr.push((register_address, len, Instant::now()));
+                                        while cr.len() > 1000 {
+                                            cr.remove(0);
                                         }
-                                    } else {
-                                        log::warn!("Failed to parse HTTP response data");
                                     }
                                 }
                                 Err(e) => {
-                                    log::warn!("Failed to read HTTP response: {}", e);
+                                    log::warn!("Failed to extract values from HTTP data: {}", e);
                                 }
                             }
                         }
-                        Err(err) => {
-                            log::warn!("Failed to fetch from HTTP server: {}", err);
+                        Err(flume::RecvTimeoutError::Timeout) => {
+                            // Timeout is normal, just continue
+                            continue;
+                        }
+                        Err(flume::RecvTimeoutError::Disconnected) => {
+                            log::error!("HTTP server channel disconnected");
+                            return Err(anyhow!("HTTP server channel disconnected"));
                         }
                     }
-
-                    // Poll every second
-                    std::thread::sleep(Duration::from_secs(1));
                 }
             }
             DataSource::IpcPipe(path) => {
                 // IPC pipe: similar to regular Pipe
+                log::info!("📂 IPC: Opening IPC pipe at: {}", path);
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -1276,6 +1507,7 @@ fn update_storage_loop(
                         continue;
                     }
 
+                    log::info!("📥 IPC: Received line (len={}): {}", line.len(), line);
                     match parse_data_line(
                         &line,
                         station_id,
@@ -1284,31 +1516,32 @@ fn update_storage_loop(
                         register_length,
                     ) {
                         Ok(values) => {
-                            log::info!("Updating storage with values from IPC: {values:?}");
-                            let mut context = storage.lock().unwrap();
-                            match reg_mode {
-                                crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_holding(register_address + i as u16, val)?;
-                                    }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_coil(register_address + i as u16, val != 0)?;
-                                    }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_discrete(register_address + i as u16, val != 0)?;
-                                    }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_input(register_address + i as u16, val)?;
-                                    }
-                                }
+                            log::info!("✅ IPC: Updating storage with values from IPC: {values:?}");
+                            {
+                                let mut context = storage.lock().unwrap();
+                                match reg_mode {
+                                            crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_holding(register_address + i as u16, val)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_coil(register_address + i as u16, val != 0)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_discrete(register_address + i as u16, val != 0)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_input(register_address + i as u16, val)?;
+                                                }
+                                            }
+                                        }
                             }
-                            drop(context);
 
                             // Record changed range
                             {
@@ -1320,7 +1553,7 @@ fn update_storage_loop(
                                 }
                             }
 
-                            std::thread::sleep(Duration::from_millis(100));
+                            sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line from IPC: {err}");
@@ -1333,6 +1566,7 @@ fn update_storage_loop(
             }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
+                log::info!("📂 File: Opening file data source at: {}", path);
                 let file = match std::fs::File::open(path) {
                     Ok(f) => f,
                     Err(err) => {
@@ -1358,6 +1592,12 @@ fn update_storage_loop(
                     }
 
                     line_count += 1;
+                    log::info!(
+                        "📥 File: Reading line {} (len={}): {}",
+                        line_count,
+                        line.len(),
+                        line
+                    );
                     match parse_data_line(
                         &line,
                         station_id,
@@ -1366,35 +1606,37 @@ fn update_storage_loop(
                         register_length,
                     ) {
                         Ok(values) => {
-                            log::debug!(
-                                "Updating storage with {} values from line {}",
+                            log::info!(
+                                "✅ File: Updating storage with {} values from line {}: {:?}",
                                 values.len(),
-                                line_count
+                                line_count,
+                                values
                             );
-                            let mut context = storage.lock().unwrap();
-                            match reg_mode {
-                                crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_holding(register_address + i as u16, val)?;
+                            {
+                                let mut context = storage.lock().unwrap();
+                                match reg_mode {
+                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_holding(register_address + i as u16, val)?;
+                                        }
                                     }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_coil(register_address + i as u16, val != 0)?;
+                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_coil(register_address + i as u16, val != 0)?;
+                                        }
                                     }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_discrete(register_address + i as u16, val != 0)?;
+                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_discrete(register_address + i as u16, val != 0)?;
+                                        }
                                     }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_input(register_address + i as u16, val)?;
+                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_input(register_address + i as u16, val)?;
+                                        }
                                     }
                                 }
                             }
-                            drop(context);
 
                             // Record changed range for other thread to detect overlap
                             {
@@ -1408,7 +1650,7 @@ fn update_storage_loop(
                             }
 
                             // Wait a bit before next update to avoid overwhelming
-                            std::thread::sleep(Duration::from_millis(100));
+                            sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line {line_count}: {err}");
@@ -1423,6 +1665,7 @@ fn update_storage_loop(
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it
+                log::info!("📂 Pipe: Opening named pipe at: {}", path);
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -1432,6 +1675,7 @@ fn update_storage_loop(
                         continue;
                     }
 
+                    log::info!("📥 Pipe: Received line (len={}): {}", line.len(), line);
                     match parse_data_line(
                         &line,
                         station_id,
@@ -1440,31 +1684,32 @@ fn update_storage_loop(
                         register_length,
                     ) {
                         Ok(values) => {
-                            log::info!("Updating storage with values: {values:?}");
-                            let mut context = storage.lock().unwrap();
-                            match reg_mode {
-                                crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_holding(register_address + i as u16, val)?;
+                            log::info!("✅ Pipe: Updating storage with values: {values:?}");
+                            {
+                                let mut context = storage.lock().unwrap();
+                                match reg_mode {
+                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_holding(register_address + i as u16, val)?;
+                                        }
                                     }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_coil(register_address + i as u16, val != 0)?;
+                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_coil(register_address + i as u16, val != 0)?;
+                                        }
                                     }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_discrete(register_address + i as u16, val != 0)?;
+                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_discrete(register_address + i as u16, val != 0)?;
+                                        }
                                     }
-                                }
-                                crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                    for (i, &val) in values.iter().enumerate() {
-                                        context.set_input(register_address + i as u16, val)?;
+                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_input(register_address + i as u16, val)?;
+                                        }
                                     }
                                 }
                             }
-                            drop(context);
 
                             // Record changed range for other thread to detect overlap
                             {
@@ -1477,7 +1722,7 @@ fn update_storage_loop(
                             }
 
                             // Wait a bit before next update
-                            std::thread::sleep(Duration::from_millis(100));
+                            sleep_1s().await;
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line: {err}");
@@ -1537,7 +1782,7 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
 }
 
 /// Read one data update from source
-fn read_one_data_update(
+async fn read_one_data_update(
     source: &DataSource,
     station_id: u8,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
@@ -1545,10 +1790,7 @@ fn read_one_data_update(
     register_length: u16,
 ) -> Result<Vec<u16>> {
     match source {
-        DataSource::Manual => {
-            // Manual mode: return empty values, will be set via TUI or other means
-            Ok(vec![])
-        }
+        DataSource::Manual => Ok(vec![]),
         DataSource::File(path) => {
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
@@ -1563,7 +1805,6 @@ fn read_one_data_update(
             )
         }
         DataSource::Pipe(path) => {
-            // Open named pipe (FIFO) for reading
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();
@@ -1576,134 +1817,58 @@ fn read_one_data_update(
                 register_length,
             )
         }
-        DataSource::TransparentForward(port) => {
-            // Transparent forwarding: read from IPC channel connected to source port
-            // The source port should be publishing data to a named pipe
-            log::debug!("Reading from transparent forward source port: {}", port);
-
-            // Create IPC channel name from port name
-            let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
-
-            log::info!(
-                "TransparentForward: waiting for data from channel {}",
-                channel_name
-            );
-
-            // Try to read from the channel file
-            match std::fs::File::open(&channel_name) {
-                Ok(file) => {
-                    let mut reader = BufReader::new(file);
-                    let mut line = String::new();
-                    reader.read_line(&mut line)?;
-                    parse_data_line(
-                        &line,
-                        station_id,
-                        reg_mode,
-                        register_address,
-                        register_length,
-                    )
-                }
-                Err(e) => {
-                    log::warn!(
-                        "Failed to open transparent forward channel {}: {}",
-                        channel_name,
-                        e
-                    );
-                    log::info!("Ensure source port is running with transparent forwarding enabled");
-                    Err(anyhow!("TransparentForward channel not available: {}", e))
-                }
-            }
-        }
         DataSource::MqttServer(url) => {
-            // MQTT: connect to broker and wait for one message
-            log::debug!("Connecting to MQTT broker: {}", url);
-
-            // Parse MQTT URL to extract broker and topic
-            let parsed_url =
-                url::Url::parse(url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
-
-            let host = parsed_url
-                .host_str()
-                .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
-            let port = parsed_url.port().unwrap_or(1883);
-            let topic = parsed_url.path().trim_start_matches('/');
-
-            if topic.is_empty() {
-                return Err(anyhow!(
-                    "MQTT URL must include a topic path (e.g., mqtt://host:port/topic)"
-                ));
-            }
-
-            log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
-
-            // Create a unique client ID
-            let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
-
-            // Create MQTT options
-            let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
-
-            // Create client
-            let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
-
-            // Subscribe to topic
-            client
-                .subscribe(topic, rumqttc::QoS::AtMostOnce)
-                .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
-
-            // Wait for one message
-            for notification in connection.iter() {
-                if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
-                    notification
-                {
-                    let payload = String::from_utf8_lossy(&publish.payload);
-                    log::debug!("Received MQTT message: {}", payload);
-                    return parse_data_line(
-                        &payload,
-                        station_id,
-                        reg_mode,
-                        register_address,
-                        register_length,
-                    );
+            // MQTT: connect and wait for a single publish
+            // Use spawn_blocking to avoid blocking the async runtime
+            let url = url.clone();
+            let join_result = tokio::task::spawn_blocking(move || {
+                log::debug!("Connecting to MQTT broker: {}", url);
+                let parsed_url =
+                    url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
+                let host = parsed_url
+                    .host_str()
+                    .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
+                let port = parsed_url.port().unwrap_or(1883);
+                let topic = parsed_url.path().trim_start_matches('/');
+                if topic.is_empty() {
+                    return Err(anyhow!("MQTT URL must include a topic path"));
                 }
-            }
 
-            Err(anyhow!("MQTT connection closed without receiving data"))
-        }
-        DataSource::HttpServer(url) => {
-            // HTTP: make GET request to server and parse JSON response
-            log::debug!("Fetching data from HTTP server: {}", url);
-            let response = ureq::get(url)
-                .call()
-                .map_err(|e| anyhow!("Failed to fetch from HTTP server: {}", e))?;
+                let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
+                let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
+                let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
+                client
+                    .subscribe(topic, rumqttc::QoS::AtMostOnce)
+                    .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
 
-            let mut response = response;
-            let text = response
-                .body_mut()
-                .read_to_string()
-                .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
+                for notification in connection.iter() {
+                    if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
+                        notification
+                    {
+                        let payload = String::from_utf8_lossy(&publish.payload);
+                        return parse_data_line(
+                            &payload,
+                            station_id,
+                            reg_mode,
+                            register_address,
+                            register_length,
+                        );
+                    }
+                }
 
-            log::debug!(
-                "HTTP response text (first 500 chars): {}",
-                &text.chars().take(500).collect::<String>()
-            );
-
-            parse_data_line(
-                &text,
-                station_id,
-                reg_mode,
-                register_address,
-                register_length,
-            )
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to parse HTTP response data: {}. Response was: {}",
-                    e,
-                    &text.chars().take(200).collect::<String>()
-                )
+                Err(anyhow!("MQTT connection closed before receiving a message"))
             })
+            .await
+            .map_err(|e| anyhow!("MQTT task panicked: {}", e))?;
+
+            join_result
+        }
+        DataSource::HttpServer(_) => {
+            // HTTP server sends updates via a separate daemon; return empty initial values
+            log::debug!("HTTP Server mode - returning empty initial values");
+            Ok(vec![])
         }
         DataSource::IpcPipe(path) => {
-            // IPC pipe: similar to Pipe but for inter-process communication
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();

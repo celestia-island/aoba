@@ -70,7 +70,6 @@ impl std::fmt::Display for ModbusConnectionMode {
 #[serde(rename_all = "snake_case")]
 pub enum ModbusMasterDataSourceKind {
     Manual,
-    TransparentForward,
     MqttServer,
     HttpServer,
     IpcPipe,
@@ -80,7 +79,6 @@ impl ModbusMasterDataSourceKind {
     pub const fn all() -> &'static [Self] {
         &[
             Self::Manual,
-            Self::TransparentForward,
             Self::MqttServer,
             Self::HttpServer,
             Self::IpcPipe,
@@ -101,8 +99,8 @@ impl ModbusMasterDataSourceKind {
     pub fn value_kind(self) -> ModbusMasterDataSourceValueKind {
         match self {
             Self::Manual => ModbusMasterDataSourceValueKind::None,
-            Self::TransparentForward => ModbusMasterDataSourceValueKind::Port,
-            Self::MqttServer | Self::HttpServer => ModbusMasterDataSourceValueKind::Url,
+            Self::MqttServer => ModbusMasterDataSourceValueKind::Url,
+            Self::HttpServer => ModbusMasterDataSourceValueKind::Port,
             Self::IpcPipe => ModbusMasterDataSourceValueKind::Path,
         }
     }
@@ -112,11 +110,6 @@ impl fmt::Display for ModbusMasterDataSourceKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let label = match self {
             ModbusMasterDataSourceKind::Manual => lang().protocol.modbus.data_source_manual.clone(),
-            ModbusMasterDataSourceKind::TransparentForward => lang()
-                .protocol
-                .modbus
-                .data_source_transparent_forward
-                .clone(),
             ModbusMasterDataSourceKind::MqttServer => {
                 lang().protocol.modbus.data_source_mqtt.clone()
             }
@@ -143,14 +136,11 @@ pub enum ModbusMasterDataSourceValueKind {
 pub enum ModbusMasterDataSource {
     #[default]
     Manual,
-    TransparentForward {
-        port: Option<String>,
-    },
     MqttServer {
         url: String,
     },
     HttpServer {
-        url: String,
+        port: u16,
     },
     IpcPipe {
         path: String,
@@ -161,9 +151,6 @@ impl ModbusMasterDataSource {
     pub fn kind(&self) -> ModbusMasterDataSourceKind {
         match self {
             ModbusMasterDataSource::Manual => ModbusMasterDataSourceKind::Manual,
-            ModbusMasterDataSource::TransparentForward { .. } => {
-                ModbusMasterDataSourceKind::TransparentForward
-            }
             ModbusMasterDataSource::MqttServer { .. } => ModbusMasterDataSourceKind::MqttServer,
             ModbusMasterDataSource::HttpServer { .. } => ModbusMasterDataSourceKind::HttpServer,
             ModbusMasterDataSource::IpcPipe { .. } => ModbusMasterDataSourceKind::IpcPipe,
@@ -177,11 +164,8 @@ impl ModbusMasterDataSource {
     pub fn with_kind(kind: ModbusMasterDataSourceKind) -> Self {
         match kind {
             ModbusMasterDataSourceKind::Manual => Self::Manual,
-            ModbusMasterDataSourceKind::TransparentForward => {
-                Self::TransparentForward { port: None }
-            }
             ModbusMasterDataSourceKind::MqttServer => Self::MqttServer { url: String::new() },
-            ModbusMasterDataSourceKind::HttpServer => Self::HttpServer { url: String::new() },
+            ModbusMasterDataSourceKind::HttpServer => Self::HttpServer { port: 8080 },
             ModbusMasterDataSourceKind::IpcPipe => Self::IpcPipe {
                 path: String::new(),
             },
@@ -192,23 +176,22 @@ impl ModbusMasterDataSource {
         *self = Self::with_kind(kind);
     }
 
-    pub fn get_port(&self) -> Option<&str> {
+    pub fn get_port(&self) -> Option<u16> {
         match self {
-            ModbusMasterDataSource::TransparentForward { port } => port.as_deref(),
+            ModbusMasterDataSource::HttpServer { port } => Some(*port),
             _ => None,
         }
     }
 
-    pub fn set_port(&mut self, port: Option<String>) {
-        if let ModbusMasterDataSource::TransparentForward { port: existing } = self {
-            *existing = port;
+    pub fn set_port(&mut self, new_port: u16) {
+        if let ModbusMasterDataSource::HttpServer { port } = self {
+            *port = new_port;
         }
     }
 
     pub fn get_text(&self) -> Option<&str> {
         match self {
-            ModbusMasterDataSource::MqttServer { url }
-            | ModbusMasterDataSource::HttpServer { url } => Some(url.as_str()),
+            ModbusMasterDataSource::MqttServer { url } => Some(url.as_str()),
             ModbusMasterDataSource::IpcPipe { path } => Some(path.as_str()),
             _ => None,
         }
@@ -216,15 +199,14 @@ impl ModbusMasterDataSource {
 
     pub fn set_text(&mut self, value: String) {
         match self {
-            ModbusMasterDataSource::MqttServer { url }
-            | ModbusMasterDataSource::HttpServer { url } => {
+            ModbusMasterDataSource::MqttServer { url } => {
                 *url = value;
             }
             ModbusMasterDataSource::IpcPipe { path } => {
                 *path = value;
             }
             ModbusMasterDataSource::Manual => {}
-            ModbusMasterDataSource::TransparentForward { .. } => {}
+            ModbusMasterDataSource::HttpServer { .. } => {}
         }
     }
 }
@@ -529,6 +511,14 @@ impl StationConfig {
 
         self.map = map;
     }
+}
+
+/// Standardized response used for HTTP server POST /stations replies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationsResponse {
+    pub success: bool,
+    pub message: String,
+    pub stations: Vec<StationConfig>,
 }
 
 #[derive(Debug, Clone)]

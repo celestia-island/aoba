@@ -1,8 +1,13 @@
+use anyhow::anyhow;
 use serde::Serialize;
 
 use clap::ArgMatches;
 
-use crate::protocol::ipc::{self, IpcCommandListener, IpcServer};
+use crate::{
+    core::task_manager::spawn_task,
+    protocol::ipc::{self, IpcCommandListener, IpcServer},
+    utils::sleep::sleep_1s,
+};
 
 /// IPC connections for CLI subprocess (bidirectional)
 pub struct IpcConnections {
@@ -244,7 +249,7 @@ struct PortInfo<'a> {
     product: Option<String>,
 }
 
-pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
+pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     // Handle check-port command (must be before list-ports)
     if let Some(port_name) = matches.get_one::<String>("check-port") {
         let is_occupied = check_port_occupation(port_name);
@@ -332,7 +337,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen
     if let Some(port) = matches.get_one::<String>("slave-listen") {
-        if let Err(err) = super::modbus::slave::handle_slave_listen(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_listen(matches, port).await {
             eprintln!("Error in slave-listen: {err}");
             std::process::exit(1);
         }
@@ -341,7 +346,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen persist
     if let Some(port) = matches.get_one::<String>("slave-listen-persist") {
-        if let Err(err) = super::modbus::slave::handle_slave_listen_persist(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_listen_persist(matches, port).await {
             eprintln!("Error in slave-listen-persist: {err}");
             std::process::exit(1);
         }
@@ -350,7 +355,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave poll (client mode - sends request)
     if let Some(port) = matches.get_one::<String>("slave-poll") {
-        if let Err(err) = super::modbus::slave::handle_slave_poll(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_poll(matches, port).await {
             eprintln!("Error in slave-poll: {err}");
             std::process::exit(1);
         }
@@ -359,7 +364,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave poll persist (client mode - continuous polling)
     if let Some(port) = matches.get_one::<String>("slave-poll-persist") {
-        if let Err(err) = super::modbus::slave::handle_slave_poll_persist(matches, port) {
+        if let Err(err) = super::modbus::slave::handle_slave_poll_persist(matches, port).await {
             eprintln!("Error in slave-poll-persist: {err}");
             std::process::exit(1);
         }
@@ -368,7 +373,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus master provide
     if let Some(port) = matches.get_one::<String>("master-provide") {
-        if let Err(err) = super::modbus::master::handle_master_provide(matches, port) {
+        if let Err(err) = super::modbus::master::handle_master_provide(matches, port).await {
             eprintln!("Error in master-provide: {err}");
             std::process::exit(1);
         }
@@ -377,7 +382,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus master provide persist
     if let Some(port) = matches.get_one::<String>("master-provide-persist") {
-        if let Err(err) = super::modbus::master::handle_master_provide_persist(matches, port) {
+        if let Err(err) = super::modbus::master::handle_master_provide_persist(matches, port).await
+        {
             eprintln!("Error in master-provide-persist: {err}");
             std::process::exit(1);
         }
@@ -412,7 +418,7 @@ fn compute_canonical(name: &str) -> Option<String> {
 }
 
 /// Handle configuration mode
-pub fn handle_config_mode(matches: &ArgMatches) -> bool {
+pub async fn handle_config_mode(matches: &ArgMatches) -> bool {
     // Handle configuration file
     if let Some(config_file) = matches.get_one::<String>("config") {
         println!("Loading configuration from file: {config_file}");
@@ -423,7 +429,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
                     config.port_name
                 );
                 // Start the ports defined in the configuration
-                if let Err(err) = start_configuration(&config) {
+                if let Err(err) = start_configuration(&config).await {
                     eprintln!("Error starting configuration: {err}");
                     std::process::exit(1);
                 }
@@ -447,7 +453,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
                     config.port_name
                 );
                 // Start the ports defined in the configuration
-                if let Err(err) = start_configuration(&config) {
+                if let Err(err) = start_configuration(&config).await {
                     eprintln!("Error starting configuration: {err}");
                     std::process::exit(1);
                 }
@@ -465,9 +471,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
 }
 
 /// Start the ports defined in the configuration
-fn start_configuration(
-    config: &super::config::ModbusBootConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn start_configuration(config: &super::config::ModbusBootConfig) -> anyhow::Result<()> {
     log::info!(
         "Starting port: {} with {} stations",
         config.port_name,
@@ -520,27 +524,18 @@ fn start_configuration(
     log::info!("Configuration started successfully");
 
     // Start the actual runtime with the config
-    // We need to spawn a blocking task since we're already in an async context
+    // Use global task manager to spawn the runtime
     let config_clone = config.clone();
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            if let Err(e) = run_config_runtime(&config_clone).await {
-                log::error!("Config runtime error: {e}");
-            }
-        });
-    });
+    let task = spawn_task(async move { run_config_runtime(&config_clone).await });
 
-    // Keep the main thread alive
-    loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
+    // Wait for the task to complete
+    let _ = task.await;
+
+    Ok(())
 }
 
 /// Run the configuration in an async runtime
-async fn run_config_runtime(
-    config: &super::config::ModbusBootConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> anyhow::Result<()> {
     use rmodbus::server::context::ModbusContext;
     use std::io::Write;
     use std::sync::Arc;
@@ -550,7 +545,7 @@ async fn run_config_runtime(
     let port_handle = serialport::new(&config.port_name, config.baud_rate)
         .timeout(std::time::Duration::from_millis(100))
         .open()
-        .map_err(|e| format!("Failed to open port {}: {}", config.port_name, e))?;
+        .map_err(|e| anyhow!("Failed to open port {}: {}", config.port_name, e))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -630,17 +625,17 @@ async fn run_config_runtime(
             Ok(_) => {
                 // No data, sleep briefly
                 drop(port);
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                sleep_1s().await;
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
                 // Timeout is expected, just continue
                 drop(port);
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                sleep_1s().await;
             }
             Err(e) => {
                 log::error!("Error reading from port: {e}");
                 drop(port);
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                sleep_1s().await;
             }
         }
     }
