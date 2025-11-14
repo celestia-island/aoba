@@ -114,7 +114,18 @@ key = "Enter"
 description = "Initialize master station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
-  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_station]]

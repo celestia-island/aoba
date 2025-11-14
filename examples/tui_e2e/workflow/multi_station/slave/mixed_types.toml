@@ -168,7 +168,18 @@ description = "Initialize first master station structure"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_stations]]
@@ -184,8 +195,30 @@ description = "Initialize second master station structure"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [false, false, false, false, false, false, false, false, false, false] },
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+  ] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 # Step 6: Configure Station 1 Fields
@@ -368,7 +401,18 @@ mock_set_value = 10
 description = "Ensure registers array matches length"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers"
-mock_set_value = [false, false, false, false, false, false, false, false, false, false]
+mock_set_value = [
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+]
 
 # Step XXX: Edit Station 1 Registers - Round 1
 [[workflow.edit_station1_round1]]

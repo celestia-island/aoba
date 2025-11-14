@@ -136,7 +136,18 @@ key = "Enter"
 description = "Initialize first master station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_stations]]
@@ -151,8 +162,30 @@ key = "Enter"
 description = "Initialize second master station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-  { station_id = 2, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+  { station_id = 2, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 # Step 6: Configure Station 1 Fields

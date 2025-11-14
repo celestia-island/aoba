@@ -36,10 +36,7 @@ init_order = [
   "simulate_data_feed_round1",
 ]
 
-recycle_order = [
-  "simulate_data_feed_round2",
-  "simulate_data_feed_round3",
-]
+recycle_order = ["simulate_data_feed_round2", "simulate_data_feed_round3"]
 
 # Step 1: Navigate to Entry page
 [[workflow.navigate_to_entry]]
@@ -207,7 +204,18 @@ key = "Enter"
 description = "Initialize master station structure with empty registers"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_station]]
@@ -504,7 +512,18 @@ mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 [[workflow.simulate_data_feed_round3]]
 description = "Simulate IPC pipe feeding data - Round 3 (Custom)"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+mock_set_value = [
+  0x1111,
+  0x2222,
+  0x3333,
+  0x4444,
+  0x5555,
+  0x6666,
+  0x7777,
+  0x8888,
+  0x9999,
+  0xAAAA,
+]
 
 [[workflow.simulate_data_feed_round3]]
 description = "Verify data appears on screen (partial)"
@@ -517,4 +536,15 @@ verify = "    0x0008              0x9999 0xAAAA"
 [[workflow.simulate_data_feed_round3]]
 description = "Verify all register values in mock state"
 mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_verify_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+mock_verify_value = [
+  0x1111,
+  0x2222,
+  0x3333,
+  0x4444,
+  0x5555,
+  0x6666,
+  0x7777,
+  0x8888,
+  0x9999,
+  0xAAAA,
+]
