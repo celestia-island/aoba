@@ -50,17 +50,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             })?;
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        KeyCode::Left | KeyCode::Char('h') => {
             handle_move_prev(read_status(|status| {
                 if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
-                    Ok(cursor.unwrap_or(cursor::EntryCursor::Refresh))
+                    Ok(cursor.unwrap_or(cursor::EntryCursor::Com { index: 0 }))
                 } else {
-                    Ok(cursor::EntryCursor::Refresh)
+                    Ok(cursor::EntryCursor::Com { index: 0 })
                 }
             })?)?;
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        KeyCode::Right | KeyCode::Char('l') => {
             let cursor_opt = read_status(|status| {
                 if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
                     Ok(*cursor)
@@ -70,33 +70,27 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             })?;
 
             if cursor_opt.is_none() {
-                if read_status(|status| Ok(status.ports.map.len()))? >= 2 {
-                    let new_cursor = types::cursor::EntryCursor::Com { index: 1 };
-                    let offset = 1;
-                    write_status(|status| {
-                        status.page = Page::Entry {
-                            cursor: Some(new_cursor),
-                            view_offset: offset,
-                        };
-                        Ok(())
-                    })?;
-                } else {
-                    let new_cursor = types::cursor::EntryCursor::Refresh;
-                    let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                    let offset =
-                        calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
-                    write_status(|status| {
-                        status.page = Page::Entry {
-                            cursor: Some(new_cursor),
-                            view_offset: offset,
-                        };
-                        Ok(())
-                    })?;
-                }
+                // Initialize cursor to first port
+                let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
+                write_status(|status| {
+                    status.page = Page::Entry {
+                        cursor: Some(new_cursor),
+                        view_offset: 0,
+                    };
+                    Ok(())
+                })?;
             } else {
-                handle_move_next(cursor_opt.unwrap_or(types::cursor::EntryCursor::Refresh))?;
+                handle_move_next(cursor_opt.unwrap_or(types::cursor::EntryCursor::Com { index: 0 }))?;
             }
 
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+        }
+        // Support for About (A key) and Refresh (R key) shortcuts
+        KeyCode::Char('a') | KeyCode::Char('A') => {
+            write_status(|status| {
+                status.page = Page::About { view_offset: 0 };
+                Ok(())
+            })?;
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         KeyCode::Enter => {
@@ -180,38 +174,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         Ok(())
                     })?;
                 }
-                Some(types::cursor::EntryCursor::Refresh) => {
-                    bus.ui_tx
-                        .send(crate::core::bus::UiToCore::RescanPorts)
-                        .map_err(|err| anyhow!(err))?;
+                _ => {
+                    // For any other cursor type, do nothing (shouldn't happen in new layout)
+                    log::warn!("Unexpected cursor type on Enter in entry page");
                 }
-                Some(types::cursor::EntryCursor::CreateVirtual) => {
-                    // Virtual port creation feature
-                    // This would allow users to manually specify a port path to add
-                    // For now, log the action as this feature requires:
-                    // 1. Input dialog for port path
-                    // 2. Validation of the port path
-                    // 3. Platform-specific virtual port handling
-                    log::info!(
-                        "Virtual port creation requested - feature not yet fully implemented"
-                    );
-
-                    // Show a message in the error state to inform the user
-                    write_status(|status| {
-                        status.temporarily.error = Some(crate::tui::status::ErrorInfo {
-                            message: "Virtual port creation is not yet implemented. Use system tools to create virtual ports.".to_string(),
-                            timestamp: chrono::Local::now(),
-                        });
-                        Ok(())
-                    })?;
-                }
-                Some(types::cursor::EntryCursor::About) => write_status(|status| {
-                    status.page = Page::About { view_offset: 0 };
-                    Ok(())
-                })?,
-                None => unreachable!(
-                    "Entry cursor should have been initialized before reaching this point"
-                ),
             }
         }
         KeyCode::Esc => {
@@ -232,63 +198,27 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
     match cursor {
         cursor::EntryCursor::Com { index } => {
-            let prev = index.saturating_sub(1);
-            let new_cursor = types::cursor::EntryCursor::Com { index: prev };
-            let offset = prev; // For Com cursor, offset is just the index
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(new_cursor),
-                    view_offset: offset,
-                };
-                Ok(())
-            })?;
-        }
-        cursor::EntryCursor::Refresh => {
-            let prev = read_status(|status| Ok(status.ports.map.len().saturating_sub(1)))?;
-            if read_status(|status| Ok(status.ports.map.is_empty()))? {
-                let new_cursor = types::cursor::EntryCursor::Refresh;
-                let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                let offset =
-                    calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(new_cursor),
-                        view_offset: offset,
-                    };
-                    Ok(())
-                })?;
-            } else {
+            if index > 0 {
+                let prev = index - 1;
                 let new_cursor = types::cursor::EntryCursor::Com { index: prev };
-                let offset = prev;
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),
-                        view_offset: offset,
+                        view_offset: prev,
                     };
                     Ok(())
                 })?;
             }
+            // If already at index 0, stay there (no wrap-around in grid layout)
         }
-        cursor::EntryCursor::CreateVirtual => {
-            let new_cursor = types::cursor::EntryCursor::Refresh;
-            let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
+        _ => {
+            // For other cursor types, move to last port
+            let last_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
+            let new_cursor = types::cursor::EntryCursor::Com { index: last_index };
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
-                    view_offset: offset,
-                };
-                Ok(())
-            })?;
-        }
-        cursor::EntryCursor::About => {
-            let new_cursor = types::cursor::EntryCursor::CreateVirtual;
-            let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(new_cursor),
-                    view_offset: offset,
+                    view_offset: last_index,
                 };
                 Ok(())
             })?;
@@ -301,56 +231,31 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
 pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
     match cursor {
         cursor::EntryCursor::Com { index } => {
-            let next = index.saturating_add(1);
-            if next >= read_status(|status| Ok(status.ports.map.len()))? {
-                let new_cursor = types::cursor::EntryCursor::Refresh;
-                let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                let offset =
-                    calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(new_cursor),
-                        view_offset: offset,
-                    };
-                    Ok(())
-                })?;
-            } else {
+            let max_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
+            if index < max_index {
+                let next = index + 1;
                 let new_cursor = types::cursor::EntryCursor::Com { index: next };
-                let offset = next;
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),
-                        view_offset: offset,
+                        view_offset: next,
                     };
                     Ok(())
                 })?;
             }
+            // If already at last index, stay there (no wrap-around in grid layout)
         }
-        cursor::EntryCursor::Refresh => {
-            let new_cursor = types::cursor::EntryCursor::CreateVirtual;
-            let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
+        _ => {
+            // For other cursor types, move to first port
+            let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
-                    view_offset: offset,
+                    view_offset: 0,
                 };
                 Ok(())
             })?;
         }
-        cursor::EntryCursor::CreateVirtual => {
-            let new_cursor = types::cursor::EntryCursor::About;
-            let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(new_cursor),
-                    view_offset: offset,
-                };
-                Ok(())
-            })?;
-        }
-        cursor::EntryCursor::About => {}
     }
 
     Ok(())

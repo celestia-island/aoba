@@ -33,6 +33,9 @@ derive_struct! {
             entry_page_required: String = "entry_page_required".to_string(),
             error_loading_content: String = "error_loading_content".to_string(),
             err_modbus_config_empty: String = "err-modbus-config-empty".to_string(),
+            port_suffix: String = "port_suffix".to_string(),
+            new_action: String = "new_action".to_string(),
+            delete_action: String = "delete_action".to_string(),
         },
 
         about: {
@@ -74,6 +77,7 @@ derive_struct! {
             hint_back_list_save: String = "hint_back_list_save".to_string(),
             hint_switch_tab: String = "hint_switch_tab".to_string(),
             hint_move_vertical: String = "hint_move_vertical".to_string(),
+            hint_move_horizontal: String = "hint_move_horizontal".to_string(),
             hint_move_with_panels: String = "hint_move_with_panels".to_string(),
             hint_switch_options: String = "hint_switch_options".to_string(),
 
