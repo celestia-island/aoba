@@ -71,7 +71,7 @@ pub async fn test_http_data_source() -> Result<()> {
     let payload = build_station_payload(&expected_values);
     
     // Use a fixed port for the HTTP server that the master will run
-    let http_port = 18080;
+    let http_port = 8080;
     let data_source_arg = format!("http://{}", http_port);
 
     log::info!("🧪 Master will run HTTP server on port {}", http_port);
@@ -180,8 +180,8 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
     
-    // Use a different fixed port for persistent mode test
-    let http_port = 18081;
+    // Use a fixed port for the HTTP server that the master will run
+    let http_port = 8080;
     let data_source_arg = format!("http://{}", http_port);
 
     log::info!("🧪 Master will run HTTP server on port {}", http_port);
