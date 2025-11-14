@@ -7,6 +7,10 @@ name = "async-trait"
 version = "0.1"
 
 [[dependencies]]
+name = "axum"
+version = "0.7"
+
+[[dependencies]]
 name = "base64"
 version = "0.22"
 
@@ -49,10 +53,6 @@ version = "0.11"
 [[dependencies]]
 name = "futures"
 version = "0.3"
-
-[[dependencies]]
-name = "httparse"
-version = "1"
 
 [[dependencies]]
 name = "interprocess"
@@ -131,10 +131,6 @@ name = "strum"
 version = "0.27"
 
 [[dependencies]]
-name = "tiny_http"
-version = "0.12"
-
-[[dependencies]]
 name = "tokio"
 version = "1"
 
@@ -181,6 +177,7 @@ version = "0.6"
 [license_map]
 anyhow = "MIT OR Apache-2.0"
 async-trait = "MIT OR Apache-2.0"
+axum = "MIT"
 base64 = "MIT OR Apache-2.0"
 bytes = "MIT"
 cfg-if = "MIT OR Apache-2.0"
@@ -192,7 +189,6 @@ derive_more = "MIT"
 env_logger = "MIT OR Apache-2.0"
 flume = "Apache-2.0/MIT"
 futures = "MIT OR Apache-2.0"
-httparse = "MIT OR Apache-2.0"
 interprocess = "MIT OR Apache-2.0"
 libc = "MIT OR Apache-2.0"
 log = "MIT OR Apache-2.0"
@@ -212,7 +208,6 @@ serde_json_path = "MIT"
 serialport = "MPL-2.0"
 sqids = "MIT"
 strum = "MIT"
-tiny_http = "MIT OR Apache-2.0"
 tokio = "MIT"
 toml = "MIT OR Apache-2.0"
 tracing = "MIT"

@@ -85,8 +85,7 @@ serialport = "^4"
 interprocess = "^2"
 ureq = { version = "^3", features = ["json"] }
 rumqttc = "^0.25"
-httparse = "^1"
-tiny_http = "^0.12"
+axum = "^0.7"
 
 expectrl = "^0.8"
 regex = "^1"
@@ -144,8 +143,7 @@ serialport.workspace = true
 interprocess.workspace = true
 ureq.workspace = true
 rumqttc.workspace = true
-httparse.workspace = true
-tiny_http.workspace = true
+axum.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true
