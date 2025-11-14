@@ -513,6 +513,14 @@ impl StationConfig {
     }
 }
 
+/// Standardized response used for HTTP server POST /stations replies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationsResponse {
+    pub success: bool,
+    pub message: String,
+    pub stations: Vec<StationConfig>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModbusRegisterItem {
     pub station_id: u8,

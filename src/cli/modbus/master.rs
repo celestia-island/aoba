@@ -8,14 +8,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::post,
-    Json, Router,
-};
+// serde_json::json was previously used; keep serde available via direct calls
+use rmodbus::server::storage::ModbusStorageSmall;
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
@@ -71,25 +68,76 @@ fn open_serial_port_with_retry(
 #[derive(Clone)]
 struct HttpServerState {
     tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
+    storage: Option<Arc<Mutex<ModbusStorageSmall>>>,
 }
+
+use crate::protocol::status::types::modbus::StationConfig as ProtocolStationConfig;
+use crate::protocol::status::types::modbus::StationsResponse;
 
 /// Axum handler for POST /stations endpoint
 async fn handle_stations_post(
     State(state): State<HttpServerState>,
     Json(stations): Json<Vec<crate::protocol::status::types::modbus::StationConfig>>,
-) -> Result<(StatusCode, &'static str), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<StationsResponse>), (StatusCode, String)> {
+    // helper functions live in `crate::cli::modbus`
+
     log::debug!("HTTP server received {} stations", stations.len());
-    
-    state
-        .tx
-        .send_async(stations)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to send stations to update thread: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("Internal Server Error: {}", e))
-        })?;
-    
-    Ok((StatusCode::OK, "OK"))
+
+    // Clone stations for forwarding and for building the response snapshot
+    let stations_for_send = stations.clone();
+
+    // Forward stations to the update thread
+    state.tx.send_async(stations_for_send).await.map_err(|e| {
+        log::error!("Failed to send stations to update thread: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Internal Server Error: {}", e),
+        )
+    })?;
+
+    // Attempt to read current values from storage (if available). We poll
+    // briefly (up to 3s) for the update thread to apply the changes.
+    let mut stations_snapshot: Vec<ProtocolStationConfig> = Vec::new();
+
+    if let Some(ref storage) = state.storage {
+        let start_wait = Instant::now();
+        let timeout = Duration::from_secs(3);
+
+        // Try to read updated values; if storage hasn't been populated yet,
+        // keep retrying until timeout.
+        loop {
+            stations_snapshot.clear();
+            let mut ok = true;
+            for station in &stations {
+                match crate::cli::modbus::build_station_snapshot_from_storage(storage, station) {
+                    Ok(sc) => stations_snapshot.push(sc),
+                    Err(_) => {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+
+            if ok || start_wait.elapsed() >= timeout {
+                break;
+            }
+
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    } else {
+        // No storage available — fall back to echoing posted initial values
+        for station in &stations {
+            stations_snapshot.push(station.clone());
+        }
+    }
+
+    let resp = StationsResponse {
+        success: true,
+        message: "Stations queued".to_string(),
+        stations: stations_snapshot,
+    };
+
+    Ok((StatusCode::OK, Json(resp)))
 }
 
 /// Run HTTP server daemon using axum
@@ -97,12 +145,13 @@ fn run_http_server_daemon(
     port: u16,
     tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
     shutdown_rx: flume::Receiver<()>,
+    storage: Option<Arc<Mutex<ModbusStorageSmall>>>,
 ) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     log::info!("Starting HTTP server daemon on {}", addr);
 
-    let state = HttpServerState { tx };
-    
+    let state = HttpServerState { tx, storage };
+
     // Build axum router with POST endpoint
     let app = Router::new()
         .route("/", post(handle_stations_post))
@@ -118,22 +167,20 @@ fn run_http_server_daemon(
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
-        
+
         log::info!("HTTP server daemon listening on {}", addr);
 
-        // Create shutdown signal from channel
+        // Create shutdown signal from channel. Await once; receiver returns
+        // either Ok(()) when a shutdown is requested, or Err when the
+        // channel is closed — both should end the server's run.
         let shutdown_signal = async move {
-            loop {
-                match shutdown_rx.recv_async().await {
-                    Ok(()) => {
-                        log::info!("HTTP server daemon received shutdown signal, exiting");
-                        break;
-                    }
-                    Err(_) => {
-                        // Channel closed, shutdown
-                        log::info!("HTTP server shutdown channel closed, exiting");
-                        break;
-                    }
+            match shutdown_rx.recv_async().await {
+                Ok(()) => {
+                    log::info!("HTTP server daemon received shutdown signal, exiting");
+                }
+                Err(_) => {
+                    // Channel closed, shutdown
+                    log::info!("HTTP server shutdown channel closed, exiting");
                 }
             }
         };
@@ -176,7 +223,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
         let handle = std::thread::spawn(move || {
-            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx) {
+            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx, None) {
                 log::error!("HTTP server daemon exited with error: {}", e);
             }
         });
@@ -511,8 +558,10 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         let port = *port;
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
+        let storage_for_thread = storage_clone.clone();
         let handle = std::thread::spawn(move || {
-            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx) {
+            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread))
+            {
                 log::error!("HTTP server daemon exited with error: {}", e);
             }
         });

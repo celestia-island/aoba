@@ -355,3 +355,58 @@ pub fn extract_values_from_storage(
 
     Ok(values)
 }
+
+/// Build a StationConfig snapshot by reading current values from `storage`.
+///
+/// This clones the provided `station` and replaces each `RegisterRange`'s
+/// `initial_values` with the values read from `storage` for that range.
+pub fn build_station_snapshot_from_storage(
+    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    station: &crate::protocol::status::types::modbus::StationConfig,
+) -> Result<crate::protocol::status::types::modbus::StationConfig> {
+    use crate::protocol::status::types::modbus::RegisterMode;
+
+    let mut sc = station.clone();
+
+    for range in sc.map.holding.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::Holding,
+        )?;
+        range.initial_values = vals;
+    }
+
+    for range in sc.map.coils.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::Coils,
+        )?;
+        range.initial_values = vals;
+    }
+
+    for range in sc.map.discrete_inputs.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::DiscreteInputs,
+        )?;
+        range.initial_values = vals;
+    }
+
+    for range in sc.map.input.iter_mut() {
+        let vals = extract_values_from_storage(
+            storage,
+            range.address_start,
+            range.length,
+            RegisterMode::Input,
+        )?;
+        range.initial_values = vals;
+    }
+
+    Ok(sc)
+}
