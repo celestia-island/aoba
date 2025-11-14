@@ -156,7 +156,7 @@ key = "Enter"
 
 [[workflow.configure_data_source]]
 description = "Verify HTTP Server data source is selected"
-verify = "HTTP Server"
+verify = "HTTP Receive Port"
 
 [[workflow.configure_data_source]]
 description = "Navigate down to MasterSourceValue"

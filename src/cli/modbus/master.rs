@@ -145,6 +145,17 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         "Starting master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
+    // Start HTTP server daemon if using HTTP data source
+    let (http_tx, http_rx) =
+        flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
+    let _http_server_thread = if let DataSource::HttpServer(http_port) = &data_source {
+        let port = *http_port;
+        let tx = http_tx.clone();
+        Some(std::thread::spawn(move || run_http_server_daemon(port, tx)))
+    } else {
+        None
+    };
+
     // Read one line of data
     let values = read_one_data_update(
         &data_source,
@@ -157,6 +168,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     // Initialize modbus storage with values
     use rmodbus::server::storage::ModbusStorageSmall;
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
+    let storage_clone = storage.clone();
     {
         let mut context = storage.lock().unwrap();
         match reg_mode {
@@ -179,6 +191,53 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
                 for (i, &val) in values.iter().enumerate() {
                     context.set_input(register_address + i as u16, val)?;
                 }
+            }
+        }
+    }
+
+    // If HTTP server mode, check for incoming data before serial port opens
+    if matches!(&data_source, DataSource::HttpServer(_)) {
+        // Wait for HTTP POST data (with timeout)
+        match http_rx.recv_timeout(Duration::from_secs(15)) {
+            Ok(stations) => {
+                log::info!("Received HTTP POST with {} stations", stations.len());
+                // Update storage with received data
+                let mut context = storage_clone.lock().unwrap();
+                for station in &stations {
+                    if station.station_id == station_id {
+                        // Update holding registers
+                        for range in &station.map.holding {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_holding(addr, val)?;
+                            }
+                        }
+                        // Update coils
+                        for range in &station.map.coils {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_coil(addr, val != 0)?;
+                            }
+                        }
+                        // Update discrete inputs
+                        for range in &station.map.discrete_inputs {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_discrete(addr, val != 0)?;
+                            }
+                        }
+                        // Update input registers
+                        for range in &station.map.input {
+                            for (i, &val) in range.initial_values.iter().enumerate() {
+                                let addr = range.address_start + i as u16;
+                                context.set_input(addr, val)?;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Timeout waiting for HTTP POST data: {}", e);
             }
         }
     }
