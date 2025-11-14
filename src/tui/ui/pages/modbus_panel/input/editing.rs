@@ -525,6 +525,18 @@ fn commit_text_edit(
                                     }
                                 }
                             }
+                            ModbusMasterDataSource::PortForwarding { source_port } => {
+                                if *source_port != trimmed {
+                                    *source_port = trimmed.clone();
+                                    port_data.config_modified = true;
+                                    if matches!(
+                                        port_data.state,
+                                        types::port::PortState::OccupiedByThis
+                                    ) {
+                                        should_restart = true;
+                                    }
+                                }
+                            }
                             ModbusMasterDataSource::Manual => {}
                         }
 

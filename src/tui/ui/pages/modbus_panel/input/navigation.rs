@@ -786,6 +786,14 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             // It will be created or connected when starting
             Ok(())
         }
+        types::modbus::ModbusMasterDataSource::PortForwarding { source_port } => {
+            if source_port.is_empty() {
+                return Ok(()); // Allow empty port, will use placeholder
+            }
+            // Validate that source_port is not the same as current port
+            // This will be done at runtime validation
+            Ok(())
+        }
     }
 }
 

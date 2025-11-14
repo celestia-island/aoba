@@ -46,6 +46,13 @@ fn get_data_source_placeholder(kind: ModbusMasterDataSourceKind) -> Option<Strin
                 .clone();
             Some(placeholder)
         }
+        ModbusMasterDataSourceKind::PortForwarding => Some(
+            lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_port_forwarding
+                .clone(),
+        ),
     }
 }
 
@@ -265,6 +272,9 @@ pub fn render_kv_lines_with_indicators(
                     ModbusMasterDataSourceValueKind::Path => {
                         lang().protocol.modbus.data_source_path.clone()
                     }
+                    ModbusMasterDataSourceValueKind::PortName => {
+                        lang().protocol.modbus.data_source_source_port.clone()
+                    }
                     ModbusMasterDataSourceValueKind::None => unreachable!(),
                 };
 
@@ -315,10 +325,13 @@ pub fn render_kv_lines_with_indicators(
                         let placeholder = get_data_source_placeholder(master_source.kind());
                         input_spans_with_placeholder(port_num.to_string(), placeholder, state)
                     } else {
-                        // Render as text input for other types (MQTT, IPC)
+                        // Render as text input for other types (MQTT, IPC, PortForwarding)
                         let current_value = match master_source {
                             ModbusMasterDataSource::MqttServer { url } => url.clone(),
                             ModbusMasterDataSource::IpcPipe { path } => path.clone(),
+                            ModbusMasterDataSource::PortForwarding { source_port } => {
+                                source_port.clone()
+                            }
                             _ => String::new(),
                         };
 
