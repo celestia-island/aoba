@@ -3,7 +3,7 @@ use std::{
     cell::RefCell,
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hasher,
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader, Read, Write},
     net::TcpListener,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -11,12 +11,13 @@ use std::{
 
 use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
-use tiny_http::{Method, Response, Server};
+// tiny_http no longer used; server implemented with TcpListener directly
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
     ModbusIpcLogPayload, ModbusResponse,
 };
+use crate::cli::http_daemon_registry as http_registry;
 use crate::{
     cli::{actions, cleanup},
     protocol::modbus::{
@@ -24,6 +25,7 @@ use crate::{
         build_slave_holdings_response, build_slave_inputs_response,
     },
 };
+use httparse;
 
 const SERIAL_PORT_OPEN_RETRIES: usize = 10;
 const SERIAL_PORT_OPEN_RETRY_DELAY_MS: u64 = 200;
@@ -66,60 +68,132 @@ fn open_serial_port_with_retry(
 fn run_http_server_daemon(
     port: u16,
     tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
+    shutdown_rx: flume::Receiver<()>,
 ) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     log::info!("Starting HTTP server daemon on {}", addr);
-
     let listener = TcpListener::bind(&addr)
         .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
 
-    listener.set_nonblocking(false)?;
-
-    let server = Server::from_listener(listener, None)
-        .map_err(|e| anyhow!("Failed to create HTTP server: {}", e))?;
+    // Use non-blocking accept loop so we can check shutdown channel periodically
+    listener.set_nonblocking(true)?;
 
     log::info!("HTTP server daemon listening on {}", addr);
 
-    for mut request in server.incoming_requests() {
-        // Only accept POST requests
-        if request.method() != &Method::Post {
-            let response = Response::from_string("Method Not Allowed").with_status_code(405);
-            let _ = request.respond(response);
-            continue;
+    loop {
+        // Check shutdown channel first (non-blocking)
+        if shutdown_rx.try_recv().is_ok() {
+            log::info!("HTTP server daemon received shutdown signal, exiting");
+            break;
         }
 
-        // Read body
-        let mut body = String::new();
-        if let Err(e) = request.as_reader().read_to_string(&mut body) {
-            log::warn!("Failed to read HTTP request body: {}", e);
-            let response = Response::from_string("Bad Request").with_status_code(400);
-            let _ = request.respond(response);
-            continue;
-        }
+        match listener.accept() {
+            Ok((mut stream, _addr)) => {
+                // handle connection
+                let mut buf = Vec::new();
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                if let Err(e) = stream.read_to_end(&mut buf) {
+                    log::warn!("Failed to read HTTP connection: {}", e);
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request",
+                    );
+                    continue;
+                }
 
-        // Parse JSON as Vec<StationConfig>
-        match serde_json::from_str::<Vec<crate::protocol::status::types::modbus::StationConfig>>(
-            &body,
-        ) {
-            Ok(stations) => {
-                log::debug!("HTTP server received {} stations", stations.len());
+                // Parse HTTP request using httparse for robustness
+                let mut headers = [httparse::EMPTY_HEADER; 32];
+                let mut req = httparse::Request::new(&mut headers);
+                match req.parse(&buf) {
+                    Ok(httparse::Status::Complete(header_len)) => {
+                        let method = req.method.unwrap_or("");
 
-                // Send to update thread via channel
-                if let Err(e) = tx.send(stations) {
-                    log::error!("Failed to send stations to update thread: {}", e);
-                    let response =
-                        Response::from_string("Internal Server Error").with_status_code(500);
-                    let _ = request.respond(response);
-                } else {
-                    let response = Response::from_string("OK").with_status_code(200);
-                    let _ = request.respond(response);
+                        // Only accept POST for station updates
+                        if method != "POST" {
+                            let _ = stream.write_all(b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 18\r\n\r\nMethod Not Allowed");
+                            let _ = stream.flush();
+                            continue;
+                        }
+
+                        // Determine content-length
+                        let mut content_length: usize = 0;
+                        for h in req.headers.iter() {
+                            if h.name.eq_ignore_ascii_case("content-length") {
+                                if let Ok(s) = std::str::from_utf8(h.value) {
+                                    if let Ok(v) = s.trim().parse::<usize>() {
+                                        content_length = v;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Extract body bytes (after header_len)
+                        let body_bytes: &[u8] = if buf.len() > header_len {
+                            let available = &buf[header_len..];
+                            if available.len() >= content_length {
+                                &available[..content_length]
+                            } else {
+                                available
+                            }
+                        } else {
+                            &[]
+                        };
+
+                        // Parse JSON body
+                        match serde_json::from_slice::<
+                            Vec<crate::protocol::status::types::modbus::StationConfig>,
+                        >(body_bytes)
+                        {
+                            Ok(stations) => {
+                                log::debug!("HTTP server received {} stations", stations.len());
+                                if let Err(e) = tx.send(stations) {
+                                    log::error!("Failed to send stations to update thread: {}", e);
+                                    let _ = stream.write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 21\r\n\r\nInternal Server Error");
+                                    let _ = stream.flush();
+                                } else {
+                                    let _ = stream.write_all(
+                                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK",
+                                    );
+                                    let _ = stream.flush();
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to parse HTTP request body as JSON: {}", e);
+                                let body = format!("Invalid JSON: {}", e);
+                                let resp = format!(
+                                    "HTTP/1.1 400 Bad Request\r\nContent-Length: {}\r\n\r\n{}",
+                                    body.len(),
+                                    body
+                                );
+                                let _ = stream.write_all(resp.as_bytes());
+                                let _ = stream.flush();
+                            }
+                        }
+                    }
+                    Ok(httparse::Status::Partial) => {
+                        // Incomplete request; respond 400
+                        let _ = stream.write_all(
+                            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request",
+                        );
+                        let _ = stream.flush();
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to parse HTTP request: {}", e);
+                        let _ = stream.write_all(
+                            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request",
+                        );
+                        let _ = stream.flush();
+                    }
                 }
             }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // no incoming connection, sleep briefly
+                std::thread::sleep(Duration::from_millis(50));
+                continue;
+            }
             Err(e) => {
-                log::warn!("Failed to parse HTTP request body as JSON: {}", e);
-                let response =
-                    Response::from_string(format!("Invalid JSON: {}", e)).with_status_code(400);
-                let _ = request.respond(response);
+                log::warn!("HTTP accept error: {}", e);
+                std::thread::sleep(Duration::from_millis(100));
+                continue;
             }
         }
     }
@@ -145,13 +219,30 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         "Starting master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
-    // Start HTTP server daemon if using HTTP data source
+    // Start HTTP server daemon if using HTTP data source. Register the join
+    // handle in a global registry so other code (mode switches) can shut it
+    // down later.
     let (http_tx, http_rx) =
         flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
-    let _http_server_thread = if let DataSource::HttpServer(http_port) = &data_source {
+    let _http_server_thread_port = if let DataSource::HttpServer(http_port) = &data_source {
         let port = *http_port;
         let tx = http_tx.clone();
-        Some(std::thread::spawn(move || run_http_server_daemon(port, tx)))
+        let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
+        let handle = std::thread::spawn(move || {
+            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx) {
+                log::error!("HTTP server daemon exited with error: {}", e);
+            }
+        });
+
+        // register handle+shutdown sender in global registry for lookup/shutdown
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+
+        // Ensure cleanup on program exit also shuts down the daemon
+        cleanup::register_cleanup(move || {
+            let _ = http_registry::shutdown_and_join(port);
+        });
+
+        Some(port)
     } else {
         None
     };
@@ -465,13 +556,29 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>> = Arc::new(Mutex::new(Vec::new()));
     let changed_ranges_clone = changed_ranges.clone();
 
-    // Create HTTP server daemon if needed
+    // Create HTTP server daemon if needed. Keep handle in shared container and
+    // register cleanup so it can be shutdown/joined on cleanup.
     let (http_tx, http_rx) =
         flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
-    let http_server_thread = if let DataSource::HttpServer(port) = &data_source {
+    let http_server_thread: Option<u16> = if let DataSource::HttpServer(port) = &data_source {
         let port = *port;
         let tx = http_tx.clone();
-        Some(std::thread::spawn(move || run_http_server_daemon(port, tx)))
+        let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
+        let handle = std::thread::spawn(move || {
+            if let Err(e) = run_http_server_daemon(port, tx, shutdown_rx) {
+                log::error!("HTTP server daemon exited with error: {}", e);
+            }
+        });
+
+        // Register handle+shutdown sender into global registry
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+
+        // ensure cleanup will shutdown and join
+        cleanup::register_cleanup(move || {
+            let _ = http_registry::shutdown_and_join(port);
+        });
+
+        Some(port)
     } else {
         None
     };
@@ -592,9 +699,11 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         }
 
         // Check if HTTP server thread has panicked
-        if let Some(ref http_thread) = http_server_thread {
-            if http_thread.is_finished() {
-                return Err(anyhow!("HTTP server thread terminated unexpectedly"));
+        if let Some(port) = http_server_thread {
+            if let Some(is_finished) = http_registry::is_handle_finished(port) {
+                if is_finished {
+                    return Err(anyhow!("HTTP server thread terminated unexpectedly"));
+                }
             }
         }
 
