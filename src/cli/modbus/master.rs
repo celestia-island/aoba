@@ -11,7 +11,7 @@ use std::{
 
 use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
-use tiny_http::{Header, Method, Response, Server};
+use tiny_http::{Method, Response, Server};
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
@@ -69,62 +69,61 @@ fn run_http_server_daemon(
 ) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
     log::info!("Starting HTTP server daemon on {}", addr);
-    
+
     let listener = TcpListener::bind(&addr)
         .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
-    
+
     listener.set_nonblocking(false)?;
-    
+
     let server = Server::from_listener(listener, None)
         .map_err(|e| anyhow!("Failed to create HTTP server: {}", e))?;
-    
+
     log::info!("HTTP server daemon listening on {}", addr);
-    
+
     for mut request in server.incoming_requests() {
         // Only accept POST requests
         if request.method() != &Method::Post {
-            let response = Response::from_string("Method Not Allowed")
-                .with_status_code(405);
+            let response = Response::from_string("Method Not Allowed").with_status_code(405);
             let _ = request.respond(response);
             continue;
         }
-        
+
         // Read body
         let mut body = String::new();
         if let Err(e) = request.as_reader().read_to_string(&mut body) {
             log::warn!("Failed to read HTTP request body: {}", e);
-            let response = Response::from_string("Bad Request")
-                .with_status_code(400);
+            let response = Response::from_string("Bad Request").with_status_code(400);
             let _ = request.respond(response);
             continue;
         }
-        
+
         // Parse JSON as Vec<StationConfig>
-        match serde_json::from_str::<Vec<crate::protocol::status::types::modbus::StationConfig>>(&body) {
+        match serde_json::from_str::<Vec<crate::protocol::status::types::modbus::StationConfig>>(
+            &body,
+        ) {
             Ok(stations) => {
                 log::debug!("HTTP server received {} stations", stations.len());
-                
+
                 // Send to update thread via channel
                 if let Err(e) = tx.send(stations) {
                     log::error!("Failed to send stations to update thread: {}", e);
-                    let response = Response::from_string("Internal Server Error")
-                        .with_status_code(500);
+                    let response =
+                        Response::from_string("Internal Server Error").with_status_code(500);
                     let _ = request.respond(response);
                 } else {
-                    let response = Response::from_string("OK")
-                        .with_status_code(200);
+                    let response = Response::from_string("OK").with_status_code(200);
                     let _ = request.respond(response);
                 }
             }
             Err(e) => {
                 log::warn!("Failed to parse HTTP request body as JSON: {}", e);
-                let response = Response::from_string(format!("Invalid JSON: {}", e))
-                    .with_status_code(400);
+                let response =
+                    Response::from_string(format!("Invalid JSON: {}", e)).with_status_code(400);
                 let _ = request.respond(response);
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -408,13 +407,12 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let changed_ranges_clone = changed_ranges.clone();
 
     // Create HTTP server daemon if needed
-    let (http_tx, http_rx) = flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
+    let (http_tx, http_rx) =
+        flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
     let http_server_thread = if let DataSource::HttpServer(port) = &data_source {
         let port = *port;
         let tx = http_tx.clone();
-        Some(std::thread::spawn(move || {
-            run_http_server_daemon(port, tx)
-        }))
+        Some(std::thread::spawn(move || run_http_server_daemon(port, tx)))
     } else {
         None
     };
@@ -425,18 +423,18 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         None
     };
 
-    let update_thread = std::thread::spawn(move || {
-        update_storage_loop(
-            storage_clone,
-            data_source_clone,
-            station_id,
-            reg_mode,
-            register_address,
-            register_length,
-            changed_ranges_clone,
-            http_rx_clone,
-        )
-    });
+    let update_args = UpdateStorageArgs {
+        storage: storage_clone,
+        data_source: data_source_clone,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+        changed_ranges: changed_ranges_clone,
+        http_rx: http_rx_clone,
+    };
+
+    let update_thread = std::thread::spawn(move || update_storage_loop(update_args));
 
     // Parse optional debounce seconds argument (floating seconds). Default 1.0s
     // Single-precision seconds argument
@@ -1077,8 +1075,8 @@ fn respond_to_request(
     ))
 }
 
-/// Update storage loop - continuously reads data from source and updates storage
-fn update_storage_loop(
+/// Arguments for the update storage loop.
+struct UpdateStorageArgs {
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     data_source: DataSource,
     station_id: u8,
@@ -1087,7 +1085,20 @@ fn update_storage_loop(
     register_length: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
     http_rx: Option<flume::Receiver<Vec<crate::protocol::status::types::modbus::StationConfig>>>,
-) -> Result<()> {
+}
+
+/// Update storage loop - continuously reads data from source and updates storage
+fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
+    let UpdateStorageArgs {
+        storage,
+        data_source,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+        changed_ranges,
+        http_rx,
+    } = args;
     loop {
         match &data_source {
             DataSource::Manual => {

@@ -254,9 +254,7 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
                                     url: value.unwrap_or_default(),
                                 }),
                                 "http" => Some(ModbusMasterDataSource::HttpServer {
-                                    port: value
-                                        .and_then(|v| v.parse().ok())
-                                        .unwrap_or(8080),
+                                    port: value.and_then(|v| v.parse().ok()).unwrap_or(8080),
                                 }),
                                 "ipc" => Some(ModbusMasterDataSource::IpcPipe {
                                     path: value.unwrap_or_default(),

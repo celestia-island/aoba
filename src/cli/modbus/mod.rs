@@ -101,9 +101,9 @@ pub enum DataSource {
     Manual,
     File(String),
     Pipe(String),
-    MqttServer(String),  // URL
-    HttpServer(u16),     // Port
-    IpcPipe(String),     // pipe path
+    MqttServer(String), // URL
+    HttpServer(u16),    // Port
+    IpcPipe(String),    // pipe path
 }
 
 impl std::str::FromStr for DataSource {

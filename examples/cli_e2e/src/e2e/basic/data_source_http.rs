@@ -13,28 +13,37 @@ use aoba::{
 /// Post JSON data to the HTTP server running in the subprocess
 async fn post_data_to_server(port: u16, payload: Arc<Vec<StationConfig>>) -> Result<()> {
     let url = format!("http://127.0.0.1:{}", port);
-    
+
     // Wait a bit for the server to start
     thread::sleep(Duration::from_secs(1));
-    
+
     // Try to POST the data with retries
     for attempt in 0..10 {
         match ureq::post(&url).send_json(&*payload) {
             Ok(resp) if resp.status() == 200 => {
-                log::info!("Successfully posted data to HTTP server on attempt {}", attempt + 1);
+                log::info!(
+                    "Successfully posted data to HTTP server on attempt {}",
+                    attempt + 1
+                );
                 return Ok(());
             }
             Ok(resp) => {
                 log::warn!("HTTP POST returned status {}, retrying...", resp.status());
             }
             Err(err) => {
-                log::warn!("Failed to POST to HTTP server (attempt {}): {}", attempt + 1, err);
+                log::warn!(
+                    "Failed to POST to HTTP server (attempt {}): {}",
+                    attempt + 1,
+                    err
+                );
             }
         }
         thread::sleep(Duration::from_millis(500));
     }
-    
-    Err(anyhow!("Failed to POST data to HTTP server after 10 attempts"))
+
+    Err(anyhow!(
+        "Failed to POST data to HTTP server after 10 attempts"
+    ))
 }
 
 fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
@@ -69,7 +78,7 @@ pub async fn test_http_data_source() -> Result<()> {
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A01_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
-    
+
     // Use a fixed port for the HTTP server that the master will run
     let http_port = 8080;
     let data_source_arg = format!("http://{}", http_port);
@@ -107,13 +116,12 @@ pub async fn test_http_data_source() -> Result<()> {
 
     // POST data to the master's HTTP server in a separate thread
     let payload_clone = payload.clone();
-    let post_handle = tokio::spawn(async move {
-        post_data_to_server(http_port, payload_clone).await
-    });
+    let post_handle =
+        tokio::spawn(async move { post_data_to_server(http_port, payload_clone).await });
 
     // Wait for POST to complete
     post_handle.await??;
-    
+
     // Give the master time to process the HTTP data
     thread::sleep(Duration::from_millis(500));
 
@@ -179,7 +187,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     let mut rng = StdRng::seed_from_u64(0x00A0_BADA_7A02_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
     let payload = build_station_payload(&expected_values);
-    
+
     // Use a fixed port for the HTTP server that the master will run
     let http_port = 8080;
     let data_source_arg = format!("http://{}", http_port);
@@ -217,13 +225,12 @@ pub async fn test_http_data_source_persist() -> Result<()> {
 
     // POST data to the master's HTTP server in a separate thread
     let payload_clone = payload.clone();
-    let post_handle = tokio::spawn(async move {
-        post_data_to_server(http_port, payload_clone).await
-    });
+    let post_handle =
+        tokio::spawn(async move { post_data_to_server(http_port, payload_clone).await });
 
     // Wait for POST to complete
     post_handle.await??;
-    
+
     // Give the master time to process the HTTP data
     thread::sleep(Duration::from_millis(500));
 

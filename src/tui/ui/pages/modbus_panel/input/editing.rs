@@ -496,7 +496,7 @@ fn commit_text_edit(
                             ModbusMasterDataSource::HttpServer { port } => {
                                 // Parse port number with validation
                                 if let Ok(new_port) = trimmed.parse::<u16>() {
-                                    if new_port == 0 || new_port > 65535 {
+                                    if new_port == 0 {
                                         // Invalid port range
                                         log::warn!("Invalid port number: {}", new_port);
                                     } else if *port != new_port {

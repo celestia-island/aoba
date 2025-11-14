@@ -281,10 +281,8 @@ pub fn render_kv_lines_with_indicators(
                     );
 
                     // Check if this is HttpServer (numeric port input) or text input
-                    let is_http_server = matches!(
-                        master_source,
-                        ModbusMasterDataSource::HttpServer { .. }
-                    );
+                    let is_http_server =
+                        matches!(master_source, ModbusMasterDataSource::HttpServer { .. });
 
                     if is_http_server {
                         // Render as numeric input for HttpServer port
