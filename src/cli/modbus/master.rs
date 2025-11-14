@@ -158,41 +158,40 @@ fn run_http_server_daemon(
         .route("/", post(handle_stations_post))
         .with_state(state);
 
-    // Run HTTP server using task manager
-    spawn_task(async move {
+    // Create a tokio runtime for this thread
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| anyhow!("Failed to create tokio runtime: {}", e))?;
+
+    // Block on the async server - this will run until shutdown
+    runtime.block_on(async move {
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
 
         log::info!("HTTP server daemon listening on {}", addr);
 
-        // Create shutdown signal from channel. Await once; receiver returns
-        // either Ok(()) when a shutdown is requested, or Err when the
-        // channel is closed — both should end the server's run.
+        // Create shutdown signal from channel
         let shutdown_signal = async move {
             match shutdown_rx.recv_async().await {
                 Ok(()) => {
                     log::info!("HTTP server daemon received shutdown signal, exiting");
                 }
                 Err(_) => {
-                    // Channel closed, shutdown
                     log::info!("HTTP server shutdown channel closed, exiting");
                 }
             }
         };
 
         // Run axum server with graceful shutdown
-        if let Err(e) = axum::serve(listener, app)
+        axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal)
             .await
-        {
-            log::error!("HTTP server error: {}", e);
-        }
+            .map_err(|e| anyhow!("HTTP server error: {}", e))?;
 
         Ok(())
-    });
-
-    Ok(())
+    })
 }
 
 /// Handle master provide (temporary: output once and exit)

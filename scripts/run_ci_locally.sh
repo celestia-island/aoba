@@ -185,7 +185,7 @@ declare -a CLI_MODULES=(
     "list_ports_status"
     "modbus_basic_master_slave"
     "data_source_http"
-    "data_source_http_persist"
+    "data_source_mqtt"
 )
 
 ## Docker support removed: this script runs tests locally only.
