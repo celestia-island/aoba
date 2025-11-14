@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     cli::{actions, cleanup, http_daemon_registry as http_registry},
-    core::task_manager::{spawn_blocking_task, spawn_task},
+    core::task_manager::spawn_task,
     protocol::modbus::{
         build_slave_coils_response, build_slave_discrete_inputs_response,
         build_slave_holdings_response, build_slave_inputs_response,
@@ -142,7 +142,7 @@ async fn handle_stations_post(
 }
 
 /// Run HTTP server daemon using axum
-fn run_http_server_daemon(
+async fn run_http_server_daemon(
     port: u16,
     tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
     shutdown_rx: flume::Receiver<()>,
@@ -159,37 +159,31 @@ fn run_http_server_daemon(
         .with_state(state);
 
     // Use task_manager to spawn the async HTTP server daemon
-    let handle = spawn_task(async move {
-        let listener = tokio::net::TcpListener::bind(&addr)
-            .await
-            .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
 
-        log::info!("HTTP server daemon listening on {}", addr);
+    log::info!("HTTP server daemon listening on {}", addr);
 
-        // Create shutdown signal from channel
-        let shutdown_signal = async move {
-            match shutdown_rx.recv_async().await {
-                Ok(()) => {
-                    log::info!("HTTP server daemon received shutdown signal, exiting");
-                }
-                Err(_) => {
-                    log::info!("HTTP server shutdown channel closed, exiting");
-                }
+    // Create shutdown signal from channel
+    let shutdown_signal = async move {
+        match shutdown_rx.recv_async().await {
+            Ok(()) => {
+                log::info!("HTTP server daemon received shutdown signal, exiting");
             }
-        };
+            Err(_) => {
+                log::info!("HTTP server shutdown channel closed, exiting");
+            }
+        }
+    };
 
-        // Run axum server with graceful shutdown
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal)
-            .await
-            .map_err(|e| anyhow!("HTTP server error: {}", e))?;
+    // Run axum server with graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await
+        .map_err(|e| anyhow!("HTTP server error: {}", e))?;
 
-        Ok(())
-    });
-
-    // Block on the spawned task to ensure it completes
-    // This keeps the blocking thread alive until the HTTP server shuts down
-    futures::executor::block_on(async { handle.await.map_err(|e| anyhow!("Task join error: {}", e))? })
+    Ok(())
 }
 
 /// Handle master provide (temporary: output once and exit)
@@ -219,8 +213,8 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         let port = *http_port;
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
-        let handle = spawn_blocking_task(move || {
-            run_http_server_daemon(port, tx, shutdown_rx, None)?;
+        let handle = spawn_task(async move {
+            run_http_server_daemon(port, tx, shutdown_rx, None).await?;
             Ok(())
         });
 
@@ -562,8 +556,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let tx = http_tx.clone();
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
         let storage_for_thread = storage_clone.clone();
-        let handle = spawn_blocking_task(move || {
-            run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread))?;
+        let handle = spawn_task(async move {
+            run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread)).await?;
             Ok(())
         });
 
