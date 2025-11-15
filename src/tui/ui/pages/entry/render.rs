@@ -19,10 +19,10 @@ use crate::{
 
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     Ok(vec![vec![
-        format!("N: {}", lang().index.new_action.as_str()),
-        format!("D: {}", lang().index.delete_action.as_str()),
-        format!("A: {}", lang().index.about_label.as_str()),
-        format!("Q: {}", lang().hotkeys.press_q_quit.as_str().replace("Press q to ", "")),
+        format!("n: {}", lang().index.new_action.as_str()),
+        format!("d: {}", lang().index.delete_action.as_str()),
+        format!("a: {}", lang().index.about_label.as_str()),
+        format!("q: {}", lang().hotkeys.press_q_quit.as_str().replace("Press q to ", "")),
     ]])
 }
 
@@ -189,13 +189,14 @@ fn render_node(
     let inner = node_block.inner(area);
     frame.render_widget(node_block, area);
 
-    // Build node content with proper padding
-    if inner.height >= 3 && inner.width >= 3 {
-        // Line 1: Status indicator (top-right, 2 spaces from edge)
-        let indicator_x = inner.x + inner.width.saturating_sub(3);
+    // Render status indicator on the border (top-right corner on the actual border)
+    // Position it at the border edge, not inside
+    if area.width >= 3 {
+        let indicator_x = area.x + area.width.saturating_sub(2);
+        let indicator_y = area.y;
         let indicator_area = Rect {
             x: indicator_x,
-            y: inner.y,
+            y: indicator_y,
             width: 1,
             height: 1,
         };
@@ -206,20 +207,26 @@ fn render_node(
         let indicator_widget = Paragraph::new(status_indicator)
             .style(Style::default().fg(indicator_color));
         frame.render_widget(indicator_widget, indicator_area);
+    }
 
-        // Line 2-3: Port name with selection brackets
+    // Build node content with proper padding
+    if inner.height >= 4 && inner.width >= 3 {
+        // Line 1: Port name
         let port_suffix = lang().index.port_suffix.as_str();
-        let display_text = if is_selected {
-            format!("> {} {} <", port_name, port_suffix)
+        
+        // Calculate vertical centering for two lines of text
+        let start_y = inner.y + (inner.height / 2).saturating_sub(1);
+        
+        // First line: Port name with selection brackets
+        let name_display = if is_selected {
+            format!("> {} <", port_name)
         } else {
-            format!("  {} {}  ", port_name, port_suffix)
+            format!("  {}  ", port_name)
         };
-
-        // Center the text vertically
-        let text_y = inner.y + (inner.height / 2).saturating_sub(1);
-        let text_area = Rect {
+        
+        let name_area = Rect {
             x: inner.x,
-            y: text_y,
+            y: start_y,
             width: inner.width,
             height: 1,
         };
@@ -230,10 +237,29 @@ fn render_node(
             Style::default()
         };
 
-        let text_widget = Paragraph::new(display_text)
+        let name_widget = Paragraph::new(name_display)
             .style(text_style)
             .alignment(Alignment::Center);
-        frame.render_widget(text_widget, text_area);
+        frame.render_widget(name_widget, name_area);
+        
+        // Second line: Port suffix (串口 or Port)
+        let suffix_display = if is_selected {
+            format!("> {} <", port_suffix)
+        } else {
+            format!("  {}  ", port_suffix)
+        };
+        
+        let suffix_area = Rect {
+            x: inner.x,
+            y: start_y + 1,
+            width: inner.width,
+            height: 1,
+        };
+        
+        let suffix_widget = Paragraph::new(suffix_display)
+            .style(text_style)
+            .alignment(Alignment::Center);
+        frame.render_widget(suffix_widget, suffix_area);
     }
 
     Ok(())
