@@ -1,10 +1,10 @@
-# HTTP Server and IPC Channel Features
+# Custom Data Source — HTTP and IPC Channel
 
-This document describes the HTTP server and IPC channel features added to support virtual serial port data retrieval and external data sources.
+This document describes the HTTP server and IPC channel features for external data exchange with virtual serial ports and real port monitoring.
 
 ## Overview
 
-The Aoba CLI now supports two new modes for data exchange:
+The Aoba CLI supports two modes for data exchange:
 
 1. **HTTP Server Mode**: HTTP GET/POST endpoints for retrieving and uploading station data
 2. **IPC Channel Mode**: Unix socket server with half-duplex JSON request-response protocol
@@ -41,22 +41,6 @@ curl http://localhost:8080/
             "address_start": 0,
             "length": 10,
             "initial_values": [100, 101, 102, 103, 104, 105, 106, 107, 108, 109]
-          }
-        ],
-        "coils": [],
-        "discrete_inputs": [],
-        "input": []
-      }
-    },
-    {
-      "id": 2,
-      "mode": "master",
-      "map": {
-        "holding": [
-          {
-            "address_start": 0,
-            "length": 5,
-            "initial_values": [200, 201, 202, 203, 204]
           }
         ],
         "coils": [],
@@ -268,81 +252,6 @@ Both clients will receive responses independently as Modbus transactions complet
 - Connection handler uses line-based JSON over `BufReader`
 - Calls `listen_for_one_request()` to process Modbus transaction per request
 - Automatic cleanup of socket file on Unix systems
-
-## Implementation Details
-
-### Code Changes
-
-1. **`src/cli/modbus/master.rs`**:
-   - Added `handle_stations_get()` for HTTP GET endpoint
-   - Enhanced `HttpServerState` with `stations` field to track configurations
-   - Updated `handle_stations_post()` to store received configurations
-   - Modified router to support both GET and POST on "/" endpoint
-
-2. **`src/cli/modbus/slave.rs`**:
-   - Added `handle_slave_listen_ipc_channel()` for IPC socket server
-   - Added `handle_ipc_connection()` for per-connection processing
-   - Implements half-duplex JSON request-response protocol
-   - Supports multiple concurrent connections via task spawning
-
-3. **`src/cli/mod.rs`**:
-   - Added `--ipc-socket-path` CLI argument (requires `--slave-listen-persist`)
-
-4. **`src/cli/actions.rs`**:
-   - Updated dispatch logic to check for IPC socket path
-   - Routes to IPC channel handler when socket path is provided
-
-### Error Handling
-
-- Invalid JSON requests return error response without closing connection
-- Connection errors are logged with connection ID
-- Modbus transaction errors wrapped in JSON error response
-- Socket binding errors propagated with cleanup
-
-### Cleanup
-
-- HTTP server: Registered with `http_daemon_registry` for shutdown/join
-- IPC socket: Existing socket file removed before binding (Unix)
-- Serial port: Cleanup handler registered to flush and release port
-
-## Future Enhancements
-
-1. **Request Types**: Define specific JSON request schemas for different operations
-2. **Streaming**: Support streaming mode for continuous data updates
-3. **Authentication**: Add authentication for HTTP/IPC connections
-4. **Compression**: Support compressed payloads for large station configurations
-5. **WebSocket**: Add WebSocket support for bi-directional real-time updates
-
-## Testing
-
-### HTTP Server Testing
-
-```bash
-# Start server
-cargo run -- --master-provide-persist /tmp/vcom1 --data-source http://8080 --station-id 1 --register-address 0 --register-length 10 --register-mode holding
-
-# Test POST
-curl -X POST http://localhost:8080/ -H "Content-Type: application/json" -d '[{"id":1,"mode":"master","map":{"holding":[{"address_start":0,"length":10,"initial_values":[1,2,3,4,5,6,7,8,9,10]}],"coils":[],"discrete_inputs":[],"input":[]}}]'
-
-# Test GET
-curl http://localhost:8080/
-```
-
-### IPC Channel Testing
-
-```bash
-# Start server
-cargo run -- --slave-listen-persist /tmp/vcom1 --ipc-socket-path /tmp/modbus.sock --station-id 1 --register-address 0 --register-length 10 --register-mode holding
-
-# Test single request
-echo '{}' | nc -U /tmp/modbus.sock
-
-# Test multiple concurrent connections
-for i in {1..5}; do
-  (echo "{\"client\":$i}" | nc -U /tmp/modbus.sock) &
-done
-wait
-```
 
 ## Troubleshooting
 
