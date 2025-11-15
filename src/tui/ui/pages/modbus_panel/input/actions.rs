@@ -660,6 +660,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     last_request_time: None,
                     last_response_time: None,
                     pending_requests: Vec::new(),
+                    pending_writes: std::collections::HashMap::new(),
                 };
                 log::info!("🟢 Pushing new station entry");
                 stations.push(new_entry);

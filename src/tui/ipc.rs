@@ -149,6 +149,7 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                 last_request_time: None,
                                                 last_response_time: None,
                                                 pending_requests: Vec::new(),
+                                                pending_writes: std::collections::HashMap::new(),
                                             };
                                             modbus_stations.push(new_item);
                                         }
@@ -204,6 +205,61 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
         IpcMessage::Log { level, message, .. } => {
             log::info!("CLI[{port_name}]: log[{level}] {message}");
             append_cli_log_message(port_name, &level, &message);
+        }
+        IpcMessage::RegisterWriteComplete {
+            station_id,
+            register_address,
+            register_value,
+            register_type,
+            success,
+            error,
+            ..
+        } => {
+            log::info!(
+                "CLI[{port_name}]: RegisterWriteComplete station={station_id} addr=0x{register_address:04X} value=0x{register_value:04X} type={register_type} success={success}"
+            );
+
+            crate::tui::status::write_status(|status| {
+                if let Some(port) = status.ports.map.get_mut(port_name) {
+                    let types::port::PortConfig::Modbus {
+                        mode: _,
+                        master_source: _,
+                        stations,
+                    } = &mut port.config;
+
+                    // Find the station and register to update
+                    for station in stations.iter_mut() {
+                        if station.station_id == station_id {
+                            let register_index =
+                                (register_address - station.register_address) as usize;
+                            
+                            // Remove from pending writes
+                            station.pending_writes.remove(&register_index);
+
+                            if success {
+                                // Update local value on success
+                                if register_index < station.last_values.len() {
+                                    station.last_values[register_index] = register_value;
+                                    log::info!(
+                                        "✅ Write success: Updated local value for register #{register_index} to 0x{register_value:04X}"
+                                    );
+                                }
+                            } else if let Some(err_msg) = &error {
+                                // Show error message in status bar
+                                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                                    message: format!(
+                                        "Write failed for register 0x{register_address:04X}: {err_msg}"
+                                    ),
+                                    timestamp: chrono::Local::now(),
+                                });
+                                log::warn!("❌ Write failed: {err_msg}");
+                            }
+                            break;
+                        }
+                    }
+                }
+                Ok(())
+            })?;
         }
     }
     Ok(())
