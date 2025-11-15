@@ -496,6 +496,15 @@ description = "Check port state is Running"
 mock_verify_path = "$.ports['/tmp/vcom1'].state"
 mock_verify_value = { type = "occupied_by_this" }
 
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows Modbus configuration page"
+verify_regex = "ModBus Master/Slave"
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows correct port"
+verify_regex = "/tmp/vcom1"
+
+
 # Step 10: Edit Registers - Round 2 (Alternating ON/OFF: 1,0,1,0,1,0,1,0,1,0)
 [[workflow.edit_registers_round2]]
 description = "Return to register editing - press Ctrl+PageUp"

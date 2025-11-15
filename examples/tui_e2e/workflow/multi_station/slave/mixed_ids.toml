@@ -1022,6 +1022,15 @@ description = "Check port state is Running"
 mock_verify_path = "$.ports['/tmp/vcom1'].state"
 mock_verify_value = { type = "occupied_by_this" }
 
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows Modbus configuration page"
+verify_regex = "ModBus Master/Slave"
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows correct port"
+verify_regex = "/tmp/vcom1"
+
+
 # Round 2 updates
 [[workflow.edit_station1_round2]]
 description = "Navigate to Station 1 registers - Start from top"

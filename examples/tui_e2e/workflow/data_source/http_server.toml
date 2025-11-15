@@ -474,6 +474,15 @@ mock_verify_path = "$.ports['/tmp/vcom1'].state"
 mock_verify_value = { type = "occupied_by_this" }
 
 [[workflow.verify_port_enabled]]
+description = "Verify UI shows Modbus configuration page"
+verify_regex = "ModBus Master/Slave"
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows correct port"
+verify_regex = "/tmp/vcom1"
+
+
+[[workflow.verify_port_enabled]]
 description = "Verify data source configuration"
 mock_verify_path = "$.ports['/tmp/vcom1'].master_source"
 mock_verify_value = { type = "http_server", port = 8080 }
