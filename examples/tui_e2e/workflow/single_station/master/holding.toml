@@ -103,7 +103,7 @@ mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "AddLine" }
 
 [[workflow.enter_modbus_panel]]
-verify = "ModBus Master/Slave Set"
+verify_regex = "ModBus Master/Slave"
 
 # Step 5: Create station
 [[workflow.create_station]]

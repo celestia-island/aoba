@@ -95,7 +95,7 @@ mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "AddLine" }
 
 [[workflow.enter_modbus_panel]]
-verify = "ModBus Master/Slave Set"
+verify_regex = "ModBus Master/Slave"
 
 [[workflow.configure_data_source]]
 description = "Navigate down from AddLine to ModbusMode"

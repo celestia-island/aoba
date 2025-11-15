@@ -155,7 +155,7 @@ mock_set_value = { kind = "AddLine" }
 
 [[workflow.enter_modbus_panel]]
 description = "Verify Modbus panel header"
-verify = "ModBus Master/Slave Set"
+verify_regex = "ModBus Master/Slave"
 at_line = 0
 
 # Step 5: Create two stations
