@@ -78,25 +78,11 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     Ok(())
 }
 
-/// Calculate the height needed for a node based on its station count
-fn calculate_node_height(
-    port_name: &str,
-    ports_map: &std::collections::HashMap<String, PortData>,
-) -> u16 {
+/// Get the base node height (always fixed at 4 lines)
+/// Stations are now rendered outside the box, so node height doesn't include them
+fn get_node_height() -> u16 {
     // Base height: 2 content lines (name + type) + 2 border lines = 4
-    let base_height = 4u16;
-    
-    // Get station count for ports that are OccupiedByThis
-    if let Some(port_data) = ports_map.get(port_name) {
-        if port_data.state.is_occupied_by_this() {
-            let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config;
-            let station_count = stations.len() as u16;
-            // Add one line per station
-            return base_height + station_count;
-        }
-    }
-    
-    base_height
+    4u16
 }
 
 /// Render nodes in a horizontal single-row layout with scrolling support
@@ -193,18 +179,14 @@ fn render_node_grid(
             break;
         }
 
-        // Calculate height for this specific node
-        let node_height = calculate_node_height(port_name, &ports_map);
-        
-        // Ensure node doesn't exceed available height
-        let available_height = inner_area.height;
-        let actual_node_height = node_height.min(available_height);
+        // Node height is fixed; stations are rendered outside the box
+        let node_height = get_node_height();
 
         let node_area = Rect {
             x,
             y,
             width: node_width,
-            height: actual_node_height,
+            height: node_height,
         };
 
         // Render the node
@@ -461,46 +443,44 @@ fn render_node(
             .alignment(Alignment::Center);
         frame.render_widget(type_widget, type_area);
         
-        // Lines 3+: Connected stations (if any)
-        if let Some(stations) = stations {
-            if !stations.is_empty() {
-                let station_style = Style::default().fg(Color::Cyan);
-                let mut current_y = inner.y + 2;
+    }
+    
+    // Render connected stations outside the box (below the node)
+    if let Some(stations) = stations {
+        if !stations.is_empty() {
+            let station_style = Style::default().fg(Color::Cyan);
+            // Start rendering below the node box
+            let mut current_y = area.y + area.height;
+            
+            for (idx, station) in stations.iter().enumerate() {
+                // Determine the timeline character (├─ for intermediate, └─ for last)
+                let timeline_char = if idx == stations.len() - 1 {
+                    "└─"
+                } else {
+                    "├─"
+                };
                 
-                for (idx, station) in stations.iter().enumerate() {
-                    if current_y >= inner.y + inner.height {
-                        break; // No more space
-                    }
-                    
-                    // Determine the timeline character (├─ for intermediate, └─ for last)
-                    let timeline_char = if idx == stations.len() - 1 {
-                        "└─"
-                    } else {
-                        "├─"
-                    };
-                    
-                    // Format station info: " ├─ St.1:Coils "
-                    let station_text = format!(
-                        " {} St.{}:{}",
-                        timeline_char,
-                        station.station_id,
-                        format_register_mode_short(&station.register_mode)
-                    );
-                    
-                    let station_area = Rect {
-                        x: inner.x,
-                        y: current_y,
-                        width: inner.width,
-                        height: 1,
-                    };
-                    
-                    let station_widget = Paragraph::new(station_text)
-                        .style(station_style)
-                        .alignment(Alignment::Left);
-                    frame.render_widget(station_widget, station_area);
-                    
-                    current_y += 1;
-                }
+                // Format station info: " ├─ St.1:Coils "
+                let station_text = format!(
+                    " {} St.{}:{}",
+                    timeline_char,
+                    station.station_id,
+                    format_register_mode_short(&station.register_mode)
+                );
+                
+                let station_area = Rect {
+                    x: area.x,
+                    y: current_y,
+                    width: area.width,
+                    height: 1,
+                };
+                
+                let station_widget = Paragraph::new(station_text)
+                    .style(station_style)
+                    .alignment(Alignment::Left);
+                frame.render_widget(station_widget, station_area);
+                
+                current_y += 1;
             }
         }
     }
