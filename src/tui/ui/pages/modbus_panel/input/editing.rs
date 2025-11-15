@@ -239,23 +239,22 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             {
                                 if let Some(port_name) = status.ports.order.get(*selected_port) {
                                     if let Some(port_data) = status.ports.map.get(port_name) {
-                                        if let types::port::PortConfig::Modbus {
+                                        let types::port::PortConfig::Modbus {
                                             master_source, ..
-                                        } = &port_data.config
-                                        {
-                                            if matches!(
-                                                master_source,
-                                                ModbusMasterDataSource::PortForwarding { .. }
-                                            ) {
-                                                // Count ports excluding the current one
-                                                let count = status
-                                                    .ports
-                                                    .order
-                                                    .iter()
-                                                    .filter(|p| *p != port_name)
-                                                    .count();
-                                                return Ok(count);
-                                            }
+                                        } = &port_data.config;
+
+                                        if matches!(
+                                            master_source,
+                                            ModbusMasterDataSource::PortForwarding { .. }
+                                        ) {
+                                            // Count ports excluding the current one
+                                            let count = status
+                                                .ports
+                                                .order
+                                                .iter()
+                                                .filter(|p| *p != port_name)
+                                                .count();
+                                            return Ok(count);
                                         }
                                     }
                                 }
@@ -469,14 +468,12 @@ fn commit_selector_edit(
                     // Get the current data source kind first
                     let is_port_forwarding = read_status(|status| {
                         if let Some(port_data) = status.ports.map.get(&port_name) {
-                            if let types::port::PortConfig::Modbus { master_source, .. } =
-                                &port_data.config
-                            {
-                                return Ok(matches!(
-                                    master_source,
-                                    ModbusMasterDataSource::PortForwarding { .. }
-                                ));
-                            }
+                            let types::port::PortConfig::Modbus { master_source, .. } =
+                                &port_data.config;
+                            return Ok(matches!(
+                                master_source,
+                                ModbusMasterDataSource::PortForwarding { .. }
+                            ));
                         }
                         Ok(false)
                     })?;
@@ -501,24 +498,21 @@ fn commit_selector_edit(
                                     .get_mut(&port_name)
                                     .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
 
-                                if let types::port::PortConfig::Modbus { master_source, .. } =
-                                    &mut port.config
+                                let types::port::PortConfig::Modbus { master_source, .. } =
+                                    &mut port.config;
+                                if let ModbusMasterDataSource::PortForwarding { source_port } =
+                                    master_source
                                 {
-                                    if let ModbusMasterDataSource::PortForwarding {
-                                        source_port,
-                                    } = master_source
-                                    {
-                                        if *source_port != *selected_port_name {
-                                            *source_port = selected_port_name.clone();
-                                            port.config_modified = true;
-                                            if matches!(port.state, PortState::OccupiedByThis) {
-                                                should_restart = true;
-                                            }
-                                            log::info!(
-                                                "Updated port forwarding source to: {}",
-                                                selected_port_name
-                                            );
+                                    if *source_port != *selected_port_name {
+                                        *source_port = selected_port_name.clone();
+                                        port.config_modified = true;
+                                        if matches!(port.state, PortState::OccupiedByThis) {
+                                            should_restart = true;
                                         }
+                                        log::info!(
+                                            "Updated port forwarding source to: {}",
+                                            selected_port_name
+                                        );
                                     }
                                 }
 

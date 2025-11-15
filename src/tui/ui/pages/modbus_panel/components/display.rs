@@ -293,8 +293,9 @@ pub fn render_kv_lines_with_indicators(
                     // Special handling for PortForwarding - show selector or hint
                     if matches!(master_source, ModbusMasterDataSource::PortForwarding { .. }) {
                         let current_port_name = read_status(|status| {
-                            if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
-                                &status.page
+                            if let crate::tui::status::Page::ModbusDashboard {
+                                selected_port, ..
+                            } = &status.page
                             {
                                 Ok(status.ports.order.get(*selected_port).cloned())
                             } else {
@@ -311,17 +312,19 @@ pub fn render_kv_lines_with_indicators(
 
                         if available_ports.is_empty() {
                             // No other ports available - show greyed hint
-                            let state = if selected {
-                                TextState::Selected
-                            } else {
-                                TextState::Normal
-                            };
-                            let hint_text =
-                                lang().protocol.modbus.data_source_port_forwarding_hint.clone();
+                            let hint_text = lang()
+                                .protocol
+                                .modbus
+                                .data_source_port_forwarding_hint
+                                .clone();
                             let style = if selected {
-                                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+                                Style::default()
+                                    .fg(Color::Yellow)
+                                    .add_modifier(Modifier::ITALIC)
                             } else {
-                                Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+                                Style::default()
+                                    .fg(Color::DarkGray)
+                                    .add_modifier(Modifier::ITALIC)
                             };
                             return Ok(vec![Span::styled(hint_text, style)]);
                         }
@@ -351,7 +354,10 @@ pub fn render_kv_lines_with_indicators(
                                     .unwrap_or_else(|| available_ports[0].clone());
                                 return Ok(vec![
                                     Span::raw("< "),
-                                    Span::styled(selected_port_name, Style::default().fg(Color::Yellow)),
+                                    Span::styled(
+                                        selected_port_name,
+                                        Style::default().fg(Color::Yellow),
+                                    ),
                                     Span::raw(" >"),
                                 ]);
                             }
