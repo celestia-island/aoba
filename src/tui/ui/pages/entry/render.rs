@@ -30,8 +30,8 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let selection = read_status(|app| derive_selection_from_page(&app.page, &app.ports.order))?;
 
-    // Get port list and cursor state
-    let (ports_order, _cursor_opt, view_offset) = read_status(|status| {
+    // Get port list, cursor state, and new port creation state
+    let (ports_order, _cursor_opt, view_offset, in_creation, port_type_index) = read_status(|status| {
         let cursor = if let Page::Entry { cursor, .. } = &status.page {
             *cursor
         } else {
@@ -42,11 +42,17 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
         } else {
             0
         };
-        Ok((status.ports.order.clone(), cursor, offset))
+        Ok((
+            status.ports.order.clone(), 
+            cursor, 
+            offset,
+            status.temporarily.new_port_creation.active,
+            status.temporarily.new_port_creation.port_type_index,
+        ))
     })?;
 
     // Render the full-screen canvas with nodes
-    render_node_grid(frame, area, &ports_order, selection, view_offset)?;
+    render_node_grid(frame, area, &ports_order, selection, view_offset, in_creation, port_type_index)?;
 
     Ok(())
 }
@@ -58,6 +64,8 @@ fn render_node_grid(
     ports_order: &[String],
     selection: usize,
     view_offset: usize,
+    in_creation: bool,
+    port_type_index: usize,
 ) -> Result<()> {
     // Create outer block for the canvas
     let canvas_block = Block::default()
@@ -134,6 +142,34 @@ fn render_node_grid(
 
         // Render the node
         render_node(frame, node_area, port_name, i == selection, &ports_map)?;
+    }
+    
+    // Render "editing" node if in creation mode
+    if in_creation {
+        let edit_node_index = ports_order.len();
+        let row = edit_node_index / nodes_per_row;
+        let col = edit_node_index % nodes_per_row;
+        
+        let x = inner_area.x + (col as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
+        let y = inner_area.y + (row as u16 * (node_height + spacing));
+        
+        // Only render if in viewport
+        if x + node_width >= inner_area.x && x < inner_area.x + inner_area.width
+            && y + node_height >= inner_area.y && y < inner_area.y + inner_area.height {
+            let node_x = x.max(inner_area.x);
+            let node_width_visible = (x + node_width).min(inner_area.x + inner_area.width).saturating_sub(node_x);
+            
+            if node_width_visible > 0 {
+                let node_area = Rect {
+                    x: node_x,
+                    y,
+                    width: node_width_visible.min(node_width),
+                    height: node_height.min(inner_area.height.saturating_sub(y - inner_area.y)),
+                };
+                
+                render_editing_node(frame, node_area, port_type_index)?;
+            }
+        }
     }
 
     // Render horizontal scrollbar if needed
@@ -260,6 +296,79 @@ fn render_node(
             .style(text_style)
             .alignment(Alignment::Center);
         frame.render_widget(suffix_widget, suffix_area);
+    }
+
+    Ok(())
+}
+
+/// Render the "editing" node for new port creation
+fn render_editing_node(
+    frame: &mut Frame,
+    area: Rect,
+    port_type_index: usize,
+) -> Result<()> {
+    // Create node block with border - always highlighted as it's being edited
+    let node_border_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+
+    let node_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(node_border_style);
+
+    let inner = node_block.inner(area);
+    frame.render_widget(node_block, area);
+
+    // Build node content with proper padding
+    if inner.height >= 4 && inner.width >= 3 {
+        // Calculate vertical centering for two lines of text
+        let start_y = inner.y + (inner.height / 2).saturating_sub(1);
+        
+        // First line: "正在编辑中" or "Editing"
+        let editing_label = if lang().index.title.contains("中") {
+            "正在编辑中"
+        } else {
+            "Editing"
+        };
+        
+        let editing_display = format!("> {} <", editing_label);
+        
+        let editing_area = Rect {
+            x: inner.x,
+            y: start_y,
+            width: inner.width,
+            height: 1,
+        };
+
+        let text_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+
+        let editing_widget = Paragraph::new(editing_display)
+            .style(text_style)
+            .alignment(Alignment::Center);
+        frame.render_widget(editing_widget, editing_area);
+        
+        // Second line: Port type selector (IPC / HTTP)
+        let port_types = if lang().index.title.contains("中") {
+            ["IPC 管道", "HTTP 服务器"]
+        } else {
+            ["IPC Pipe", "HTTP Server"]
+        };
+        
+        let type_display = if port_type_index < port_types.len() {
+            format!("> {} <", port_types[port_type_index])
+        } else {
+            format!("> {} <", port_types[0])
+        };
+        
+        let type_area = Rect {
+            x: inner.x,
+            y: start_y + 1,
+            width: inner.width,
+            height: 1,
+        };
+        
+        let type_widget = Paragraph::new(type_display)
+            .style(text_style)
+            .alignment(Alignment::Center);
+        frame.render_widget(type_widget, type_area);
     }
 
     Ok(())

@@ -51,36 +51,60 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         KeyCode::Left | KeyCode::Char('h') => {
-            handle_move_prev(read_status(|status| {
-                if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
-                    Ok(cursor.unwrap_or(cursor::EntryCursor::Com { index: 0 }))
-                } else {
-                    Ok(cursor::EntryCursor::Com { index: 0 })
-                }
-            })?)?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
-        }
-        KeyCode::Right | KeyCode::Char('l') => {
-            let cursor_opt = read_status(|status| {
-                if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
-                    Ok(*cursor)
-                } else {
-                    Ok(None)
-                }
-            })?;
-
-            if cursor_opt.is_none() {
-                // Initialize cursor to first port
-                let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
+            // Check if we're in new port creation mode
+            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+            if in_creation {
+                // Toggle port type selection
                 write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(new_cursor),
-                        view_offset: 0,
-                    };
+                    if status.temporarily.new_port_creation.port_type_index > 0 {
+                        status.temporarily.new_port_creation.port_type_index -= 1;
+                    }
                     Ok(())
                 })?;
             } else {
-                handle_move_next(cursor_opt.unwrap_or(types::cursor::EntryCursor::Com { index: 0 }))?;
+                handle_move_prev(read_status(|status| {
+                    if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
+                        Ok(cursor.unwrap_or(cursor::EntryCursor::Com { index: 0 }))
+                    } else {
+                        Ok(cursor::EntryCursor::Com { index: 0 })
+                    }
+                })?)?;
+            }
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+        }
+        KeyCode::Right | KeyCode::Char('l') => {
+            // Check if we're in new port creation mode
+            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+            if in_creation {
+                // Toggle port type selection (0 = IPC, 1 = HTTP, max 1)
+                write_status(|status| {
+                    if status.temporarily.new_port_creation.port_type_index < 1 {
+                        status.temporarily.new_port_creation.port_type_index += 1;
+                    }
+                    Ok(())
+                })?;
+            } else {
+                let cursor_opt = read_status(|status| {
+                    if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
+                        Ok(*cursor)
+                    } else {
+                        Ok(None)
+                    }
+                })?;
+
+                if cursor_opt.is_none() {
+                    // Initialize cursor to first port
+                    let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
+                    write_status(|status| {
+                        status.page = Page::Entry {
+                            cursor: Some(new_cursor),
+                            view_offset: 0,
+                        };
+                        Ok(())
+                    })?;
+                } else {
+                    handle_move_next(cursor_opt.unwrap_or(types::cursor::EntryCursor::Com { index: 0 }))?;
+                }
             }
 
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
@@ -93,14 +117,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             })?;
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
-        // Support for New (N key) - placeholder for port creation
+        // Support for New (N key) - activate port creation mode
         KeyCode::Char('n') | KeyCode::Char('N') => {
-            log::info!("New port creation requested - feature not yet fully implemented");
+            log::info!("New port creation requested");
             write_status(|status| {
-                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
-                    message: "Port creation is not yet implemented. Use system tools or --check-port to add ports.".to_string(),
-                    timestamp: chrono::Local::now(),
-                });
+                status.temporarily.new_port_creation.active = true;
+                status.temporarily.new_port_creation.port_type_index = 0;
                 Ok(())
             })?;
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
@@ -118,6 +140,48 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         KeyCode::Enter => {
+            // Check if we're in new port creation mode
+            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+            
+            if in_creation {
+                // Confirm port creation
+                let port_type_index = read_status(|status| {
+                    Ok(status.temporarily.new_port_creation.port_type_index)
+                })?;
+                
+                let port_type_name = if port_type_index == 0 { "IPC" } else { "HTTP" };
+                let new_port_name = format!("virtual_{}", port_type_name.to_lowercase());
+                
+                log::info!("Creating new {} port: {}", port_type_name, new_port_name);
+                
+                // Create a new port entry (without starting it)
+                use crate::tui::status::port::{PortConfig, PortData, PortState, PortStatusIndicator};
+                
+                // Add to ports
+                write_status(|status| {
+                    let mut new_port = PortData::default();
+                    new_port.port_name = new_port_name.clone();
+                    new_port.port_type = port_type_name.to_string();
+                    new_port.state = PortState::Free;
+                    new_port.status_indicator = PortStatusIndicator::NotStarted;
+                    new_port.config = PortConfig::Modbus {
+                        mode: crate::tui::status::modbus::ModbusConnectionMode::default_master(),
+                        master_source: Default::default(),
+                        stations: Vec::new(),
+                    };
+                    
+                    status.ports.order.push(new_port_name.clone());
+                    status.ports.map.insert(new_port_name.clone(), new_port);
+                    // Clear creation mode
+                    status.temporarily.new_port_creation.active = false;
+                    status.temporarily.new_port_creation.port_type_index = 0;
+                    Ok(())
+                })?;
+                
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                return Ok(());
+            }
+            
             let cursor = read_status(|status| {
                 if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
                     Ok(*cursor)
@@ -205,13 +269,25 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
         }
         KeyCode::Esc => {
-            write_status(|status| {
-                status.page = crate::tui::status::Page::Entry {
-                    cursor: None,
-                    view_offset: 0,
-                };
-                Ok(())
-            })?;
+            // Check if we're in new port creation mode
+            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+            
+            if in_creation {
+                // Cancel creation
+                write_status(|status| {
+                    status.temporarily.new_port_creation.active = false;
+                    status.temporarily.new_port_creation.port_type_index = 0;
+                    Ok(())
+                })?;
+            } else {
+                write_status(|status| {
+                    status.page = crate::tui::status::Page::Entry {
+                        cursor: None,
+                        view_offset: 0,
+                    };
+                    Ok(())
+                })?;
+            }
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         _ => {}
