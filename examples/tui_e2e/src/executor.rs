@@ -692,7 +692,7 @@ async fn execute_single_step(
                     } else {
                         actual_line.contains(&expected_text)
                     };
-                    
+
                     if matches {
                         Ok(())
                     } else {
@@ -718,7 +718,7 @@ async fn execute_single_step(
                 } else {
                     screen_content.contains(&expected_text)
                 };
-                
+
                 if matches {
                     Ok(())
                 } else {
