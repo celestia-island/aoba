@@ -299,18 +299,18 @@ fn render_node(
     ports_map: &std::collections::HashMap<String, PortData>,
 ) -> Result<()> {
     // Get port data
-    let (port_state, port_type, stations, master_source) = if let Some(port_data) = ports_map.get(port_name) {
+    let (port_state, port_type, master_source) = if let Some(port_data) = ports_map.get(port_name) {
         let state = port_data.state.clone();
         let ptype = port_data.port_type.clone();
-        let (stations, master_source) = if state.is_occupied_by_this() {
-            let crate::tui::status::port::PortConfig::Modbus { stations, master_source, .. } = &port_data.config;
-            (Some(stations.clone()), Some(master_source.clone()))
+        let master_source = if state.is_occupied_by_this() {
+            let crate::tui::status::port::PortConfig::Modbus { master_source, .. } = &port_data.config;
+            Some(master_source.clone())
         } else {
-            (None, None)
+            None
         };
-        (state, ptype, stations, master_source)
+        (state, ptype, master_source)
     } else {
-        (PortState::Free, String::new(), None, None)
+        (PortState::Free, String::new(), None)
     };
 
     // Determine status indicator
@@ -444,84 +444,27 @@ fn render_node(
         frame.render_widget(type_widget, type_area);
     }
 
-    // Render connected stations outside the box (below the node)
-    // Start rendering below the node box
-    let mut current_y = area.y + area.height;
-
-    // First, render stations if any
-    if let Some(stations) = stations {
-        if !stations.is_empty() {
-            let station_style = Style::default().fg(Color::Cyan);
-
-            for (idx, _station) in stations.iter().enumerate() {
-                // Determine the timeline character (├─ for intermediate, └─ for last, considering references below)
-                let has_references = master_source.as_ref()
-                    .map(|ms| matches!(ms, crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding { .. }))
-                    .unwrap_or(false);
-
-                let is_last = !has_references && idx == stations.len() - 1;
-                let timeline_char = if is_last {
-                    "└─"
-                } else {
-                    "├─"
-                };
-
-                // Show station as port name (current port) instead of "St.N"
-                let station_text = format!(
-                    " {} {}",
-                    timeline_char,
-                    format_port_name_for_display(port_name)
-                );
-
-                let station_area = Rect {
-                    x: area.x,
-                    y: current_y,
-                    width: area.width,
-                    height: 1,
-                };
-
-                let station_widget = Paragraph::new(station_text)
-                    .style(station_style)
-                    .alignment(Alignment::Left);
-                frame.render_widget(station_widget, station_area);
-
-                current_y += 1;
-            }
-        }
-    }
-
-    // Then, render port forwarding reference if present
-    if let Some(master_source) = master_source {
+    // Render port forwarding references outside the box (below the node)
+    // Only show green-colored references, not the cyan station entries (port info already in box)
+    
+    // Collect all references first to determine proper timeline characters
+    let mut references: Vec<String> = Vec::new();
+    
+    // Check if this port references another port (data consumer)
+    if let Some(master_source) = &master_source {
         if let crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding { source_port } = master_source {
             if !source_port.is_empty() {
-                let reference_style = Style::default().fg(Color::Green);
-
                 // This port references source_port (consumes data from it)
                 // Show left arrow: ├<─ source_port
-                let reference_text = format!(
-                    " ├<─ {}",
-                    format_port_name_for_display(&source_port)
-                );
-
-                let reference_area = Rect {
-                    x: area.x,
-                    y: current_y,
-                    width: area.width,
-                    height: 1,
-                };
-
-                let reference_widget = Paragraph::new(reference_text)
-                    .style(reference_style)
-                    .alignment(Alignment::Left);
-                frame.render_widget(reference_widget, reference_area);
-
-                current_y += 1;
+                references.push(format!(
+                    "<─ {}",
+                    format_port_name_for_display(source_port)
+                ));
             }
         }
     }
-
-    // Finally, check if any other port references this port (this port is a data source)
-    // Scan all ports to see if any of them have PortForwarding pointing to this port
+    
+    // Check if any other port references this port (this port is a data source)
     for (other_port_name, other_port_data) in ports_map.iter() {
         if other_port_name != port_name && other_port_data.state.is_occupied_by_this() {
             let crate::tui::status::port::PortConfig::Modbus { master_source: other_master_source, .. } = &other_port_data.config;
@@ -529,27 +472,43 @@ fn render_node(
                 if source_port == port_name {
                     // Other port references this port (this port is the data source)
                     // Show right arrow: ├─> other_port_name
-                    let reference_style = Style::default().fg(Color::Green);
-                    let reference_text = format!(
-                        " ├─> {}",
+                    references.push(format!(
+                        "─> {}",
                         format_port_name_for_display(other_port_name)
-                    );
-
-                    let reference_area = Rect {
-                        x: area.x,
-                        y: current_y,
-                        width: area.width,
-                        height: 1,
-                    };
-
-                    let reference_widget = Paragraph::new(reference_text)
-                        .style(reference_style)
-                        .alignment(Alignment::Left);
-                    frame.render_widget(reference_widget, reference_area);
-
-                    current_y += 1;
+                    ));
                 }
             }
+        }
+    }
+    
+    // Render all references with proper timeline characters
+    if !references.is_empty() {
+        let reference_style = Style::default().fg(Color::Green);
+        let mut current_y = area.y + area.height;
+        
+        for (idx, reference_text) in references.iter().enumerate() {
+            // Use └─ for the last reference, ├─ for others
+            let timeline_char = if idx == references.len() - 1 {
+                "└"
+            } else {
+                "├"
+            };
+            
+            let full_text = format!(" {}{}", timeline_char, reference_text);
+            
+            let reference_area = Rect {
+                x: area.x,
+                y: current_y,
+                width: area.width,
+                height: 1,
+            };
+            
+            let reference_widget = Paragraph::new(full_text)
+                .style(reference_style)
+                .alignment(Alignment::Left);
+            frame.render_widget(reference_widget, reference_area);
+            
+            current_y += 1;
         }
     }
 
