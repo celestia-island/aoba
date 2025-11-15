@@ -101,8 +101,8 @@ fn render_node_grid(
     let node_height = 4u16; // Two lines + borders (4 total)
     let spacing = 1u16; // Spacing between nodes
 
-    // Calculate total number of nodes (ports + editing node if in creation mode)
-    let total_nodes = if in_creation {
+    // Calculate total number of nodes for rendering (ports + editing node if in creation mode)
+    let total_nodes_for_rendering = if in_creation {
         ports_order.len() + 1
     } else {
         ports_order.len()
@@ -118,13 +118,24 @@ fn render_node_grid(
     // Smart viewport rendering strategy based on selection position
     let (start_index, end_index) = calculate_visible_range(
         selection,
-        total_nodes,
+        total_nodes_for_rendering,
         nodes_fit_in_viewport,
     );
 
-    // Render position indicator in top-right corner (green to match other UI elements)
-    if total_nodes > 0 {
-        let indicator_text = format!(" {} / {} ", selection + 1, total_nodes);
+    // Render position indicator in top-right corner
+    // In editing mode: keep count at ports_order.len(), show yellow color
+    // In normal mode: show ports_order.len(), show green color
+    let actual_port_count = ports_order.len();
+    if actual_port_count > 0 {
+        // During editing mode, selection points to CreateVirtual which is at ports_order.len() + 1
+        // So we need to calculate the display position differently
+        let display_position = if in_creation {
+            actual_port_count  // Show the last real port's position
+        } else {
+            selection + 1
+        };
+        
+        let indicator_text = format!(" {} / {} ", display_position, actual_port_count);
         let indicator_width = indicator_text.len() as u16;
         let indicator_area = Rect {
             x: area.x + area.width.saturating_sub(indicator_width + 1),
@@ -132,8 +143,16 @@ fn render_node_grid(
             width: indicator_width,
             height: 1,
         };
+        
+        // Yellow color during editing mode, green otherwise
+        let indicator_color = if in_creation {
+            Color::Yellow
+        } else {
+            Color::Green
+        };
+        
         let indicator_widget = Paragraph::new(indicator_text)
-            .style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
+            .style(Style::default().fg(indicator_color).add_modifier(Modifier::BOLD));
         frame.render_widget(indicator_widget, indicator_area);
     }
 
@@ -182,7 +201,7 @@ fn render_node_grid(
     }
 
     // Render horizontal scrollbar if total nodes exceed viewport capacity (using ratatui's Scrollbar)
-    if total_nodes > nodes_fit_in_viewport {
+    if total_nodes_for_rendering > nodes_fit_in_viewport {
         let scrollbar_area = Rect {
             x: area.x + 1,
             y: area.y + area.height - 1,
@@ -191,7 +210,7 @@ fn render_node_grid(
         };
         // Calculate scrollbar max based on actual content vs viewport ratio
         // This ensures the thumb size reflects the actual visible portion
-        let scrollbar_max = total_nodes.saturating_sub(1).max(1);
+        let scrollbar_max = total_nodes_for_rendering.saturating_sub(1).max(1);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
             .thumb_symbol("━")  // Use thick horizontal line for occupied part
             .track_symbol(Some("─"));  // Use thin horizontal line for unoccupied part
@@ -358,8 +377,16 @@ fn render_node(
             Style::default()
         };
 
-        // Line 1: Port name (truncated to 10 chars max)
-        let name_display = truncate_text(port_name, 10);
+        // Line 1: Port name
+        // For UUID-based names (36 chars with hyphens), show only last 7 chars
+        // For other names, truncate to 10 chars max
+        let name_display = if port_name.len() == 36 && port_name.chars().filter(|c| *c == '-').count() == 4 {
+            // This looks like a UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+            // Show only the last 7 characters
+            port_name.chars().rev().take(7).collect::<String>().chars().rev().collect::<String>()
+        } else {
+            truncate_text(port_name, 10)
+        };
         let name_area = Rect {
             x: inner.x,
             y: inner.y,

@@ -156,9 +156,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 })?;
                 
                 let port_type_name = if port_type_index == 0 { "IPC" } else { "HTTP" };
-                let new_port_name = format!("virtual_{}", port_type_name.to_lowercase());
                 
-                log::info!("Creating new {} port: {}", port_type_name, new_port_name);
+                // Generate UUID v7 for unique port name
+                let uuid = uuid::Uuid::now_v7();
+                let new_port_name = uuid.to_string();
+                
+                log::info!("Creating new {} port with UUID: {}", port_type_name, new_port_name);
                 
                 // Create a new port entry (without starting it)
                 use crate::tui::status::port::{PortConfig, PortData, PortState, PortStatusIndicator};
