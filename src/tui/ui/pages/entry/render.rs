@@ -226,27 +226,30 @@ fn render_node(
     frame.render_widget(node_block, area);
 
     // Render status indicator on the border (top-right corner on the actual border)
-    // Position it at the border edge, not inside
-    if area.width >= 3 {
-        let indicator_x = area.x + area.width.saturating_sub(2);
+    // Position it at the border edge with spaces on both sides (moves it 2 positions left from corner)
+    if area.width >= 5 {
+        let indicator_x = area.x + area.width.saturating_sub(4);
         let indicator_y = area.y;
         let indicator_area = Rect {
             x: indicator_x,
             y: indicator_y,
-            width: 1,
+            width: 3,  // Space + indicator + space
             height: 1,
         };
         let indicator_color = match port_state {
             PortState::OccupiedByThis => Color::Green,
             _ => Color::Gray,
         };
-        let indicator_widget = Paragraph::new(status_indicator)
+        // Add spaces before and after the indicator for better positioning
+        let indicator_text = format!(" {} ", status_indicator);
+        let indicator_widget = Paragraph::new(indicator_text)
             .style(Style::default().fg(indicator_color));
         frame.render_widget(indicator_widget, indicator_area);
     }
 
     // Build node content with proper padding
-    if inner.height >= 4 && inner.width >= 3 {
+    // Node height is 5, so inner height is 3 (5 - 2 borders), which is enough for 2 lines of text
+    if inner.height >= 2 && inner.width >= 3 {
         // Line 1: Port name
         let port_suffix = lang().index.port_suffix.as_str();
         
@@ -318,7 +321,8 @@ fn render_editing_node(
     frame.render_widget(node_block, area);
 
     // Build node content with proper padding
-    if inner.height >= 4 && inner.width >= 3 {
+    // Node height is 5, so inner height is 3 (5 - 2 borders), which is enough for 2 lines of text
+    if inner.height >= 2 && inner.width >= 3 {
         // Calculate vertical centering for two lines of text
         let start_y = inner.y + (inner.height / 2).saturating_sub(1);
         
