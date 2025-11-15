@@ -257,6 +257,16 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                             break;
                         }
                     }
+                    
+                    // Check if there are any remaining pending writes
+                    let has_pending_writes = stations.iter().any(|s| !s.pending_writes.is_empty());
+                    
+                    // Update status indicator
+                    if !has_pending_writes {
+                        // No more pending writes, restore to Running status
+                        port.status_indicator = types::port::PortStatusIndicator::Running;
+                    }
+                    // If there are still pending writes, keep Syncing status
                 }
                 Ok(())
             })?;
