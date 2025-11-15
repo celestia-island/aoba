@@ -34,6 +34,7 @@ derive_struct! {
             error_loading_content: String = "error_loading_content".to_string(),
             err_modbus_config_empty: String = "err-modbus-config-empty".to_string(),
             port_suffix: String = "port_suffix".to_string(),
+            virtual_port_prefix: String = "virtual_port_prefix".to_string(),
             new_action: String = "new_action".to_string(),
             delete_action: String = "delete_action".to_string(),
             port_creation_new_label: String = "port_creation_new_label".to_string(),

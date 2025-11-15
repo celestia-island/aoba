@@ -378,12 +378,13 @@ fn render_node(
         };
 
         // Line 1: Port name
-        // For UUID-based names (36 chars with hyphens), show only last 7 chars
+        // For UUID-based names (36 chars with hyphens), show "虚拟" + last 7 chars
         // For other names, truncate to 10 chars max
         let name_display = if port_name.len() == 36 && port_name.chars().filter(|c| *c == '-').count() == 4 {
             // This looks like a UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-            // Show only the last 7 characters
-            port_name.chars().rev().take(7).collect::<String>().chars().rev().collect::<String>()
+            // Show "虚拟" prefix + last 7 characters
+            let last_7 = port_name.chars().rev().take(7).collect::<String>().chars().rev().collect::<String>();
+            format!("{} {}", lang().index.virtual_port_prefix, last_7)
         } else {
             truncate_text(port_name, 10)
         };

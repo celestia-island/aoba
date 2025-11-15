@@ -181,9 +181,18 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     
                     status.ports.order.push(new_port_name.clone());
                     status.ports.map.insert(new_port_name.clone(), new_port);
+                    
                     // Clear creation mode
                     status.temporarily.new_port_creation.active = false;
                     status.temporarily.new_port_creation.port_type_index = 0;
+                    
+                    // Set cursor to the newly created port (last in the list)
+                    let new_port_index = status.ports.order.len() - 1;
+                    status.page = Page::Entry {
+                        cursor: Some(types::cursor::EntryCursor::Com { index: new_port_index }),
+                        view_offset: 0,
+                    };
+                    
                     Ok(())
                 })?;
                 
