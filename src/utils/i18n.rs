@@ -36,6 +36,11 @@ derive_struct! {
             port_suffix: String = "port_suffix".to_string(),
             new_action: String = "new_action".to_string(),
             delete_action: String = "delete_action".to_string(),
+            port_creation_new_label: String = "port_creation_new_label".to_string(),
+            port_creation_ipc_pipe: String = "port_creation_ipc_pipe".to_string(),
+            port_creation_http_server: String = "port_creation_http_server".to_string(),
+            press_enter_confirm: String = "press_enter_confirm".to_string(),
+            press_esc_cancel_action: String = "press_esc_cancel_action".to_string(),
         },
 
         about: {

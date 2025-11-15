@@ -20,30 +20,26 @@ use crate::{
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     // Check if we're in creation mode
     let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
-    
+
     if in_creation {
-        // Show creation mode hints
-        let confirm_hint = if lang().index.title.contains("中") {
-            "Enter: 确认"
-        } else {
-            "Enter: Confirm"
-        };
-        let cancel_hint = if lang().index.title.contains("中") {
-            "Esc: 取消"
-        } else {
-            "Esc: Cancel"
-        };
-        Ok(vec![vec![
-            confirm_hint.to_string(),
-            cancel_hint.to_string(),
-        ]])
+        // Show creation mode hints using i18n
+        let confirm_hint = format!("Enter: {}", lang().index.press_enter_confirm.as_str());
+        let cancel_hint = format!("Esc: {}", lang().index.press_esc_cancel_action.as_str());
+        Ok(vec![vec![confirm_hint, cancel_hint]])
     } else {
         // Show normal mode hints
         Ok(vec![vec![
             format!("n: {}", lang().index.new_action.as_str()),
             format!("d: {}", lang().index.delete_action.as_str()),
             format!("a: {}", lang().index.about_label.as_str()),
-            format!("q: {}", lang().hotkeys.press_q_quit.as_str().replace("Press q to ", "")),
+            format!(
+                "q: {}",
+                lang()
+                    .hotkeys
+                    .press_q_quit
+                    .as_str()
+                    .replace("Press q to ", "")
+            ),
         ]])
     }
 }
@@ -53,28 +49,37 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let selection = read_status(|app| derive_selection_from_page(&app.page, &app.ports.order))?;
 
     // Get port list, cursor state, and new port creation state
-    let (ports_order, _cursor_opt, view_offset, in_creation, port_type_index) = read_status(|status| {
-        let cursor = if let Page::Entry { cursor, .. } = &status.page {
-            *cursor
-        } else {
-            None
-        };
-        let offset = if let Page::Entry { view_offset, .. } = &status.page {
-            *view_offset
-        } else {
-            0
-        };
-        Ok((
-            status.ports.order.clone(), 
-            cursor, 
-            offset,
-            status.temporarily.new_port_creation.active,
-            status.temporarily.new_port_creation.port_type_index,
-        ))
-    })?;
+    let (ports_order, _cursor_opt, view_offset, in_creation, port_type_index) =
+        read_status(|status| {
+            let cursor = if let Page::Entry { cursor, .. } = &status.page {
+                *cursor
+            } else {
+                None
+            };
+            let offset = if let Page::Entry { view_offset, .. } = &status.page {
+                *view_offset
+            } else {
+                0
+            };
+            Ok((
+                status.ports.order.clone(),
+                cursor,
+                offset,
+                status.temporarily.new_port_creation.active,
+                status.temporarily.new_port_creation.port_type_index,
+            ))
+        })?;
 
     // Render the full-screen canvas with nodes
-    render_node_grid(frame, area, &ports_order, selection, view_offset, in_creation, port_type_index)?;
+    render_node_grid(
+        frame,
+        area,
+        &ports_order,
+        selection,
+        view_offset,
+        in_creation,
+        port_type_index,
+    )?;
 
     Ok(())
 }
@@ -126,9 +131,7 @@ fn render_node_grid(
     };
 
     // Get port data for status indicators (Arc<PortData> is cloned cheaply)
-    let ports_map = read_status(|status| {
-        Ok(status.ports.map.clone())
-    })?;
+    let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
 
     // Render each node
     for (i, port_name) in ports_order.iter().enumerate() {
@@ -136,7 +139,8 @@ fn render_node_grid(
         let col = i % nodes_per_row;
 
         // Calculate node position
-        let x = inner_area.x + (col as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
+        let x =
+            inner_area.x + (col as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
         let y = inner_area.y + (row as u16 * (node_height + spacing));
 
         // Skip nodes outside the viewport
@@ -149,8 +153,10 @@ fn render_node_grid(
 
         // Create node area, clipping to viewport bounds
         let node_x = x.max(inner_area.x);
-        let node_width_visible = (x + node_width).min(inner_area.x + inner_area.width).saturating_sub(node_x);
-        
+        let node_width_visible = (x + node_width)
+            .min(inner_area.x + inner_area.width)
+            .saturating_sub(node_x);
+
         if node_width_visible == 0 {
             continue;
         }
@@ -165,22 +171,28 @@ fn render_node_grid(
         // Render the node
         render_node(frame, node_area, port_name, i == selection, &ports_map)?;
     }
-    
+
     // Render "editing" node if in creation mode
     if in_creation {
         let edit_node_index = ports_order.len();
         let row = edit_node_index / nodes_per_row;
         let col = edit_node_index % nodes_per_row;
-        
-        let x = inner_area.x + (col as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
+
+        let x =
+            inner_area.x + (col as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
         let y = inner_area.y + (row as u16 * (node_height + spacing));
-        
+
         // Only render if in viewport
-        if x + node_width >= inner_area.x && x < inner_area.x + inner_area.width
-            && y + node_height >= inner_area.y && y < inner_area.y + inner_area.height {
+        if x + node_width >= inner_area.x
+            && x < inner_area.x + inner_area.width
+            && y + node_height >= inner_area.y
+            && y < inner_area.y + inner_area.height
+        {
             let node_x = x.max(inner_area.x);
-            let node_width_visible = (x + node_width).min(inner_area.x + inner_area.width).saturating_sub(node_x);
-            
+            let node_width_visible = (x + node_width)
+                .min(inner_area.x + inner_area.width)
+                .saturating_sub(node_x);
+
             if node_width_visible > 0 {
                 let node_area = Rect {
                     x: node_x,
@@ -188,7 +200,7 @@ fn render_node_grid(
                     width: node_width_visible.min(node_width),
                     height: node_height.min(inner_area.height.saturating_sub(y - inner_area.y)),
                 };
-                
+
                 render_editing_node(frame, node_area, port_type_index)?;
             }
         }
@@ -230,12 +242,14 @@ fn render_node(
     // Determine status indicator
     let status_indicator = match port_state {
         PortState::OccupiedByThis => "●", // Filled circle
-        _ => "○", // Empty circle
+        _ => "○",                         // Empty circle
     };
 
     // Create node block with border
     let node_border_style = if is_selected {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Gray)
     };
@@ -263,22 +277,23 @@ fn render_node(
             PortState::OccupiedByThis => Color::Green,
             _ => Color::Gray,
         };
-        
+
         // Selection indicator: angle brackets around the circle when selected
         let indicator_text = if is_selected {
             format!(" > {} < ", status_indicator)
         } else {
             format!("   {}   ", status_indicator)
         };
-        
+
         let indicator_style = if is_selected {
-            Style::default().fg(indicator_color).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(indicator_color)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(indicator_color)
         };
-        
-        let indicator_widget = Paragraph::new(indicator_text)
-            .style(indicator_style);
+
+        let indicator_widget = Paragraph::new(indicator_text).style(indicator_style);
         frame.render_widget(indicator_widget, indicator_area);
     }
 
@@ -288,13 +303,13 @@ fn render_node(
     if inner.height >= 2 && inner.width >= 3 {
         // Line 1: Port name
         let port_suffix = lang().index.port_suffix.as_str();
-        
+
         // Calculate vertical centering for two lines of text
         let start_y = inner.y + (inner.height / 2).saturating_sub(1);
-        
+
         // First line: Port name (no selection brackets)
         let name_display = format!("{}", port_name);
-        
+
         let name_area = Rect {
             x: inner.x,
             y: start_y,
@@ -303,7 +318,9 @@ fn render_node(
         };
 
         let text_style = if is_selected {
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -312,17 +329,17 @@ fn render_node(
             .style(text_style)
             .alignment(Alignment::Center);
         frame.render_widget(name_widget, name_area);
-        
+
         // Second line: Port suffix (串口 or Port, no selection brackets)
         let suffix_display = format!("{}", port_suffix);
-        
+
         let suffix_area = Rect {
             x: inner.x,
             y: start_y + 1,
             width: inner.width,
             height: 1,
         };
-        
+
         let suffix_widget = Paragraph::new(suffix_display)
             .style(text_style)
             .alignment(Alignment::Center);
@@ -333,13 +350,11 @@ fn render_node(
 }
 
 /// Render the "editing" node for new port creation
-fn render_editing_node(
-    frame: &mut Frame,
-    area: Rect,
-    port_type_index: usize,
-) -> Result<()> {
+fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) -> Result<()> {
     // Create node block with border - always highlighted as it's being edited
-    let node_border_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+    let node_border_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
 
     let node_block = Block::default()
         .borders(Borders::ALL)
@@ -353,16 +368,11 @@ fn render_editing_node(
     if inner.height >= 2 && inner.width >= 3 {
         // Calculate vertical centering for two lines of text
         let start_y = inner.y + (inner.height / 2).saturating_sub(1);
-        
-        // First line: "新建" or "New"
-        let new_label = if lang().index.title.contains("中") {
-            "新建"
-        } else {
-            "New"
-        };
-        
-        let new_display = format!("{}", new_label);
-        
+
+        // First line: new port label using i18n
+        let new_label = lang().index.port_creation_new_label.as_str();
+        let new_display = new_label.to_string();
+
         let new_area = Rect {
             x: inner.x,
             y: start_y,
@@ -370,33 +380,34 @@ fn render_editing_node(
             height: 1,
         };
 
-        let text_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+        let text_style = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
 
         let new_widget = Paragraph::new(new_display)
             .style(text_style)
             .alignment(Alignment::Center);
         frame.render_widget(new_widget, new_area);
-        
+
         // Second line: Port type selector with outward-pointing brackets < option >
-        let port_types = if lang().index.title.contains("中") {
-            ["IPC 管道", "HTTP 服务器"]
-        } else {
-            ["IPC Pipe", "HTTP Server"]
-        };
-        
+        let port_types = [
+            lang().index.port_creation_ipc_pipe.as_str(),
+            lang().index.port_creation_http_server.as_str(),
+        ];
+
         let type_display = if port_type_index < port_types.len() {
             format!("< {} >", port_types[port_type_index])
         } else {
             format!("< {} >", port_types[0])
         };
-        
+
         let type_area = Rect {
             x: inner.x,
             y: start_y + 1,
             width: inner.width,
             height: 1,
         };
-        
+
         let type_widget = Paragraph::new(type_display)
             .style(text_style)
             .alignment(Alignment::Center);
