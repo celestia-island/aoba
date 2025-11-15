@@ -149,6 +149,12 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
                                     value: Some(path.clone()),
                                 })
                             }
+                            ModbusMasterDataSource::PortForwarding { source_port } => {
+                                Some(SerializableMasterSource {
+                                    kind: "port_forwarding".to_string(),
+                                    value: Some(source_port.clone()),
+                                })
+                            }
                         }
                     } else {
                         None
@@ -258,6 +264,9 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
                                 }),
                                 "ipc" => Some(ModbusMasterDataSource::IpcPipe {
                                     path: value.unwrap_or_default(),
+                                }),
+                                "port_forwarding" => Some(ModbusMasterDataSource::PortForwarding {
+                                    source_port: value.unwrap_or_default(),
                                 }),
                                 _ => None,
                             }

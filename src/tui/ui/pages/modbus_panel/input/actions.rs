@@ -113,7 +113,62 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-            // HttpServer uses numeric input, others use text input
+            // Check if it's PortForwarding - use Index selector, otherwise use text input
+            let (is_port_forwarding, current_source_port, all_ports, current_port) =
+                read_status(|status| {
+                    if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                        &status.page
+                    {
+                        if let Some(port_name) = status.ports.order.get(*selected_port) {
+                            if let Some(port_entry) = status.ports.map.get(port_name) {
+                                let types::port::PortConfig::Modbus { master_source, .. } =
+                                    &port_entry.config;
+                                if let types::modbus::ModbusMasterDataSource::PortForwarding {
+                                    source_port,
+                                } = master_source
+                                {
+                                    return Ok((
+                                        true,
+                                        source_port.clone(),
+                                        status.ports.order.clone(),
+                                        port_name.clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    Ok((false, String::new(), vec![], String::new()))
+                })?;
+
+            if is_port_forwarding {
+                // Use Index selector for PortForwarding
+                let available_ports: Vec<String> = all_ports
+                    .iter()
+                    .filter(|p| p.as_str() != current_port)
+                    .cloned()
+                    .collect();
+
+                if available_ports.is_empty() {
+                    // No other ports available - do nothing (show greyed hint)
+                    return Ok(());
+                }
+
+                // Find current index
+                let current_index = available_ports
+                    .iter()
+                    .position(|p| p == &current_source_port)
+                    .unwrap_or(0);
+
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer =
+                        types::ui::InputRawBuffer::Index(current_index);
+                    Ok(())
+                })?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                return Ok(());
+            }
+
+            // For other data sources, use text input
             let current_text = read_status(|status| {
                 if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
                     &status.page
