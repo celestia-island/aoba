@@ -84,7 +84,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     Ok(())
 }
 
-/// Render nodes in a horizontal grid layout with scrolling support
+/// Render nodes in a horizontal single-row layout with scrolling support
 fn render_node_grid(
     frame: &mut Frame,
     area: Rect,
@@ -102,23 +102,32 @@ fn render_node_grid(
     let inner_area = canvas_block.inner(area);
     frame.render_widget(canvas_block, area);
 
-    // Node dimensions: width includes border, so content width is width - 2
+    // Node dimensions: single line, horizontal only
     let node_width = 20u16; // Total width including borders
-    let node_height = 5u16; // Total height including borders
+    let node_height = 3u16; // Single line + borders (3 total)
     let spacing = 1u16; // Spacing between nodes
 
-    // Calculate how many nodes fit in the viewport
+    // Calculate total number of nodes (ports + editing node if in creation mode)
+    let total_nodes = if in_creation {
+        ports_order.len() + 1
+    } else {
+        ports_order.len()
+    };
+
+    // Calculate total content width for horizontal scrolling
+    let content_width = if total_nodes > 0 {
+        (node_width + spacing) * total_nodes as u16 - spacing // No trailing space after last node
+    } else {
+        0
+    };
+
+    // Get port data for status indicators
+    let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
+
+    // Calculate horizontal scroll offset to keep selected node visible
     let viewport_width = inner_area.width;
-    let nodes_per_row = ((viewport_width + spacing) / (node_width + spacing)).max(1) as usize;
-
-    // Calculate total content width for scrolling
-    let total_nodes = ports_order.len();
-    let content_width = (node_width + spacing) * total_nodes as u16;
-
-    // Determine horizontal scroll offset based on selection
-    let selected_col = selection % nodes_per_row;
     let horizontal_offset = if content_width > viewport_width {
-        let selected_x = selected_col as u16 * (node_width + spacing);
+        let selected_x = selection as u16 * (node_width + spacing);
         if selected_x < view_offset as u16 {
             selected_x
         } else if selected_x + node_width > view_offset as u16 + viewport_width {
@@ -130,28 +139,17 @@ fn render_node_grid(
         0
     };
 
-    // Get port data for status indicators (Arc<PortData> is cloned cheaply)
-    let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
-
-    // Render each node
+    // Render each port node in a single horizontal row
     for (i, port_name) in ports_order.iter().enumerate() {
-        let row = i / nodes_per_row;
-        let col = i % nodes_per_row;
+        let x = inner_area.x + (i as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
+        let y = inner_area.y;
 
-        // Calculate node position
-        let x =
-            inner_area.x + (col as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
-        let y = inner_area.y + (row as u16 * (node_height + spacing));
-
-        // Skip nodes outside the viewport
+        // Skip nodes outside the viewport horizontally
         if x + node_width < inner_area.x || x >= inner_area.x + inner_area.width {
             continue;
         }
-        if y + node_height < inner_area.y || y >= inner_area.y + inner_area.height {
-            continue;
-        }
 
-        // Create node area, clipping to viewport bounds
+        // Clip node to viewport bounds
         let node_x = x.max(inner_area.x);
         let node_width_visible = (x + node_width)
             .min(inner_area.x + inner_area.width)
@@ -165,29 +163,21 @@ fn render_node_grid(
             x: node_x,
             y,
             width: node_width_visible.min(node_width),
-            height: node_height.min(inner_area.height.saturating_sub(y - inner_area.y)),
+            height: node_height,
         };
 
         // Render the node
         render_node(frame, node_area, port_name, i == selection, &ports_map)?;
     }
 
-    // Render "editing" node if in creation mode
+    // Render "editing" node if in creation mode (at the end of the list)
     if in_creation {
         let edit_node_index = ports_order.len();
-        let row = edit_node_index / nodes_per_row;
-        let col = edit_node_index % nodes_per_row;
-
-        let x =
-            inner_area.x + (col as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
-        let y = inner_area.y + (row as u16 * (node_height + spacing));
+        let x = inner_area.x + (edit_node_index as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
+        let y = inner_area.y;
 
         // Only render if in viewport
-        if x + node_width >= inner_area.x
-            && x < inner_area.x + inner_area.width
-            && y + node_height >= inner_area.y
-            && y < inner_area.y + inner_area.height
-        {
+        if x + node_width >= inner_area.x && x < inner_area.x + inner_area.width {
             let node_x = x.max(inner_area.x);
             let node_width_visible = (x + node_width)
                 .min(inner_area.x + inner_area.width)
@@ -198,7 +188,7 @@ fn render_node_grid(
                     x: node_x,
                     y,
                     width: node_width_visible.min(node_width),
-                    height: node_height.min(inner_area.height.saturating_sub(y - inner_area.y)),
+                    height: node_height,
                 };
 
                 render_editing_node(frame, node_area, port_type_index)?;
@@ -206,7 +196,7 @@ fn render_node_grid(
         }
     }
 
-    // Render horizontal scrollbar if needed
+    // Render horizontal scrollbar if needed (using ratatui's Scrollbar)
     if content_width > viewport_width {
         let scrollbar_area = Rect {
             x: area.x + 1,
@@ -297,22 +287,15 @@ fn render_node(
         frame.render_widget(indicator_widget, indicator_area);
     }
 
-    // Build node content with proper padding
-    // Node height is 5, so inner height is 3 (5 - 2 borders), which is enough for 2 lines of text
+    // Build node content - single line only (node height is 3: top border + content + bottom border)
     // No angle brackets in the text - selection is shown via the indicator above
-    if inner.height >= 2 && inner.width >= 3 {
-        // Line 1: Port name
-        let port_suffix = lang().index.port_suffix.as_str();
-
-        // Calculate vertical centering for two lines of text
-        let start_y = inner.y + (inner.height / 2).saturating_sub(1);
-
-        // First line: Port name (no selection brackets)
+    if inner.height >= 1 && inner.width >= 3 {
+        // Single line: Port name only (no suffix to save space)
         let name_display = format!("{}", port_name);
 
-        let name_area = Rect {
+        let text_area = Rect {
             x: inner.x,
-            y: start_y,
+            y: inner.y, // Center vertically in the single line
             width: inner.width,
             height: 1,
         };
@@ -325,25 +308,10 @@ fn render_node(
             Style::default()
         };
 
-        let name_widget = Paragraph::new(name_display)
+        let text_widget = Paragraph::new(name_display)
             .style(text_style)
             .alignment(Alignment::Center);
-        frame.render_widget(name_widget, name_area);
-
-        // Second line: Port suffix (串口 or Port, no selection brackets)
-        let suffix_display = format!("{}", port_suffix);
-
-        let suffix_area = Rect {
-            x: inner.x,
-            y: start_y + 1,
-            width: inner.width,
-            height: 1,
-        };
-
-        let suffix_widget = Paragraph::new(suffix_display)
-            .style(text_style)
-            .alignment(Alignment::Center);
-        frame.render_widget(suffix_widget, suffix_area);
+        frame.render_widget(text_widget, text_area);
     }
 
     Ok(())
@@ -363,33 +331,9 @@ fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) ->
     let inner = node_block.inner(area);
     frame.render_widget(node_block, area);
 
-    // Build node content with proper padding
-    // Node height is 5, so inner height is 3 (5 - 2 borders), which is enough for 2 lines of text
-    if inner.height >= 2 && inner.width >= 3 {
-        // Calculate vertical centering for two lines of text
-        let start_y = inner.y + (inner.height / 2).saturating_sub(1);
-
-        // First line: new port label using i18n
-        let new_label = lang().index.port_creation_new_label.as_str();
-        let new_display = new_label.to_string();
-
-        let new_area = Rect {
-            x: inner.x,
-            y: start_y,
-            width: inner.width,
-            height: 1,
-        };
-
-        let text_style = Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD);
-
-        let new_widget = Paragraph::new(new_display)
-            .style(text_style)
-            .alignment(Alignment::Center);
-        frame.render_widget(new_widget, new_area);
-
-        // Second line: Port type selector with outward-pointing brackets < option >
+    // Build node content - single line only (node height is 3: top border + content + bottom border)
+    if inner.height >= 1 && inner.width >= 3 {
+        // Single line: Port type selector with outward-pointing brackets < option >
         let port_types = [
             lang().index.port_creation_ipc_pipe.as_str(),
             lang().index.port_creation_http_server.as_str(),
@@ -401,17 +345,21 @@ fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) ->
             format!("< {} >", port_types[0])
         };
 
-        let type_area = Rect {
+        let text_area = Rect {
             x: inner.x,
-            y: start_y + 1,
+            y: inner.y, // Center vertically in the single line
             width: inner.width,
             height: 1,
         };
 
-        let type_widget = Paragraph::new(type_display)
+        let text_style = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
+
+        let text_widget = Paragraph::new(type_display)
             .style(text_style)
             .alignment(Alignment::Center);
-        frame.render_widget(type_widget, type_area);
+        frame.render_widget(text_widget, text_area);
     }
 
     Ok(())
