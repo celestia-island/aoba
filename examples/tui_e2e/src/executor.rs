@@ -502,7 +502,7 @@ async fn execute_step_group_with_retry(
 /// Capture screenshot from current TUI state
 async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
     match ctx.mode {
-        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(80, 50),
+        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(120, 50),
         ExecutionMode::DrillDown => {
             if let Some(sender) = ctx.ipc_sender.as_mut() {
                 let (content, _width, _height) =
