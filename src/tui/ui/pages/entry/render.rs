@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     tui::{
         status::{
-            port::{PortData, PortState},
+            port::{ PortData, PortState},
             read_status, Page,
         },
         ui::pages::entry::components::derive_selection_from_page,
@@ -78,6 +78,28 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     Ok(())
 }
 
+/// Calculate the height needed for a node based on its station count
+fn calculate_node_height(
+    port_name: &str,
+    ports_map: &std::collections::HashMap<String, PortData>,
+) -> u16 {
+    // Base height: 2 content lines (name + type) + 2 border lines = 4
+    let base_height = 4u16;
+    
+    // Get station count for ports that are OccupiedByThis
+    if let Some(port_data) = ports_map.get(port_name) {
+        if port_data.state.is_occupied_by_this() {
+            if let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config {
+                let station_count = stations.len() as u16;
+                // Add one line per station
+                return base_height + station_count;
+            }
+        }
+    }
+    
+    base_height
+}
+
 /// Render nodes in a horizontal single-row layout with scrolling support
 fn render_node_grid(
     frame: &mut Frame,
@@ -96,10 +118,12 @@ fn render_node_grid(
     let inner_area = canvas_block.inner(area);
     frame.render_widget(canvas_block, area);
 
-    // Node dimensions: two lines (name + type), horizontal only
+    // Node dimensions
     let node_width = 20u16; // Total width including borders
-    let node_height = 4u16; // Two lines + borders (4 total)
     let spacing = 1u16; // Spacing between nodes
+    
+    // Get port data for calculating heights
+    let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
 
     // Calculate total number of nodes for rendering (ports + editing node if in creation mode)
     let total_nodes_for_rendering = if in_creation {
@@ -107,9 +131,6 @@ fn render_node_grid(
     } else {
         ports_order.len()
     };
-
-    // Get port data for status indicators
-    let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
 
     // Calculate how many nodes fit in the viewport
     let viewport_width = inner_area.width;
@@ -173,11 +194,18 @@ fn render_node_grid(
             break;
         }
 
+        // Calculate height for this specific node
+        let node_height = calculate_node_height(port_name, &ports_map);
+        
+        // Ensure node doesn't exceed available height
+        let available_height = inner_area.height;
+        let actual_node_height = node_height.min(available_height);
+
         let node_area = Rect {
             x,
             y,
             width: node_width,
-            height: node_height,
+            height: actual_node_height,
         };
 
         // Render the node
@@ -203,7 +231,7 @@ fn render_node_grid(
                     x,
                     y,
                     width: node_width,
-                    height: node_height,
+                    height: 4u16, // Base height for editing node
                 };
 
                 render_editing_node(frame, node_area, port_type_index)?;
@@ -289,11 +317,23 @@ fn render_node(
     is_selected: bool,
     ports_map: &std::collections::HashMap<String, PortData>,
 ) -> Result<()> {
-    // Get port state
-    let port_state = ports_map
-        .get(port_name)
-        .map(|p| p.state.clone())
-        .unwrap_or(PortState::Free);
+    // Get port data
+    let (port_state, port_type, stations) = if let Some(port_data) = ports_map.get(port_name) {
+        let state = port_data.state.clone();
+        let ptype = port_data.port_type.clone();
+        let stations = if state.is_occupied_by_this() {
+            if let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config {
+                Some(stations.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        (state, ptype, stations)
+    } else {
+        (PortState::Free, String::new(), None)
+    };
 
     // Determine status indicator
     let status_indicator = match port_state {
@@ -356,12 +396,6 @@ fn render_node(
     // Build node content - two lines (node height is 4: top border + 2 content lines + bottom border)
     // No angle brackets in the text - selection is shown via the indicator above
     if inner.height >= 2 && inner.width >= 3 {
-        // Get port type from port data
-        let port_type = ports_map
-            .get(port_name)
-            .map(|p| p.port_type.as_str())
-            .unwrap_or("");
-
         // Determine port type display label
         let port_type_label = if port_type.contains("http") || port_type.contains("HTTP") {
             if lang().index.title.contains("中") {
@@ -430,9 +464,63 @@ fn render_node(
             .style(text_style)
             .alignment(Alignment::Center);
         frame.render_widget(type_widget, type_area);
+        
+        // Lines 3+: Connected stations (if any)
+        if let Some(stations) = stations {
+            if !stations.is_empty() {
+                let station_style = Style::default().fg(Color::Cyan);
+                let mut current_y = inner.y + 2;
+                
+                for (idx, station) in stations.iter().enumerate() {
+                    if current_y >= inner.y + inner.height {
+                        break; // No more space
+                    }
+                    
+                    // Determine the timeline character (├─ for intermediate, └─ for last)
+                    let timeline_char = if idx == stations.len() - 1 {
+                        "└─"
+                    } else {
+                        "├─"
+                    };
+                    
+                    // Format station info: " ├─ St.1:Coils "
+                    let station_text = format!(
+                        " {} St.{}:{}",
+                        timeline_char,
+                        station.station_id,
+                        format_register_mode_short(&station.register_mode)
+                    );
+                    
+                    let station_area = Rect {
+                        x: inner.x,
+                        y: current_y,
+                        width: inner.width,
+                        height: 1,
+                    };
+                    
+                    let station_widget = Paragraph::new(station_text)
+                        .style(station_style)
+                        .alignment(Alignment::Left);
+                    frame.render_widget(station_widget, station_area);
+                    
+                    current_y += 1;
+                }
+            }
+        }
     }
 
     Ok(())
+}
+
+/// Format register mode in a short form for display
+fn format_register_mode_short(mode: &crate::tui::status::modbus::RegisterMode) -> String {
+    use crate::tui::status::modbus::RegisterMode;
+    match mode {
+        RegisterMode::Coils => "Coils".to_string(),
+        RegisterMode::DiscreteInputs => "DI".to_string(),
+        RegisterMode::Holding => "Hold".to_string(),
+        RegisterMode::Input => "Input".to_string(),
+    }
 }
 
 /// Render the "editing" node for new port creation
