@@ -90,7 +90,7 @@ fn render_node_grid(
     area: Rect,
     ports_order: &[String],
     selection: usize,
-    view_offset: usize,
+    _view_offset: usize,
     in_creation: bool,
     port_type_index: usize,
 ) -> Result<()> {
@@ -102,9 +102,9 @@ fn render_node_grid(
     let inner_area = canvas_block.inner(area);
     frame.render_widget(canvas_block, area);
 
-    // Node dimensions: single line, horizontal only
+    // Node dimensions: two lines (name + type), horizontal only
     let node_width = 20u16; // Total width including borders
-    let node_height = 3u16; // Single line + borders (3 total)
+    let node_height = 4u16; // Two lines + borders (4 total)
     let spacing = 1u16; // Spacing between nodes
 
     // Calculate total number of nodes (ports + editing node if in creation mode)
@@ -114,55 +114,51 @@ fn render_node_grid(
         ports_order.len()
     };
 
-    // Calculate total content width for horizontal scrolling
-    let content_width = if total_nodes > 0 {
-        (node_width + spacing) * total_nodes as u16 - spacing // No trailing space after last node
-    } else {
-        0
-    };
-
     // Get port data for status indicators
     let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
 
-    // Calculate horizontal scroll offset to keep selected node visible
+    // Calculate how many nodes fit in the viewport
     let viewport_width = inner_area.width;
-    let horizontal_offset = if content_width > viewport_width {
-        let selected_x = selection as u16 * (node_width + spacing);
-        if selected_x < view_offset as u16 {
-            selected_x
-        } else if selected_x + node_width > view_offset as u16 + viewport_width {
-            (selected_x + node_width).saturating_sub(viewport_width)
-        } else {
-            view_offset as u16
-        }
-    } else {
-        0
-    };
+    let nodes_fit_in_viewport = (viewport_width / (node_width + spacing)).max(1) as usize;
 
-    // Render each port node in a single horizontal row
-    for (i, port_name) in ports_order.iter().enumerate() {
-        let x = inner_area.x + (i as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
+    // Smart viewport rendering strategy based on selection position
+    let (start_index, end_index) = calculate_visible_range(
+        selection,
+        total_nodes,
+        nodes_fit_in_viewport,
+    );
+
+    // Render position indicator in top-right corner
+    if total_nodes > 0 {
+        let indicator_text = format!(" {} / {} ", selection + 1, total_nodes);
+        let indicator_width = indicator_text.len() as u16;
+        let indicator_area = Rect {
+            x: area.x + area.width.saturating_sub(indicator_width + 1),
+            y: area.y,
+            width: indicator_width,
+            height: 1,
+        };
+        let indicator_widget = Paragraph::new(indicator_text)
+            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+        frame.render_widget(indicator_widget, indicator_area);
+    }
+
+    // Render only the visible nodes based on calculated range
+    for i in start_index..end_index.min(ports_order.len()) {
+        let node_position_in_view = i - start_index;
+        let x = inner_area.x + (node_position_in_view as u16 * (node_width + spacing));
         let y = inner_area.y;
 
-        // Skip nodes outside the viewport horizontally
-        if x + node_width < inner_area.x || x >= inner_area.x + inner_area.width {
-            continue;
+        // Skip if no room
+        if x + node_width > inner_area.x + inner_area.width {
+            break;
         }
 
-        // Clip node to viewport bounds
-        let node_x = x.max(inner_area.x);
-        let node_width_visible = (x + node_width)
-            .min(inner_area.x + inner_area.width)
-            .saturating_sub(node_x);
-
-        if node_width_visible == 0 {
-            continue;
-        }
-
+        let port_name = &ports_order[i];
         let node_area = Rect {
-            x: node_x,
+            x,
             y,
-            width: node_width_visible.min(node_width),
+            width: node_width,
             height: node_height,
         };
 
@@ -170,24 +166,19 @@ fn render_node_grid(
         render_node(frame, node_area, port_name, i == selection, &ports_map)?;
     }
 
-    // Render "editing" node if in creation mode (at the end of the list)
-    if in_creation {
+    // Render "editing" node if in creation mode and it's in visible range
+    if in_creation && end_index > ports_order.len() {
         let edit_node_index = ports_order.len();
-        let x = inner_area.x + (edit_node_index as u16 * (node_width + spacing)).saturating_sub(horizontal_offset);
-        let y = inner_area.y;
+        if edit_node_index >= start_index {
+            let node_position_in_view = edit_node_index - start_index;
+            let x = inner_area.x + (node_position_in_view as u16 * (node_width + spacing));
+            let y = inner_area.y;
 
-        // Only render if in viewport
-        if x + node_width >= inner_area.x && x < inner_area.x + inner_area.width {
-            let node_x = x.max(inner_area.x);
-            let node_width_visible = (x + node_width)
-                .min(inner_area.x + inner_area.width)
-                .saturating_sub(node_x);
-
-            if node_width_visible > 0 {
+            if x + node_width <= inner_area.x + inner_area.width {
                 let node_area = Rect {
-                    x: node_x,
+                    x,
                     y,
-                    width: node_width_visible.min(node_width),
+                    width: node_width,
                     height: node_height,
                 };
 
@@ -196,23 +187,67 @@ fn render_node_grid(
         }
     }
 
-    // Render horizontal scrollbar if needed (using ratatui's Scrollbar)
-    if content_width > viewport_width {
+    // Render horizontal scrollbar if total nodes exceed viewport capacity (using ratatui's Scrollbar)
+    if total_nodes > nodes_fit_in_viewport {
         let scrollbar_area = Rect {
             x: area.x + 1,
             y: area.y + area.height - 1,
             width: area.width - 2,
             height: 1,
         };
-        let scrollbar_max = content_width.saturating_sub(viewport_width) as usize;
+        let scrollbar_max = (total_nodes - nodes_fit_in_viewport).max(1);
         frame.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::HorizontalBottom),
             scrollbar_area,
-            &mut ScrollbarState::new(scrollbar_max).position(horizontal_offset as usize),
+            &mut ScrollbarState::new(scrollbar_max).position(start_index),
         );
     }
 
     Ok(())
+}
+
+/// Calculate the visible range of nodes based on selection position
+/// Strategy:
+/// - First 2 positions: show from start
+/// - Last 2 positions: show from end  
+/// - Middle positions: selected node at 3rd position (index 2 in view)
+fn calculate_visible_range(
+    selection: usize,
+    total_nodes: usize,
+    nodes_fit: usize,
+) -> (usize, usize) {
+    if total_nodes <= nodes_fit {
+        // All nodes fit, show everything
+        return (0, total_nodes);
+    }
+
+    // Selection at beginning (first 2 positions)
+    if selection < 2 {
+        return (0, nodes_fit);
+    }
+
+    // Selection at end (last 2 positions)
+    if selection >= total_nodes.saturating_sub(2) {
+        return (total_nodes.saturating_sub(nodes_fit), total_nodes);
+    }
+
+    // Selection in middle: place selected node at position 2 (3rd from left)
+    // This ensures at least 2 nodes before the selected one
+    let start = selection.saturating_sub(2);
+    let end = (start + nodes_fit).min(total_nodes);
+    (start, end)
+}
+
+/// Truncate text to max 10 characters with ellipsis
+fn truncate_text(text: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max_chars {
+        text.to_string()
+    } else {
+        // Take first 7 chars + "..."
+        let truncated: String = chars.iter().take(7).collect();
+        format!("{}...", truncated)
+    }
 }
 
 /// Render a single port node
@@ -287,17 +322,31 @@ fn render_node(
         frame.render_widget(indicator_widget, indicator_area);
     }
 
-    // Build node content - single line only (node height is 3: top border + content + bottom border)
+    // Build node content - two lines (node height is 4: top border + 2 content lines + bottom border)
     // No angle brackets in the text - selection is shown via the indicator above
-    if inner.height >= 1 && inner.width >= 3 {
-        // Single line: Port name only (no suffix to save space)
-        let name_display = format!("{}", port_name);
-
-        let text_area = Rect {
-            x: inner.x,
-            y: inner.y, // Center vertically in the single line
-            width: inner.width,
-            height: 1,
+    if inner.height >= 2 && inner.width >= 3 {
+        // Get port type from port data
+        let port_type = ports_map
+            .get(port_name)
+            .map(|p| p.port_type.as_str())
+            .unwrap_or("");
+        
+        // Determine port type display label
+        let port_type_label = if port_type.contains("http") || port_type.contains("HTTP") {
+            if lang().index.title.contains("中") {
+                "HTTP 服务器"
+            } else {
+                "HTTP Server"
+            }
+        } else if port_type.contains("ipc") || port_type.contains("IPC") {
+            if lang().index.title.contains("中") {
+                "IPC 管道"
+            } else {
+                "IPC Pipe"
+            }
+        } else {
+            // Default to serial port
+            lang().index.port_suffix.as_str()
         };
 
         let text_style = if is_selected {
@@ -308,10 +357,31 @@ fn render_node(
             Style::default()
         };
 
-        let text_widget = Paragraph::new(name_display)
+        // Line 1: Port name (truncated to 10 chars max)
+        let name_display = truncate_text(port_name, 10);
+        let name_area = Rect {
+            x: inner.x,
+            y: inner.y,
+            width: inner.width,
+            height: 1,
+        };
+        let name_widget = Paragraph::new(name_display)
             .style(text_style)
             .alignment(Alignment::Center);
-        frame.render_widget(text_widget, text_area);
+        frame.render_widget(name_widget, name_area);
+
+        // Line 2: Port type (truncated to 10 chars max)
+        let type_display = truncate_text(port_type_label, 10);
+        let type_area = Rect {
+            x: inner.x,
+            y: inner.y + 1,
+            width: inner.width,
+            height: 1,
+        };
+        let type_widget = Paragraph::new(type_display)
+            .style(text_style)
+            .alignment(Alignment::Center);
+        frame.render_widget(type_widget, type_area);
     }
 
     Ok(())
@@ -331,35 +401,52 @@ fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) ->
     let inner = node_block.inner(area);
     frame.render_widget(node_block, area);
 
-    // Build node content - single line only (node height is 3: top border + content + bottom border)
-    if inner.height >= 1 && inner.width >= 3 {
-        // Single line: Port type selector with outward-pointing brackets < option >
+    // Build node content - two lines (node height is 4: top border + 2 content lines + bottom border)
+    if inner.height >= 2 && inner.width >= 3 {
+        let text_style = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
+
+        // Line 1: "新建" label
+        let new_label = if lang().index.title.contains("中") {
+            "新建"
+        } else {
+            "New"
+        };
+        let new_area = Rect {
+            x: inner.x,
+            y: inner.y,
+            width: inner.width,
+            height: 1,
+        };
+        let new_widget = Paragraph::new(new_label)
+            .style(text_style)
+            .alignment(Alignment::Center);
+        frame.render_widget(new_widget, new_area);
+
+        // Line 2: Port type selector with outward-pointing brackets < option >
         let port_types = [
             lang().index.port_creation_ipc_pipe.as_str(),
             lang().index.port_creation_http_server.as_str(),
         ];
 
         let type_display = if port_type_index < port_types.len() {
-            format!("< {} >", port_types[port_type_index])
+            format!("< {} >", truncate_text(port_types[port_type_index], 10))
         } else {
-            format!("< {} >", port_types[0])
+            format!("< {} >", truncate_text(port_types[0], 10))
         };
 
-        let text_area = Rect {
+        let type_area = Rect {
             x: inner.x,
-            y: inner.y, // Center vertically in the single line
+            y: inner.y + 1,
             width: inner.width,
             height: 1,
         };
 
-        let text_style = Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD);
-
-        let text_widget = Paragraph::new(type_display)
+        let type_widget = Paragraph::new(type_display)
             .style(text_style)
             .alignment(Alignment::Center);
-        frame.render_widget(text_widget, text_area);
+        frame.render_widget(type_widget, type_area);
     }
 
     Ok(())
