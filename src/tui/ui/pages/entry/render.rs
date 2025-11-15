@@ -299,18 +299,18 @@ fn render_node(
     ports_map: &std::collections::HashMap<String, PortData>,
 ) -> Result<()> {
     // Get port data
-    let (port_state, port_type, stations) = if let Some(port_data) = ports_map.get(port_name) {
+    let (port_state, port_type, stations, master_source) = if let Some(port_data) = ports_map.get(port_name) {
         let state = port_data.state.clone();
         let ptype = port_data.port_type.clone();
-        let stations = if state.is_occupied_by_this() {
-            let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config;
-            Some(stations.clone())
+        let (stations, master_source) = if state.is_occupied_by_this() {
+            let crate::tui::status::port::PortConfig::Modbus { stations, master_source, .. } = &port_data.config;
+            (Some(stations.clone()), Some(master_source.clone()))
         } else {
-            None
+            (None, None)
         };
-        (state, ptype, stations)
+        (state, ptype, stations, master_source)
     } else {
-        (PortState::Free, String::new(), None)
+        (PortState::Free, String::new(), None, None)
     };
 
     // Determine status indicator
@@ -445,26 +445,32 @@ fn render_node(
     }
 
     // Render connected stations outside the box (below the node)
+    // Start rendering below the node box
+    let mut current_y = area.y + area.height;
+
+    // First, render stations if any
     if let Some(stations) = stations {
         if !stations.is_empty() {
             let station_style = Style::default().fg(Color::Cyan);
-            // Start rendering below the node box
-            let mut current_y = area.y + area.height;
 
-            for (idx, station) in stations.iter().enumerate() {
-                // Determine the timeline character (├─ for intermediate, └─ for last)
-                let timeline_char = if idx == stations.len() - 1 {
+            for (idx, _station) in stations.iter().enumerate() {
+                // Determine the timeline character (├─ for intermediate, └─ for last, considering references below)
+                let has_references = master_source.as_ref()
+                    .map(|ms| matches!(ms, crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding { .. }))
+                    .unwrap_or(false);
+
+                let is_last = !has_references && idx == stations.len() - 1;
+                let timeline_char = if is_last {
                     "└─"
                 } else {
                     "├─"
                 };
 
-                // Format station info: " ├─ St.1:Coils "
+                // Show station as port name (current port) instead of "St.N"
                 let station_text = format!(
-                    " {} St.{}:{}",
+                    " {} {}",
                     timeline_char,
-                    station.station_id,
-                    format_register_mode_short(&station.register_mode)
+                    format_port_name_for_display(port_name)
                 );
 
                 let station_area = Rect {
@@ -484,17 +490,82 @@ fn render_node(
         }
     }
 
+    // Then, render port forwarding reference if present
+    if let Some(master_source) = master_source {
+        if let crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding { source_port } = master_source {
+            if !source_port.is_empty() {
+                let reference_style = Style::default().fg(Color::Green);
+
+                // This port references source_port (consumes data from it)
+                // Show left arrow: ├<─ source_port
+                let reference_text = format!(
+                    " ├<─ {}",
+                    format_port_name_for_display(&source_port)
+                );
+
+                let reference_area = Rect {
+                    x: area.x,
+                    y: current_y,
+                    width: area.width,
+                    height: 1,
+                };
+
+                let reference_widget = Paragraph::new(reference_text)
+                    .style(reference_style)
+                    .alignment(Alignment::Left);
+                frame.render_widget(reference_widget, reference_area);
+
+                current_y += 1;
+            }
+        }
+    }
+
+    // Finally, check if any other port references this port (this port is a data source)
+    // Scan all ports to see if any of them have PortForwarding pointing to this port
+    for (other_port_name, other_port_data) in ports_map.iter() {
+        if other_port_name != port_name && other_port_data.state.is_occupied_by_this() {
+            let crate::tui::status::port::PortConfig::Modbus { master_source: other_master_source, .. } = &other_port_data.config;
+            if let crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding { source_port } = other_master_source {
+                if source_port == port_name {
+                    // Other port references this port (this port is the data source)
+                    // Show right arrow: ├─> other_port_name
+                    let reference_style = Style::default().fg(Color::Green);
+                    let reference_text = format!(
+                        " ├─> {}",
+                        format_port_name_for_display(other_port_name)
+                    );
+
+                    let reference_area = Rect {
+                        x: area.x,
+                        y: current_y,
+                        width: area.width,
+                        height: 1,
+                    };
+
+                    let reference_widget = Paragraph::new(reference_text)
+                        .style(reference_style)
+                        .alignment(Alignment::Left);
+                    frame.render_widget(reference_widget, reference_area);
+
+                    current_y += 1;
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
-/// Format register mode in a short form for display
-fn format_register_mode_short(mode: &crate::tui::status::modbus::RegisterMode) -> String {
-    use crate::tui::status::modbus::RegisterMode;
-    match mode {
-        RegisterMode::Coils => "Coils".to_string(),
-        RegisterMode::DiscreteInputs => "DI".to_string(),
-        RegisterMode::Holding => "Hold".to_string(),
-        RegisterMode::Input => "Input".to_string(),
+/// Format port name for display: show last 7 chars for UUIDs, full name otherwise
+fn format_port_name_for_display(port_name: &str) -> String {
+    // Check if this looks like a UUID (36 chars with 4 hyphens)
+    if port_name.len() == 36 && port_name.chars().filter(|c| *c == '-').count() == 4 {
+        // Show last 7 characters for UUID
+        port_name.chars().rev().take(7).collect::<String>()
+            .chars().rev().collect()
+    } else {
+        // Show full name for regular serial ports
+        port_name.to_string()
     }
 }
 
