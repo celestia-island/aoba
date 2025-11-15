@@ -52,7 +52,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Left | KeyCode::Char('h') => {
             // Check if we're in new port creation mode
-            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+            let in_creation =
+                read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
             if in_creation {
                 // Toggle port type selection
                 write_status(|status| {
@@ -74,7 +75,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Right | KeyCode::Char('l') => {
             // Check if we're in new port creation mode
-            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+            let in_creation =
+                read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
             if in_creation {
                 // Toggle port type selection (0 = IPC, 1 = HTTP, max 1)
                 write_status(|status| {
@@ -103,7 +105,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         Ok(())
                     })?;
                 } else {
-                    handle_move_next(cursor_opt.unwrap_or(types::cursor::EntryCursor::Com { index: 0 }))?;
+                    handle_move_next(
+                        cursor_opt.unwrap_or(types::cursor::EntryCursor::Com { index: 0 }),
+                    )?;
                 }
             }
 
@@ -123,7 +127,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             write_status(|status| {
                 status.temporarily.new_port_creation.active = true;
                 status.temporarily.new_port_creation.port_type_index = 0;
-                
+
                 // Automatically navigate cursor to the editing node
                 status.page = Page::Entry {
                     cursor: Some(types::cursor::EntryCursor::CreateVirtual),
@@ -138,7 +142,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             log::info!("Port deletion requested - feature not yet fully implemented");
             write_status(|status| {
                 status.temporarily.error = Some(crate::tui::status::ErrorInfo {
-                    message: "Port deletion is not yet implemented. Ports are managed by the system.".to_string(),
+                    message:
+                        "Port deletion is not yet implemented. Ports are managed by the system."
+                            .to_string(),
                     timestamp: chrono::Local::now(),
                 });
                 Ok(())
@@ -147,59 +153,76 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Enter => {
             // Check if we're in new port creation mode
-            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
-            
+            let in_creation =
+                read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+
             if in_creation {
                 // Confirm port creation
-                let port_type_index = read_status(|status| {
-                    Ok(status.temporarily.new_port_creation.port_type_index)
-                })?;
-                
+                let port_type_index =
+                    read_status(|status| Ok(status.temporarily.new_port_creation.port_type_index))?;
+
                 let port_type_name = if port_type_index == 0 { "IPC" } else { "HTTP" };
-                
+
                 // Generate UUID v7 for unique port name
                 let uuid = uuid::Uuid::now_v7();
                 let new_port_name = uuid.to_string();
-                
-                log::info!("Creating new {} port with UUID: {}", port_type_name, new_port_name);
-                
+
+                log::info!(
+                    "Creating new {} port with UUID: {}",
+                    port_type_name,
+                    new_port_name
+                );
+
                 // Create a new port entry (without starting it)
-                use crate::tui::status::port::{PortConfig, PortData, PortState, PortStatusIndicator};
-                
+                use crate::tui::status::port::{
+                    PortConfig, PortData, PortState, PortStatusIndicator,
+                };
+
                 // Add to ports
                 write_status(|status| {
-                    let mut new_port = PortData::default();
-                    new_port.port_name = new_port_name.clone();
-                    new_port.port_type = port_type_name.to_string();
-                    new_port.state = PortState::Free;
-                    new_port.status_indicator = PortStatusIndicator::NotStarted;
-                    new_port.config = PortConfig::Modbus {
-                        mode: crate::tui::status::modbus::ModbusConnectionMode::default_master(),
-                        master_source: Default::default(),
-                        stations: Vec::new(),
+                    let new_port = PortData {
+                        port_name: new_port_name.clone(),
+                        port_type: port_type_name.to_string(),
+                        extra: Default::default(),
+                        state: PortState::Free,
+                        subprocess_info: None,
+                        serial_config: Default::default(),
+                        config: PortConfig::Modbus {
+                            mode: crate::tui::status::modbus::ModbusConnectionMode::default_master(
+                            ),
+                            master_source: Default::default(),
+                            stations: Vec::new(),
+                        },
+                        logs: Vec::new(),
+                        log_auto_scroll: true,
+                        log_clear_pending: false,
+                        status_indicator: PortStatusIndicator::NotStarted,
+                        config_modified: false,
                     };
-                    
+
                     status.ports.order.push(new_port_name.clone());
                     status.ports.map.insert(new_port_name.clone(), new_port);
-                    
+
                     // Clear creation mode
                     status.temporarily.new_port_creation.active = false;
                     status.temporarily.new_port_creation.port_type_index = 0;
-                    
+
                     // Set cursor to the newly created port (last in the list)
                     let new_port_index = status.ports.order.len() - 1;
                     status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com { index: new_port_index }),
+                        cursor: Some(types::cursor::EntryCursor::Com {
+                            index: new_port_index,
+                        }),
                         view_offset: 0,
                     };
-                    
+
                     Ok(())
                 })?;
-                
+
                 bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                 return Ok(());
             }
-            
+
             let cursor = read_status(|status| {
                 if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
                     Ok(*cursor)
@@ -288,8 +311,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Esc => {
             // Check if we're in new port creation mode
-            let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
-            
+            let in_creation =
+                read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
+
             if in_creation {
                 // Cancel creation
                 write_status(|status| {

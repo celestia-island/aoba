@@ -116,11 +116,8 @@ fn render_node_grid(
     let nodes_fit_in_viewport = (viewport_width / (node_width + spacing)).max(1) as usize;
 
     // Smart viewport rendering strategy based on selection position
-    let (start_index, end_index) = calculate_visible_range(
-        selection,
-        total_nodes_for_rendering,
-        nodes_fit_in_viewport,
-    );
+    let (start_index, end_index) =
+        calculate_visible_range(selection, total_nodes_for_rendering, nodes_fit_in_viewport);
 
     // Render position indicator in top-right corner
     // In editing mode: keep count at ports_order.len(), show yellow color
@@ -130,11 +127,11 @@ fn render_node_grid(
         // During editing mode, selection points to CreateVirtual which is at ports_order.len() + 1
         // So we need to calculate the display position differently
         let display_position = if in_creation {
-            actual_port_count  // Show the last real port's position
+            actual_port_count // Show the last real port's position
         } else {
             selection + 1
         };
-        
+
         let indicator_text = format!(" {} / {} ", display_position, actual_port_count);
         let indicator_width = indicator_text.len() as u16;
         let indicator_area = Rect {
@@ -143,21 +140,30 @@ fn render_node_grid(
             width: indicator_width,
             height: 1,
         };
-        
+
         // Yellow color during editing mode, green otherwise
         let indicator_color = if in_creation {
             Color::Yellow
         } else {
             Color::Green
         };
-        
-        let indicator_widget = Paragraph::new(indicator_text)
-            .style(Style::default().fg(indicator_color).add_modifier(Modifier::BOLD));
+
+        let indicator_widget = Paragraph::new(indicator_text).style(
+            Style::default()
+                .fg(indicator_color)
+                .add_modifier(Modifier::BOLD),
+        );
         frame.render_widget(indicator_widget, indicator_area);
     }
 
     // Render only the visible nodes based on calculated range
-    for i in start_index..end_index.min(ports_order.len()) {
+    let end_idx = end_index.min(ports_order.len());
+    for (i, port_name) in ports_order
+        .iter()
+        .enumerate()
+        .skip(start_index)
+        .take(end_idx.saturating_sub(start_index))
+    {
         let node_position_in_view = i - start_index;
         let x = inner_area.x + (node_position_in_view as u16 * (node_width + spacing));
         let y = inner_area.y;
@@ -167,7 +173,6 @@ fn render_node_grid(
             break;
         }
 
-        let port_name = &ports_order[i];
         let node_area = Rect {
             x,
             y,
@@ -176,7 +181,13 @@ fn render_node_grid(
         };
 
         // Render the node
-        render_node(frame, node_area, port_name, i == selection, &ports_map)?;
+        render_node(
+            frame,
+            node_area,
+            port_name.as_str(),
+            i == selection,
+            &ports_map,
+        )?;
     }
 
     // Render "editing" node if in creation mode and it's in visible range
@@ -212,8 +223,8 @@ fn render_node_grid(
         // This ensures the thumb size reflects the actual visible portion
         let scrollbar_max = total_nodes_for_rendering.saturating_sub(1).max(1);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
-            .thumb_symbol("━")  // Use thick horizontal line for occupied part
-            .track_symbol(Some("─"));  // Use thin horizontal line for unoccupied part
+            .thumb_symbol("━") // Use thick horizontal line for occupied part
+            .track_symbol(Some("─")); // Use thin horizontal line for unoccupied part
         frame.render_stateful_widget(
             scrollbar,
             scrollbar_area,
@@ -350,7 +361,7 @@ fn render_node(
             .get(port_name)
             .map(|p| p.port_type.as_str())
             .unwrap_or("");
-        
+
         // Determine port type display label
         let port_type_label = if port_type.contains("http") || port_type.contains("HTTP") {
             if lang().index.title.contains("中") {
@@ -380,14 +391,22 @@ fn render_node(
         // Line 1: Port name
         // For UUID-based names (36 chars with hyphens), show "虚拟" + last 7 chars
         // For other names, truncate to 10 chars max
-        let name_display = if port_name.len() == 36 && port_name.chars().filter(|c| *c == '-').count() == 4 {
-            // This looks like a UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-            // Show "虚拟" prefix + last 7 characters
-            let last_7 = port_name.chars().rev().take(7).collect::<String>().chars().rev().collect::<String>();
-            format!("{} {}", lang().index.virtual_port_prefix, last_7)
-        } else {
-            truncate_text(port_name, 10)
-        };
+        let name_display =
+            if port_name.len() == 36 && port_name.chars().filter(|c| *c == '-').count() == 4 {
+                // This looks like a UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+                // Show "虚拟" prefix + last 7 characters
+                let last_7 = port_name
+                    .chars()
+                    .rev()
+                    .take(7)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>();
+                format!("{} {}", lang().index.virtual_port_prefix, last_7)
+            } else {
+                truncate_text(port_name, 10)
+            };
         let name_area = Rect {
             x: inner.x,
             y: inner.y,
