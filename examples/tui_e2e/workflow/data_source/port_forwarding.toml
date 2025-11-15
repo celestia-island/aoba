@@ -70,7 +70,12 @@ key = "Enter"
 [[workflow.setup_vcom1_manual_master]]
 description = "Switch to config panel for vcom1"
 mock_path = "$.page"
-mock_set_value = { type = "config_panel", selected_port = 0 }
+mock_set_value = { type = "config_panel" }
+
+[[workflow.setup_vcom1_manual_master]]
+description = "Set config panel selected_port to 0"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 0
 
 [[workflow.setup_vcom1_manual_master]]
 description = "Set config panel cursor to EnablePort"
@@ -97,7 +102,12 @@ key = "Enter"
 [[workflow.setup_vcom1_manual_master]]
 description = "Switch to Modbus dashboard for vcom1"
 mock_path = "$.page"
-mock_set_value = { type = "modbus_dashboard", selected_port = 0 }
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.setup_vcom1_manual_master]]
+description = "Set modbus dashboard selected_port to 0"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 0
 
 [[workflow.setup_vcom1_manual_master]]
 description = "Update cursor to AddLine"
@@ -383,7 +393,12 @@ key = "Enter"
 [[workflow.setup_vcom2_port_forwarding]]
 description = "Switch to config panel for vcom2"
 mock_path = "$.page"
-mock_set_value = { type = "config_panel", selected_port = 1 }
+mock_set_value = { type = "config_panel" }
+
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Set config panel selected_port to 1"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 1
 
 [[workflow.setup_vcom2_port_forwarding]]
 description = "Set config panel cursor to EnablePort"
@@ -410,7 +425,12 @@ key = "Enter"
 [[workflow.setup_vcom2_port_forwarding]]
 description = "Switch to Modbus dashboard for vcom2"
 mock_path = "$.page"
-mock_set_value = { type = "modbus_dashboard", selected_port = 1 }
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Set modbus dashboard selected_port to 1"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 1
 
 [[workflow.setup_vcom2_port_forwarding]]
 description = "Reset cursor to AddLine"
