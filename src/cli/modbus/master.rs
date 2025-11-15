@@ -69,6 +69,8 @@ async fn open_serial_port_with_retry(
 struct HttpServerState {
     tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
     storage: Option<Arc<Mutex<ModbusStorageSmall>>>,
+    /// Track the most recent station configurations received via POST
+    stations: Arc<Mutex<Vec<crate::protocol::status::types::modbus::StationConfig>>>,
 }
 
 use crate::protocol::status::types::modbus::StationConfig as ProtocolStationConfig;
@@ -81,56 +83,31 @@ async fn handle_stations_get(
 ) -> Result<(StatusCode, Json<StationsResponse>), (StatusCode, String)> {
     log::info!("📤 HTTP Server: Received GET request for all station data");
 
+    // Get the currently configured stations
+    let configured_stations = state.stations.lock().unwrap().clone();
+
     let stations_snapshot: Vec<ProtocolStationConfig> = if let Some(ref storage) = state.storage {
-        // Read all available data from storage
-        // For now, we'll build a generic station snapshot based on what's in storage
-        // In a full implementation, you'd track which stations are configured
-        let storage_guard = storage.lock().unwrap();
-        
-        // For simplicity, scan common register ranges and build station configs
-        // This is a basic implementation - in practice you'd track actual station configs
-        let mut stations = Vec::new();
-        
-        // Try to detect data in holding registers (scan from 0-100)
-        for station_id in 1..=10 {
-            let mut has_data = false;
-            let mut holding_values = Vec::new();
-            
-            for addr in 0..100 {
-                if let Ok(val) = storage_guard.get_holding(addr) {
-                    if val != 0 {
-                        has_data = true;
-                    }
-                    holding_values.push(val);
-                } else {
-                    break;
+        // Build snapshots with current values from storage for each configured station
+        let mut snapshots = Vec::new();
+
+        for station in &configured_stations {
+            match crate::cli::modbus::build_station_snapshot_from_storage(storage, station) {
+                Ok(snapshot) => snapshots.push(snapshot),
+                Err(e) => {
+                    log::warn!(
+                        "Failed to build snapshot for station {}: {e}",
+                        station.station_id
+                    );
+                    // Fall back to returning the configuration without current values
+                    snapshots.push(station.clone());
                 }
             }
-            
-            if has_data {
-                use crate::protocol::status::types::modbus::{RegisterRange, RegisterMap, StationConfig, StationMode};
-                stations.push(StationConfig {
-                    station_id,
-                    mode: StationMode::Master,
-                    map: RegisterMap {
-                        holding: vec![RegisterRange {
-                            address_start: 0,
-                            length: holding_values.len() as u16,
-                            initial_values: holding_values,
-                        }],
-                        coils: vec![],
-                        discrete_inputs: vec![],
-                        input: vec![],
-                    },
-                });
-            }
         }
-        
-        drop(storage_guard);
-        stations
+
+        snapshots
     } else {
-        // No storage available
-        Vec::new()
+        // No storage available - return configured stations as-is
+        configured_stations
     };
 
     let resp = StationsResponse {
@@ -157,6 +134,12 @@ async fn handle_stations_post(
 
     // Clone stations for forwarding and for building the response snapshot
     let stations_for_send = stations.clone();
+
+    // Update the tracked stations
+    {
+        let mut tracked = state.stations.lock().unwrap();
+        *tracked = stations.clone();
+    }
 
     // Forward stations to the update thread
     state.tx.send_async(stations_for_send).await.map_err(|e| {
@@ -222,11 +205,18 @@ async fn run_http_server_daemon(
     let addr = format!("127.0.0.1:{}", port);
     log::info!("Starting HTTP server daemon on {}", addr);
 
-    let state = HttpServerState { tx, storage };
+    let state = HttpServerState {
+        tx,
+        storage,
+        stations: Arc::new(Mutex::new(Vec::new())),
+    };
 
     // Build axum router with GET and POST endpoints
     let app = Router::new()
-        .route("/", axum::routing::get(handle_stations_get).post(handle_stations_post))
+        .route(
+            "/",
+            axum::routing::get(handle_stations_get).post(handle_stations_post),
+        )
         .with_state(state);
 
     // Use task_manager to spawn the async HTTP server daemon

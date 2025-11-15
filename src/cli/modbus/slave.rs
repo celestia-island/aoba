@@ -851,8 +851,7 @@ pub async fn handle_slave_listen_ipc_channel(
     ipc_socket_path: &str,
 ) -> Result<()> {
     use interprocess::local_socket::{prelude::*, ListenerOptions};
-    use serde_json::Value as JsonValue;
-    
+
     let station_id = *matches.get_one::<u8>("station-id").unwrap();
     let register_address = *matches.get_one::<u16>("register-address").unwrap();
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
@@ -923,7 +922,7 @@ pub async fn handle_slave_listen_ipc_channel(
 
     // Create IPC Unix socket listener
     log::info!("Creating IPC Unix socket listener at {ipc_socket_path}");
-    
+
     // Remove existing socket file if it exists (Unix only)
     #[cfg(unix)]
     {
@@ -932,21 +931,23 @@ pub async fn handle_slave_listen_ipc_channel(
             let _ = std::fs::remove_file(ipc_socket_path);
         }
     }
-    
-    let listener = match ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() {
-        Ok(name) => ListenerOptions::new().name(name).create_sync(),
-        Err(_) => {
-            // Fall back to file path
-            let path = ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
-            ListenerOptions::new().name(path).create_sync()
-        }
-    }?;
+
+    let listener =
+        match ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() {
+            Ok(name) => ListenerOptions::new().name(name).create_sync(),
+            Err(_) => {
+                // Fall back to file path
+                let path =
+                    ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
+                ListenerOptions::new().name(path).create_sync()
+            }
+        }?;
 
     log::info!("IPC socket listener created, waiting for connections...");
 
     // Spawn a task to handle incoming connections
     let connection_counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    
+
     loop {
         // Accept incoming connection (blocking)
         let stream = match listener.accept() {
@@ -964,7 +965,7 @@ pub async fn handle_slave_listen_ipc_channel(
         // Clone resources for the connection handler
         let port_arc_clone = port_arc.clone();
         let storage_clone = storage.clone();
-        
+
         // Spawn a task to handle this connection
         crate::core::task_manager::spawn_task(async move {
             if let Err(e) = handle_ipc_connection(
@@ -976,7 +977,9 @@ pub async fn handle_slave_listen_ipc_channel(
                 register_length,
                 reg_mode,
                 storage_clone,
-            ).await {
+            )
+            .await
+            {
                 log::error!("Connection #{conn_id} error: {e}");
             }
             log::info!("Connection #{conn_id} closed");
@@ -997,30 +1000,30 @@ async fn handle_ipc_connection(
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<()> {
     use std::io::{BufRead, BufReader, Write};
-    
+
     log::info!("Connection #{conn_id}: Ready to receive JSON requests");
-    
+
     // Use BufReader for line-based reading
     let mut reader = BufReader::new(&mut stream);
-    
+
     loop {
         // Read one line (JSON request)
         let mut line = String::new();
         let bytes_read = reader.read_line(&mut line)?;
-        
+
         if bytes_read == 0 {
             // Connection closed
             log::info!("Connection #{conn_id}: Client closed connection");
             break;
         }
-        
+
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
-        
+
         log::info!("Connection #{conn_id}: Received request: {line}");
-        
+
         // Parse JSON request (we don't actually use it, just validate it's valid JSON)
         let _request: serde_json::Value = match serde_json::from_str(line) {
             Ok(req) => req,
@@ -1037,7 +1040,7 @@ async fn handle_ipc_connection(
                 continue;
             }
         };
-        
+
         // Process request and generate response
         let response = match listen_for_one_request(
             port_arc.clone(),
@@ -1060,7 +1063,7 @@ async fn handle_ipc_connection(
                 })
             }
         };
-        
+
         // Send response (JSON line)
         let response_str = serde_json::to_string(&response)?;
         log::info!("Connection #{conn_id}: Sending response: {response_str}");
@@ -1069,6 +1072,6 @@ async fn handle_ipc_connection(
         writeln!(stream_ref, "{response_str}")?;
         stream_ref.flush()?;
     }
-    
+
     Ok(())
 }
