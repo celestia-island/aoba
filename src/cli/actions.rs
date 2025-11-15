@@ -346,9 +346,19 @@ pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen persist
     if let Some(port) = matches.get_one::<String>("slave-listen-persist") {
-        if let Err(err) = super::modbus::slave::handle_slave_listen_persist(matches, port).await {
-            eprintln!("Error in slave-listen-persist: {err}");
-            std::process::exit(1);
+        // Check if IPC socket path is provided
+        if let Some(ipc_socket_path) = matches.get_one::<String>("ipc-socket-path") {
+            // Use IPC channel mode (half-duplex JSON request-response)
+            if let Err(err) = super::modbus::slave::handle_slave_listen_ipc_channel(matches, port, ipc_socket_path).await {
+                eprintln!("Error in slave-listen-persist (IPC channel mode): {err}");
+                std::process::exit(1);
+            }
+        } else {
+            // Use regular stdio mode
+            if let Err(err) = super::modbus::slave::handle_slave_listen_persist(matches, port).await {
+                eprintln!("Error in slave-listen-persist: {err}");
+                std::process::exit(1);
+            }
         }
         return true;
     }

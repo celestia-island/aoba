@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
+use axum::{extract::State, http::StatusCode, Json, Router};
 use clap::ArgMatches;
 use rmodbus::{
     server::{context::ModbusContext, storage::ModbusStorageSmall},
@@ -74,6 +74,73 @@ struct HttpServerState {
 use crate::protocol::status::types::modbus::StationConfig as ProtocolStationConfig;
 use crate::protocol::status::types::modbus::StationsResponse;
 use crate::utils::sleep::{sleep_1s, sleep_3s};
+
+/// Axum handler for GET / endpoint - retrieve all station data from storage
+async fn handle_stations_get(
+    State(state): State<HttpServerState>,
+) -> Result<(StatusCode, Json<StationsResponse>), (StatusCode, String)> {
+    log::info!("📤 HTTP Server: Received GET request for all station data");
+
+    let stations_snapshot: Vec<ProtocolStationConfig> = if let Some(ref storage) = state.storage {
+        // Read all available data from storage
+        // For now, we'll build a generic station snapshot based on what's in storage
+        // In a full implementation, you'd track which stations are configured
+        let storage_guard = storage.lock().unwrap();
+        
+        // For simplicity, scan common register ranges and build station configs
+        // This is a basic implementation - in practice you'd track actual station configs
+        let mut stations = Vec::new();
+        
+        // Try to detect data in holding registers (scan from 0-100)
+        for station_id in 1..=10 {
+            let mut has_data = false;
+            let mut holding_values = Vec::new();
+            
+            for addr in 0..100 {
+                if let Ok(val) = storage_guard.get_holding(addr) {
+                    if val != 0 {
+                        has_data = true;
+                    }
+                    holding_values.push(val);
+                } else {
+                    break;
+                }
+            }
+            
+            if has_data {
+                use crate::protocol::status::types::modbus::{RegisterRange, RegisterMap, StationConfig, StationMode};
+                stations.push(StationConfig {
+                    station_id,
+                    mode: StationMode::Master,
+                    map: RegisterMap {
+                        holding: vec![RegisterRange {
+                            address_start: 0,
+                            length: holding_values.len() as u16,
+                            initial_values: holding_values,
+                        }],
+                        coils: vec![],
+                        discrete_inputs: vec![],
+                        input: vec![],
+                    },
+                });
+            }
+        }
+        
+        drop(storage_guard);
+        stations
+    } else {
+        // No storage available
+        Vec::new()
+    };
+
+    let resp = StationsResponse {
+        success: true,
+        message: format!("Retrieved {} stations", stations_snapshot.len()),
+        stations: stations_snapshot,
+    };
+
+    Ok((StatusCode::OK, Json(resp)))
+}
 
 /// Axum handler for POST /stations endpoint
 async fn handle_stations_post(
@@ -157,9 +224,9 @@ async fn run_http_server_daemon(
 
     let state = HttpServerState { tx, storage };
 
-    // Build axum router with POST endpoint
+    // Build axum router with GET and POST endpoints
     let app = Router::new()
-        .route("/", post(handle_stations_post))
+        .route("/", axum::routing::get(handle_stations_get).post(handle_stations_post))
         .with_state(state);
 
     // Use task_manager to spawn the async HTTP server daemon
