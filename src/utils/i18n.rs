@@ -41,6 +41,9 @@ derive_struct! {
             port_creation_http_server: String = "port_creation_http_server".to_string(),
             press_enter_confirm: String = "press_enter_confirm".to_string(),
             press_esc_cancel_action: String = "press_esc_cancel_action".to_string(),
+            hint_press_n_new_port: String = "hint_press_n_new_port".to_string(),
+            hint_press_d_delete_port: String = "hint_press_d_delete_port".to_string(),
+            hint_press_a_about: String = "hint_press_a_about".to_string(),
         },
 
         about: {

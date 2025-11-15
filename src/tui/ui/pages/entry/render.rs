@@ -22,24 +22,18 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     let in_creation = read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
 
     if in_creation {
-        // Show creation mode hints using i18n
-        let confirm_hint = format!("Enter: {}", lang().index.press_enter_confirm.as_str());
-        let cancel_hint = format!("Esc: {}", lang().index.press_esc_cancel_action.as_str());
-        Ok(vec![vec![confirm_hint, cancel_hint]])
-    } else {
-        // Show normal mode hints
+        // Show creation mode hints using "Press xxx to yyy" format
         Ok(vec![vec![
-            format!("n: {}", lang().index.new_action.as_str()),
-            format!("d: {}", lang().index.delete_action.as_str()),
-            format!("a: {}", lang().index.about_label.as_str()),
-            format!(
-                "q: {}",
-                lang()
-                    .hotkeys
-                    .press_q_quit
-                    .as_str()
-                    .replace("Press q to ", "")
-            ),
+            lang().hotkeys.press_enter_submit.to_string(),
+            lang().hotkeys.press_esc_cancel.to_string(),
+        ]])
+    } else {
+        // Show normal mode hints using "Press xxx to yyy" format
+        Ok(vec![vec![
+            lang().index.hint_press_n_new_port.to_string(),
+            lang().index.hint_press_d_delete_port.to_string(),
+            lang().index.hint_press_a_about.to_string(),
+            lang().hotkeys.press_q_quit.to_string(),
         ]])
     }
 }
@@ -128,7 +122,7 @@ fn render_node_grid(
         nodes_fit_in_viewport,
     );
 
-    // Render position indicator in top-right corner
+    // Render position indicator in top-right corner (green to match other UI elements)
     if total_nodes > 0 {
         let indicator_text = format!(" {} / {} ", selection + 1, total_nodes);
         let indicator_width = indicator_text.len() as u16;
@@ -139,7 +133,7 @@ fn render_node_grid(
             height: 1,
         };
         let indicator_widget = Paragraph::new(indicator_text)
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+            .style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
         frame.render_widget(indicator_widget, indicator_area);
     }
 
@@ -195,11 +189,18 @@ fn render_node_grid(
             width: area.width - 2,
             height: 1,
         };
-        let scrollbar_max = (total_nodes - nodes_fit_in_viewport).max(1);
+        // Calculate scrollbar max based on actual content vs viewport ratio
+        // This ensures the thumb size reflects the actual visible portion
+        let scrollbar_max = total_nodes.saturating_sub(1).max(1);
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
+            .thumb_symbol("─")  // Use horizontal line for thumb instead of block
+            .track_symbol(Some("─"));  // Use horizontal line for track
         frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::HorizontalBottom),
+            scrollbar,
             scrollbar_area,
-            &mut ScrollbarState::new(scrollbar_max).position(start_index),
+            &mut ScrollbarState::new(scrollbar_max)
+                .position(selection)
+                .viewport_content_length(nodes_fit_in_viewport),
         );
     }
 
