@@ -76,6 +76,7 @@ The forwarding happens entirely within the TUI process, with no external network
 ## Example Use Case: Multi-Master Setup
 
 Suppose you have:
+
 - `/tmp/vcom1`: Connected to a physical Modbus device as a slave
 - `/tmp/vcom2`: You want to act as a master reading from vcom1
 
@@ -96,6 +97,7 @@ Result: `/tmp/vcom2` will act as a master, but its data comes from `/tmp/vcom1`'
 ## Example Use Case: Data Replication
 
 Suppose you have:
+
 - `/tmp/vcom1`: Main port reading from external IPC data source
 - `/tmp/vcom2`: Monitoring port that needs to mirror vcom1's data
 
@@ -126,6 +128,7 @@ Result: Both ports display the same data, with vcom2 mirroring vcom1's register 
 ### "No other ports available" message
 
 This appears when:
+
 - Only one port exists in the system (no source port to forward from)
 - The current port is the only port
 - **Solution**: Add another port first, configure and enable it, then set up forwarding
@@ -133,6 +136,7 @@ This appears when:
 ### Data not updating
 
 Check:
+
 - Source port is running (shows "Running ●" status)
 - Source port has configured stations
 - Target port is running (shows "Running ●" status)
@@ -141,6 +145,7 @@ Check:
 ### Port forwarding not appearing in options
 
 Make sure:
+
 - You are configuring a master station (not slave)
 - You are in the Modbus Dashboard panel
 - You have navigated to the "Data Source" field
@@ -148,9 +153,11 @@ Make sure:
 ## Advanced: Multiple Forwarding Chains
 
 You can create forwarding chains:
-- Port A → Port B → Port C
+
+> Port A → Port B → Port C
 
 However, be cautious:
+
 - Each link in the chain introduces latency
 - Circular forwarding (A → B → A) is prevented by the UI
 - Monitor performance if using multiple forwarding levels
