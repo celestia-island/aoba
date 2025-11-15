@@ -188,7 +188,7 @@ description = "Update connection mode in mock state"
 mock_path = "$.page_state.modbus_dashboard.connection_mode"
 mock_set_value = "slave"
 [[workflow.enter_modbus_panel]]
-verify = "ModBus Master/Slave Set"
+verify = "ModBus Master/Slave Settings"
 
 
 # Step 4.5: Switch to Slave Mode
@@ -608,6 +608,15 @@ mock_verify_value = true
 description = "Check port state is Running"
 mock_verify_path = "$.ports['/tmp/vcom1'].state"
 mock_verify_value = { type = "occupied_by_this" }
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows Modbus configuration page"
+verify_regex = "ModBus Master/Slave"
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows correct port"
+verify_regex = "/tmp/vcom1"
+
 
 # Step 4.5: Switch to Slave Mode
 [[workflow.switch_to_slave_mode]]
