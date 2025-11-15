@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     tui::{
         status::{
-            port::{ PortData, PortState},
+            port::{PortData, PortState},
             read_status, Page,
         },
         ui::pages::entry::components::derive_selection_from_page,
@@ -106,7 +106,7 @@ fn render_node_grid(
     // Node dimensions
     let node_width = 20u16; // Total width including borders
     let spacing = 1u16; // Spacing between nodes
-    
+
     // Get port data for calculating heights
     let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
 
@@ -442,16 +442,15 @@ fn render_node(
             .style(text_style)
             .alignment(Alignment::Center);
         frame.render_widget(type_widget, type_area);
-        
     }
-    
+
     // Render connected stations outside the box (below the node)
     if let Some(stations) = stations {
         if !stations.is_empty() {
             let station_style = Style::default().fg(Color::Cyan);
             // Start rendering below the node box
             let mut current_y = area.y + area.height;
-            
+
             for (idx, station) in stations.iter().enumerate() {
                 // Determine the timeline character (├─ for intermediate, └─ for last)
                 let timeline_char = if idx == stations.len() - 1 {
@@ -459,7 +458,7 @@ fn render_node(
                 } else {
                     "├─"
                 };
-                
+
                 // Format station info: " ├─ St.1:Coils "
                 let station_text = format!(
                     " {} St.{}:{}",
@@ -467,19 +466,19 @@ fn render_node(
                     station.station_id,
                     format_register_mode_short(&station.register_mode)
                 );
-                
+
                 let station_area = Rect {
                     x: area.x,
                     y: current_y,
                     width: area.width,
                     height: 1,
                 };
-                
+
                 let station_widget = Paragraph::new(station_text)
                     .style(station_style)
                     .alignment(Alignment::Left);
                 frame.render_widget(station_widget, station_area);
-                
+
                 current_y += 1;
             }
         }
