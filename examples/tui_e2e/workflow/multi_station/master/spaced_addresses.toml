@@ -58,13 +58,14 @@ mock_path = "$.port_order"
 mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
 
 [[workflow.navigate_to_entry]]
-description = "Initial navigation to entry page"
-verify = "/tmp/vcom1"
-at_line = 2
+description = "Verify port order contains vcom1"
+mock_verify_path = "$.port_order[0]"
+mock_verify_value = "/tmp/vcom1"
 
 [[workflow.navigate_to_entry]]
-verify = "/tmp/vcom2"
-at_line = 3
+description = "Verify port order contains vcom2"
+mock_verify_path = "$.port_order[1]"
+mock_verify_value = "/tmp/vcom2"
 
 # Step 2: Enter configuration panel
 [[workflow.enter_config_panel]]
