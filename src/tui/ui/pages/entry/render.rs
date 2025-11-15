@@ -89,11 +89,10 @@ fn calculate_node_height(
     // Get station count for ports that are OccupiedByThis
     if let Some(port_data) = ports_map.get(port_name) {
         if port_data.state.is_occupied_by_this() {
-            if let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config {
-                let station_count = stations.len() as u16;
-                // Add one line per station
-                return base_height + station_count;
-            }
+            let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config;
+            let station_count = stations.len() as u16;
+            // Add one line per station
+            return base_height + station_count;
         }
     }
     
@@ -322,11 +321,8 @@ fn render_node(
         let state = port_data.state.clone();
         let ptype = port_data.port_type.clone();
         let stations = if state.is_occupied_by_this() {
-            if let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config {
-                Some(stations.clone())
-            } else {
-                None
-            }
+            let crate::tui::status::port::PortConfig::Modbus { stations, .. } = &port_data.config;
+            Some(stations.clone())
         } else {
             None
         };
