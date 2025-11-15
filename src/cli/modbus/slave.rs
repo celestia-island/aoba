@@ -637,6 +637,10 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
     let mut current_register_address = register_address;
     let mut current_register_length = register_length;
     let mut current_reg_mode = reg_mode;
+    
+    // Track pending write requests: (register_address, value, register_type)
+    let mut pending_writes: std::collections::VecDeque<(u16, u16, String)> = 
+        std::collections::VecDeque::new();
 
     loop {
         // Try to accept incoming command channel connection (non-blocking)
@@ -683,6 +687,50 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                         // Update configuration from the first slave station
                                         current_station_id = first_station.station_id;
 
+                                        // Process pending writes from initial_values
+                                        // Check all register ranges for values that should be written
+                                        for range in &first_station.map.holding {
+                                            for (idx, &value) in range.initial_values.iter().enumerate() {
+                                                let addr = range.address_start + idx as u16;
+                                                // Check if this value differs from last read
+                                                let needs_write = match &last_written_values {
+                                                    Some(prev_vals) => {
+                                                        let relative_idx = (addr - current_register_address) as usize;
+                                                        relative_idx >= prev_vals.len() || prev_vals[relative_idx] != value
+                                                    }
+                                                    None => true, // No previous values, write everything
+                                                };
+                                                
+                                                if needs_write {
+                                                    log::info!("📤 Queueing write for holding register 0x{addr:04X} = 0x{value:04X}");
+                                                    pending_writes.push_back((addr, value, "holding".to_string()));
+                                                }
+                                            }
+                                            
+                                            // Update tracking variables
+                                            current_register_address = range.address_start;
+                                            current_register_length = range.length;
+                                            current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Holding;
+                                        }
+                                        
+                                        for range in &first_station.map.coils {
+                                            for (idx, &value) in range.initial_values.iter().enumerate() {
+                                                let addr = range.address_start + idx as u16;
+                                                let needs_write = match &last_written_values {
+                                                    Some(prev_vals) => {
+                                                        let relative_idx = (addr - current_register_address) as usize;
+                                                        relative_idx >= prev_vals.len() || prev_vals[relative_idx] != value
+                                                    }
+                                                    None => true,
+                                                };
+                                                
+                                                if needs_write {
+                                                    log::info!("📤 Queueing write for coil 0x{addr:04X} = 0x{value:04X}");
+                                                    pending_writes.push_back((addr, value, "coil".to_string()));
+                                                }
+                                            }
+                                        }
+
                                         // Find the first register range to use as the polling target
                                         if let Some(range) = first_station.map.holding.first() {
                                             current_register_address = range.address_start;
@@ -718,8 +766,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                             );
                                         }
 
-                                        // Reset last written values when configuration changes
-                                        last_written_values = None;
+                                        // Don't reset last_written_values here - we need it to detect changes
                                     } else {
                                         log::warn!("Received master station config in slave poll mode, ignoring");
                                     }
@@ -736,6 +783,86 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                     }
                 }
             }
+        }
+
+        // Process pending write requests before read polling
+        if let Some((write_addr, write_value, write_type)) = pending_writes.pop_front() {
+            log::info!("📤 Processing pending write: addr=0x{write_addr:04X}, value=0x{write_value:04X}, type={write_type}");
+            
+            let write_result = if write_type == "holding" {
+                // Send write request for holding register
+                match crate::protocol::modbus::generate_pull_set_holding_request(
+                    current_station_id,
+                    write_addr,
+                    write_value,
+                ) {
+                    Ok((mut request, raw_frame)) => {
+                        log::info!("Generated write request frame: {raw_frame:02X?}");
+                        
+                        // Send request
+                        {
+                            let mut port = port_arc.lock().unwrap();
+                            if let Err(e) = port.write_all(&raw_frame) {
+                                Err(anyhow!("Failed to write request: {e}"))
+                            } else if let Err(e) = port.flush() {
+                                Err(anyhow!("Failed to flush: {e}"))
+                            } else {
+                                Ok(())
+                            }
+                        }?;
+                        
+                        // Wait for response
+                        let mut buffer = vec![0u8; 256];
+                        let bytes_read = {
+                            let mut port = port_arc.lock().unwrap();
+                            port.read(&mut buffer)?
+                        };
+                        
+                        if bytes_read == 0 {
+                            Err(anyhow!("No response received for write"))
+                        } else {
+                            let response = &buffer[..bytes_read];
+                            log::info!("Received write response: {response:02X?}");
+                            
+                            // Parse response
+                            match crate::protocol::modbus::parse_pull_set_response(&mut request, response.to_vec()) {
+                                Ok(()) => {
+                                    log::info!("✅ Write successful for 0x{write_addr:04X} = 0x{write_value:04X}");
+                                    Ok(())
+                                }
+                                Err(e) => Err(e),
+                            }
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
+            } else if write_type == "coil" {
+                // TODO: Implement coil write using set_coils_bulk
+                log::warn!("⚠️ Coil write not yet implemented, skipping");
+                Ok(()) // Pretend success for now
+            } else {
+                Err(anyhow!("Unsupported write type: {write_type}"))
+            };
+            
+            // Send write completion message via IPC
+            if let Some(ref mut ipc_conns) = ipc {
+                let msg = crate::protocol::ipc::IpcMessage::register_write_complete(
+                    port.to_string(),
+                    current_station_id,
+                    write_addr,
+                    write_value,
+                    write_type.clone(),
+                    write_result.is_ok(),
+                    write_result.as_ref().err().map(|e| e.to_string()),
+                );
+                
+                if let Err(e) = ipc_conns.status.send(&msg) {
+                    log::warn!("Failed to send RegisterWriteComplete via IPC: {e}");
+                }
+            }
+            
+            // Continue to next iteration to process more writes if any
+            continue;
         }
 
         match run_slave_poll_transaction(

@@ -159,6 +159,9 @@ async fn main() -> Result<()> {
             log::info!("    - single_station_slave_discrete_inputs");
             log::info!("    - single_station_slave_holding");
             log::info!("    - single_station_slave_input");
+            log::info!("  Write Single-Station Slave Mode:");
+            log::info!("    - write_single_station_slave_holding");
+            log::info!("    - write_single_station_slave_coils");
             log::info!("  Multi-Station Master Mode:");
             log::info!("    - multi_station_master_mixed_types");
             log::info!("    - multi_station_master_spaced_addresses");
@@ -306,6 +309,18 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
         parse_workflow(include_str!(
             "../workflow/multi_station/slave/mixed_ids.toml"
         ))?,
+    );
+
+    // Write single station slave workflows
+    workflows.insert(
+        "write_single_station_slave_holding".to_string(),
+        parse_workflow(include_str!(
+            "../workflow/write_single_station/holding.toml"
+        ))?,
+    );
+    workflows.insert(
+        "write_single_station_slave_coils".to_string(),
+        parse_workflow(include_str!("../workflow/write_single_station/coils.toml"))?,
     );
 
     // Data source configuration workflows

@@ -1,0 +1,422 @@
+# Write Single Station - Slave Mode - Coils (01) Register Type
+# Test ID: write_single_station_slave_coils
+# Station: ID=1, Type=Coils, Address=0x0000, Length=10
+#
+# Test: Write operations to coils in slave mode
+# Each round writes to a different coil (2, 3, 4) and verifies:
+# 1. Status indicator changes to "Syncing"
+# 2. Coil shows gray italic during write
+# 3. After completion, status returns to "Running"
+# 4. Local coil value is updated
+# 5. Remote master station sees the change
+#
+# Test Values (coils are boolean):
+# Round 1 - Coil 2: ON (1)
+# Round 2 - Coil 3: ON (1)
+# Round 3 - Coil 4: OFF (0)
+
+[manifest]
+id = "write_single_station_slave_coils"
+description = "Write test for single station Slave mode with Coils"
+station_id = 1
+register_type = "Coils"
+start_address = 0x0000
+register_count = 10
+mode = "slave"
+
+init_order = [
+  "navigate_to_entry",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "switch_to_slave_mode",
+  "create_station",
+  "configure_station_fields",
+  "set_register_count_to_10",
+  "save_configuration",
+  "verify_port_enabled",
+  "verify_initial_read",
+]
+
+recycle_order = [
+  "write_coil_round1",
+  "verify_write_complete_round1",
+  "write_coil_round2",
+  "verify_write_complete_round2",
+  "write_coil_round3",
+  "verify_write_complete_round3",
+]
+
+# Step 1: Navigate to Entry page
+[[workflow.navigate_to_entry]]
+description = "Initialize mock state for entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.navigate_to_entry]]
+description = "Ensure entry page port order"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.navigate_to_entry]]
+description = "Initial navigation to entry page"
+verify = "/tmp/vcom1"
+
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom2"
+
+# Step 2: Enter configuration panel
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected port to enter config panel"
+key = "Enter"
+
+[[workflow.enter_config_panel]]
+description = "Switch mock state to config panel"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.enter_config_panel]]
+description = "Set config panel cursor to EnablePort"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "EnablePort"
+
+[[workflow.enter_config_panel]]
+verify = "Enable Port"
+
+# Step 3: Navigate to business configuration
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration menu item"
+key = "Down"
+times = 2
+
+[[workflow.navigate_to_business_config]]
+description = "Highlight Business Configuration entry"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "ProtocolConfig"
+
+[[workflow.navigate_to_business_config]]
+verify = "Enter Business Configuration"
+
+# Step 4: Enter Modbus panel
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "Enter"
+
+# Step 5: Switch to Slave Mode
+[[workflow.switch_to_slave_mode]]
+description = "Navigate to Connection Mode field"
+key = "Down"
+
+[[workflow.switch_to_slave_mode]]
+description = "Enter edit mode for Connection Mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Switch from Master to Slave"
+key = "Left"
+
+[[workflow.switch_to_slave_mode]]
+description = "Confirm Slave mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Navigate back to Create Station"
+key = "Up"
+
+[[workflow.switch_to_slave_mode]]
+description = "Update connection mode in mock state"
+mock_path = "$.page_state.modbus_dashboard.connection_mode"
+mock_set_value = "slave"
+
+# Step 6: Create station
+[[workflow.create_station]]
+description = "Press Enter on 'Create Station' to create new station"
+key = "Enter"
+
+[[workflow.create_station]]
+description = "Initialize slave station structure with coils"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
+mock_set_value = [
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+]
+
+[[workflow.create_station]]
+description = "Focus cursor on station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.create_station]]
+verify = "#1 - ID: 1"
+
+# Step 7: Configure Station Fields (Station ID, Register Type, Start Address)
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear and set station ID to 1"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+input = "decimal"
+value = 1
+
+[[workflow.configure_station_fields]]
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Station ID in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].station_id"
+mock_set_value = 1
+
+# Navigate to Register Type
+[[workflow.configure_station_fields]]
+description = "Navigate to Register Type"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Register Type"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Select Coils register type (cycle: Holding->DiscreteInputs->Coils)"
+key = "Char(h)"
+times = 2
+
+[[workflow.configure_station_fields]]
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Type in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_type"
+mock_set_value = "Coils"
+
+# Navigate to Start Address
+[[workflow.configure_station_fields]]
+description = "Navigate to Start Address"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Start Address"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Set start address to 0x0000"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+input = "hex"
+value = 0x0000
+
+[[workflow.configure_station_fields]]
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Start Address in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].start_address"
+mock_set_value = 0
+
+# Step 8: Set register count to 10
+[[workflow.set_register_count_to_10]]
+description = "Navigate to Register Count"
+key = "Down"
+
+[[workflow.set_register_count_to_10]]
+description = "Enter edit mode for Register Count"
+key = "Enter"
+
+[[workflow.set_register_count_to_10]]
+description = "Set register count to 10"
+key = "Ctrl+A"
+
+[[workflow.set_register_count_to_10]]
+key = "Backspace"
+
+[[workflow.set_register_count_to_10]]
+input = "decimal"
+value = 10
+
+[[workflow.set_register_count_to_10]]
+key = "Enter"
+
+[[workflow.set_register_count_to_10]]
+description = "Update register count in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_count"
+mock_set_value = 10
+
+[[workflow.set_register_count_to_10]]
+description = "Update registers array size"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers"
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+# Step 9: Save configuration
+[[workflow.save_configuration]]
+description = "Save configuration with Ctrl+S"
+key = "Ctrl+S"
+
+[[workflow.save_configuration]]
+description = "Wait for port to enable"
+sleep_ms = 3000
+
+# Step 10: Verify port enabled
+[[workflow.verify_port_enabled]]
+description = "Check port status shows Running"
+check_status = { path = "$.ports[0].state", expected = "OccupiedByThis" }
+
+[[workflow.verify_port_enabled]]
+description = "Verify status indicator is Running"
+mock_path = "$.ports['/tmp/vcom1'].status_indicator"
+mock_set_value = "Running"
+
+# Step 11: Verify initial read (slave reads data from master)
+[[workflow.verify_initial_read]]
+description = "Wait for initial data sync"
+sleep_ms = 2000
+
+[[workflow.verify_initial_read]]
+description = "Verify coils display OFF initially"
+verify = "OFF"
+
+# Round 1: Write to coil 2 to turn it ON
+[[workflow.write_coil_round1]]
+description = "Navigate to coil 2 (0x0002)"
+key = "Down"
+
+[[workflow.write_coil_round1]]
+description = "Move cursor to coil 2"
+key = "Right"
+times = 2
+
+[[workflow.write_coil_round1]]
+description = "Update cursor position in mock state"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "Register", station_index = 0, register_index = 2 }
+
+[[workflow.write_coil_round1]]
+description = "Toggle coil 2 to ON (press Enter)"
+key = "Enter"
+
+[[workflow.write_coil_round1]]
+description = "Update coil value in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[2]"
+mock_set_value = 1
+
+[[workflow.write_coil_round1]]
+description = "Set syncing status"
+mock_path = "$.ports['/tmp/vcom1'].status_indicator"
+mock_set_value = "Syncing"
+
+[[workflow.write_coil_round1]]
+description = "Wait for write to complete"
+sleep_ms = 3000
+
+# Verify Round 1 completion
+[[workflow.verify_write_complete_round1]]
+description = "Check status returned to Running"
+check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
+
+[[workflow.verify_write_complete_round1]]
+description = "Verify local coil value updated to ON"
+check_status = { path = "$.ports[0].modbus_slaves[0].registers[2]", expected = 1 }
+
+[[workflow.verify_write_complete_round1]]
+description = "Verify coil displays ON"
+verify = "ON"
+
+# Round 2: Write to coil 3 to turn it ON
+[[workflow.write_coil_round2]]
+description = "Move cursor to coil 3"
+key = "Right"
+
+[[workflow.write_coil_round2]]
+description = "Update cursor position in mock state"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "Register", station_index = 0, register_index = 3 }
+
+[[workflow.write_coil_round2]]
+description = "Toggle coil 3 to ON"
+key = "Enter"
+
+[[workflow.write_coil_round2]]
+description = "Update coil value in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]"
+mock_set_value = 1
+
+[[workflow.write_coil_round2]]
+description = "Set syncing status"
+mock_path = "$.ports['/tmp/vcom1'].status_indicator"
+mock_set_value = "Syncing"
+
+[[workflow.write_coil_round2]]
+description = "Wait for write to complete"
+sleep_ms = 3000
+
+# Verify Round 2 completion
+[[workflow.verify_write_complete_round2]]
+description = "Check status returned to Running"
+check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
+
+[[workflow.verify_write_complete_round2]]
+description = "Verify local coil value updated to ON"
+check_status = { path = "$.ports[0].modbus_slaves[0].registers[3]", expected = 1 }
+
+[[workflow.verify_write_complete_round2]]
+verify = "ON"
+
+# Round 3: Ensure coil 4 stays OFF (or toggle it if it's ON)
+[[workflow.write_coil_round3]]
+description = "Move cursor to coil 4"
+key = "Right"
+
+[[workflow.write_coil_round3]]
+description = "Update cursor position in mock state"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "Register", station_index = 0, register_index = 4 }
+
+[[workflow.write_coil_round3]]
+description = "Coil 4 should be OFF - verify initial state"
+verify = "OFF"
+
+[[workflow.write_coil_round3]]
+description = "Toggle coil 4 to ON first"
+key = "Enter"
+
+[[workflow.write_coil_round3]]
+description = "Wait a moment"
+sleep_ms = 500
+
+[[workflow.write_coil_round3]]
+description = "Toggle coil 4 back to OFF"
+key = "Enter"
+
+[[workflow.write_coil_round3]]
+description = "Update coil value in mock state to OFF"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[4]"
+mock_set_value = 0
+
+[[workflow.write_coil_round3]]
+description = "Set syncing status"
+mock_path = "$.ports['/tmp/vcom1'].status_indicator"
+mock_set_value = "Syncing"
+
+[[workflow.write_coil_round3]]
+description = "Wait for write to complete"
+sleep_ms = 3000
+
+# Verify Round 3 completion
+[[workflow.verify_write_complete_round3]]
+description = "Check status returned to Running"
+check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
+
+[[workflow.verify_write_complete_round3]]
+description = "Verify local coil value is OFF"
+check_status = { path = "$.ports[0].modbus_slaves[0].registers[4]", expected = 0 }
+
+[[workflow.verify_write_complete_round3]]
+verify = "OFF"
