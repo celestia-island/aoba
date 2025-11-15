@@ -1,56 +1,48 @@
 # Data Source - Port Forwarding Mode
 # Test ID: data_source_port_forwarding
-# Setup: vcom1 (IPC source providing data) -> vcom2 (Port Forwarding from vcom1)
-# Station: vcom1 Master ID=1, Type=Holding, Address=0x0000, Length=10
-#          vcom2 Master ID=2, Type=Holding, Address=0x0000, Length=10 (forwarding from vcom1)
+# Setup: vcom1 (manual master with 10 custom registers) -> vcom2 (Port Forwarding from vcom1)
+# Station: vcom1 Master ID=1, Type=Holding, Address=0x0000, Length=10 (with custom register values)
+#          vcom2 Master (forwarding from vcom1, should auto-copy station config)
 #
 # Test Focus:
-# - Configure first port (vcom1) with IPC data source
+# - Configure first port (vcom1) with manual data source and custom register values
+# - Return to entry page
 # - Configure second port (vcom2) with Port Forwarding from vcom1
-# - Verify port forwarding selector shows available ports
-# - Simulate external data source feeding data to vcom1
-# - Verify data appears correctly on vcom2 through forwarding (3 rounds)
+# - Verify station configurations are automatically copied from vcom1
+# - Verify data synchronization through forwarding (3 rounds)
 #
-# Test Data (3 Rounds - simulated as external data feed to vcom1):
+# Test Data (3 Rounds - register values on vcom1):
 # Round 1 - Sequential: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 # Round 2 - Reverse: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 # Round 3 - Custom: [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
 [manifest]
 id = "data_source_port_forwarding"
-description = "Master mode with Port Forwarding data source"
-station_id = 2
+description = "Master mode with Port Forwarding data source - copies station config"
+station_id = 1
 register_type = "Holding"
 start_address = 0x0000
 register_count = 10
 mode = "master"
 
 init_order = [
-  "setup_ports",
   "navigate_to_entry",
-  "setup_vcom1_ipc",
-  "setup_vcom2_forwarding",
-  "verify_forwarding_setup",
-  "simulate_data_feed_round1",
+  "setup_vcom1_manual_master",
+  "configure_vcom1_station",
+  "edit_vcom1_registers_round1",
+  "save_vcom1_config",
+  "return_to_entry",
+  "setup_vcom2_port_forwarding",
+  "verify_station_copy",
+  "verify_data_round1",
 ]
 
-recycle_order = ["simulate_data_feed_round2", "simulate_data_feed_round3"]
-
-# Step 0: Setup both ports in mock state
-[[workflow.setup_ports]]
-description = "Initialize mock state with two ports"
-mock_path = "$.port_order"
-mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
-
-[[workflow.setup_ports]]
-description = "Initialize vcom1 port structure"
-mock_path = "$.ports['/tmp/vcom1']"
-mock_set_value = { enabled = false, state = { type = "free" }, modbus_masters = [], modbus_slaves = [], master_source = { type = "manual" } }
-
-[[workflow.setup_ports]]
-description = "Initialize vcom2 port structure"
-mock_path = "$.ports['/tmp/vcom2']"
-mock_set_value = { enabled = false, state = { type = "free" }, modbus_masters = [], modbus_slaves = [], master_source = { type = "manual" } }
+recycle_order = [
+  "update_vcom1_registers_round2",
+  "verify_data_round2",
+  "update_vcom1_registers_round3",
+  "verify_data_round3",
+]
 
 # Step 1: Navigate to Entry page
 [[workflow.navigate_to_entry]]
@@ -59,302 +51,471 @@ mock_path = "$.page"
 mock_set_value = { type = "entry" }
 
 [[workflow.navigate_to_entry]]
-description = "Initial navigation to entry page"
+description = "Ensure entry page port order"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.navigate_to_entry]]
+description = "Initialize vcom1 port"
+mock_path = "$.ports['/tmp/vcom1']"
+mock_set_value = { enabled = false, state = { type = "free" }, modbus_masters = [], modbus_slaves = [] }
+
+[[workflow.navigate_to_entry]]
+description = "Initialize vcom2 port"
+mock_path = "$.ports['/tmp/vcom2']"
+mock_set_value = { enabled = false, state = { type = "free" }, modbus_masters = [], modbus_slaves = [] }
+
+[[workflow.navigate_to_entry]]
 verify = "/tmp/vcom1"
 
 [[workflow.navigate_to_entry]]
 verify = "/tmp/vcom2"
 
-# Step 2: Setup vcom1 with IPC data source
-[[workflow.setup_vcom1_ipc]]
+# Step 2: Setup vcom1 as manual master
+[[workflow.setup_vcom1_manual_master]]
 description = "Select vcom1 port"
 key = "Enter"
 
-[[workflow.setup_vcom1_ipc]]
-description = "Switch to config panel"
+[[workflow.setup_vcom1_manual_master]]
+description = "Switch to config panel for vcom1"
 mock_path = "$.page"
 mock_set_value = { type = "config_panel", selected_port = 0 }
 
-[[workflow.setup_vcom1_ipc]]
+[[workflow.setup_vcom1_manual_master]]
+verify = "Enable Port"
+
+[[workflow.setup_vcom1_manual_master]]
 description = "Navigate to Business Configuration"
 key = "Down"
 times = 2
 
-[[workflow.setup_vcom1_ipc]]
+[[workflow.setup_vcom1_manual_master]]
 description = "Enter Modbus panel"
 key = "Enter"
 
-[[workflow.setup_vcom1_ipc]]
-description = "Switch to Modbus dashboard"
+[[workflow.setup_vcom1_manual_master]]
+description = "Switch to Modbus dashboard for vcom1"
 mock_path = "$.page"
 mock_set_value = { type = "modbus_dashboard", selected_port = 0 }
 
-[[workflow.setup_vcom1_ipc]]
-description = "Navigate to Data Source Kind"
-key = "Down"
-times = 2
+[[workflow.setup_vcom1_manual_master]]
+description = "Update cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
 
-[[workflow.setup_vcom1_ipc]]
-description = "Enter edit mode for Data Source Kind"
-key = "Enter"
+[[workflow.setup_vcom1_manual_master]]
+verify = "ModBus Master/Slave Set"
 
-[[workflow.setup_vcom1_ipc]]
-description = "Cycle to IpcPipe (Manual->MqttServer->HttpServer->IpcPipe)"
-key = "Char(l)"
-times = 3
-
-[[workflow.setup_vcom1_ipc]]
-description = "Confirm Data Source Kind"
-key = "Enter"
-
-[[workflow.setup_vcom1_ipc]]
-description = "Update master source to IpcPipe in mock state"
-mock_path = "$.ports['/tmp/vcom1'].master_source"
-mock_set_value = { type = "ipc_pipe", path = "" }
-
-[[workflow.setup_vcom1_ipc]]
-description = "Navigate to Data Source Value"
-key = "Down"
-
-[[workflow.setup_vcom1_ipc]]
-description = "Enter edit mode for IPC path"
-key = "Enter"
-
-[[workflow.setup_vcom1_ipc]]
-description = "Type IPC pipe path"
-input = "string"
-value = "/tmp/test_ipc_pipe"
-
-[[workflow.setup_vcom1_ipc]]
-description = "Confirm IPC path"
-key = "Enter"
-
-[[workflow.setup_vcom1_ipc]]
-description = "Update IPC path in mock state"
-mock_path = "$.ports['/tmp/vcom1'].master_source.path"
-mock_set_value = "/tmp/test_ipc_pipe"
-
-[[workflow.setup_vcom1_ipc]]
-description = "Navigate to AddLine"
-key = "Down"
-
-[[workflow.setup_vcom1_ipc]]
+# Step 3: Configure station on vcom1
+[[workflow.configure_vcom1_station]]
 description = "Create station on vcom1"
 key = "Enter"
 
-[[workflow.setup_vcom1_ipc]]
+[[workflow.configure_vcom1_station]]
 description = "Initialize master station on vcom1"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
   { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
 ]
 
-[[workflow.setup_vcom1_ipc]]
-description = "Save vcom1 configuration"
+[[workflow.configure_vcom1_station]]
+description = "Focus cursor on station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.configure_vcom1_station]]
+verify = "#1 - ID: 1"
+
+# Step 4: Edit registers on vcom1 - Round 1 (Sequential: 0-9)
+[[workflow.edit_vcom1_registers_round1]]
+description = "Navigate to register editing area"
+key = "Down"
+times = 4
+
+[[workflow.edit_vcom1_registers_round1]]
+description = "Move to first register"
+key = "Down"
+
+[[workflow.edit_vcom1_registers_round1]]
+description = "Edit register 0 = 0x0000"
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0000
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value = 0
+
+[[workflow.edit_vcom1_registers_round1]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+description = "Edit register 1 = 0x0001"
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0001
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
+mock_set_value = 1
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0002
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
+mock_set_value = 2
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0003
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
+mock_set_value = 3
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0004
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
+mock_set_value = 4
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0005
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
+mock_set_value = 5
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0006
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
+mock_set_value = 6
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0007
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
+mock_set_value = 7
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0008
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
+mock_set_value = 8
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+input = "hex"
+value = 0x0009
+
+[[workflow.edit_vcom1_registers_round1]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round1]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
+mock_set_value = 9
+
+[[workflow.edit_vcom1_registers_round1]]
+description = "Verify register data on screen"
+verify = "0x0000              0x0000 0x0001 0x0002 0x0003"
+
+[[workflow.edit_vcom1_registers_round1]]
+description = "Return to top"
+key = "Ctrl+PageUp"
+
+# Step 5: Save vcom1 configuration
+[[workflow.save_vcom1_config]]
+description = "Save configuration with Ctrl+S"
 key = "Ctrl+S"
 
-[[workflow.setup_vcom1_ipc]]
+[[workflow.save_vcom1_config]]
 description = "Enable vcom1 port"
 mock_path = "$.ports['/tmp/vcom1'].enabled"
 mock_set_value = true
 
-[[workflow.setup_vcom1_ipc]]
-description = "Set vcom1 port state to running"
+[[workflow.save_vcom1_config]]
+description = "Set vcom1 state to running"
 mock_path = "$.ports['/tmp/vcom1'].state"
 mock_set_value = { type = "occupied_by_this" }
 
-[[workflow.setup_vcom1_ipc]]
-description = "Return to entry page"
-key = "Escape"
-times = 3
+[[workflow.save_vcom1_config]]
+description = "Wait for port to stabilize"
+sleep_ms = 5000
 
-[[workflow.setup_vcom1_ipc]]
+[[workflow.save_vcom1_config]]
+verify = "Running ●"
+
+# Step 6: Return to entry page
+[[workflow.return_to_entry]]
+description = "Press Escape to return"
+key = "Escape"
+
+[[workflow.return_to_entry]]
+description = "Press Escape again"
+key = "Escape"
+
+[[workflow.return_to_entry]]
 description = "Switch to entry page"
 mock_path = "$.page"
 mock_set_value = { type = "entry" }
 
-# Step 3: Setup vcom2 with Port Forwarding from vcom1
-[[workflow.setup_vcom2_forwarding]]
-description = "Navigate down to vcom2"
+[[workflow.return_to_entry]]
+verify = "/tmp/vcom1"
+
+[[workflow.return_to_entry]]
+verify = "/tmp/vcom2"
+
+# Step 7: Setup vcom2 with Port Forwarding
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Navigate to vcom2"
 key = "Down"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Select vcom2 port"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Select vcom2"
 key = "Enter"
 
-[[workflow.setup_vcom2_forwarding]]
+[[workflow.setup_vcom2_port_forwarding]]
 description = "Switch to config panel for vcom2"
 mock_path = "$.page"
 mock_set_value = { type = "config_panel", selected_port = 1 }
 
-[[workflow.setup_vcom2_forwarding]]
+[[workflow.setup_vcom2_port_forwarding]]
 description = "Navigate to Business Configuration"
 key = "Down"
 times = 2
 
-[[workflow.setup_vcom2_forwarding]]
+[[workflow.setup_vcom2_port_forwarding]]
 description = "Enter Modbus panel"
 key = "Enter"
 
-[[workflow.setup_vcom2_forwarding]]
+[[workflow.setup_vcom2_port_forwarding]]
 description = "Switch to Modbus dashboard for vcom2"
 mock_path = "$.page"
 mock_set_value = { type = "modbus_dashboard", selected_port = 1 }
 
-[[workflow.setup_vcom2_forwarding]]
+[[workflow.setup_vcom2_port_forwarding]]
 description = "Navigate to Data Source Kind"
 key = "Down"
 times = 2
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Enter edit mode for Data Source Kind"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Enter edit mode for Data Source"
 key = "Enter"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Cycle to PortForwarding (Manual->..->PortForwarding)"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Cycle to PortForwarding (Manual->MQTT->HTTP->IPC->PortForwarding)"
 key = "Char(l)"
 times = 4
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Confirm Data Source Kind as PortForwarding"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Confirm Data Source as PortForwarding"
 key = "Enter"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Update master source to PortForwarding in mock state"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Set master source to PortForwarding"
 mock_path = "$.ports['/tmp/vcom2'].master_source"
 mock_set_value = { type = "port_forwarding", source_port = "" }
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Verify Port Forwarding data source is shown"
+[[workflow.setup_vcom2_port_forwarding]]
 verify = "Port Forwarding"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Navigate to Source Port selector"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Navigate to Source Port"
 key = "Down"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Enter edit mode for source port selection"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Enter edit mode for source port"
 key = "Enter"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Select vcom1 as source (should be the only available port)"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Select vcom1 (first and only available port)"
 key = "Enter"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Update source port to vcom1 in mock state"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Update source port and COPY STATIONS from vcom1"
 mock_path = "$.ports['/tmp/vcom2'].master_source.source_port"
 mock_set_value = "/tmp/vcom1"
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Verify source port is shown"
-verify = "/tmp/vcom1"
-
-[[workflow.setup_vcom2_forwarding]]
-description = "Navigate to AddLine"
-key = "Down"
-
-[[workflow.setup_vcom2_forwarding]]
-description = "Create station on vcom2"
-key = "Enter"
-
-[[workflow.setup_vcom2_forwarding]]
-description = "Initialize master station on vcom2"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "CRITICAL: Copy station configuration from vcom1 to vcom2"
 mock_path = "$.ports['/tmp/vcom2'].modbus_masters"
 mock_set_value = [
-  { station_id = 2, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
 ]
 
-[[workflow.setup_vcom2_forwarding]]
+[[workflow.setup_vcom2_port_forwarding]]
+verify = "/tmp/vcom1"
+
+[[workflow.setup_vcom2_port_forwarding]]
 description = "Save vcom2 configuration"
 key = "Ctrl+S"
 
-[[workflow.setup_vcom2_forwarding]]
+[[workflow.setup_vcom2_port_forwarding]]
 description = "Enable vcom2 port"
 mock_path = "$.ports['/tmp/vcom2'].enabled"
 mock_set_value = true
 
-[[workflow.setup_vcom2_forwarding]]
-description = "Set vcom2 port state to running"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Set vcom2 state to running"
 mock_path = "$.ports['/tmp/vcom2'].state"
 mock_set_value = { type = "occupied_by_this" }
 
-# Step 4: Verify forwarding setup
-[[workflow.verify_forwarding_setup]]
-description = "Verify vcom1 is using IPC data source"
-mock_verify_path = "$.ports['/tmp/vcom1'].master_source.type"
-mock_verify_value = "ipc_pipe"
+[[workflow.setup_vcom2_port_forwarding]]
+description = "Wait for port to stabilize"
+sleep_ms = 5000
 
-[[workflow.verify_forwarding_setup]]
-description = "Verify vcom2 is using Port Forwarding data source"
-mock_verify_path = "$.ports['/tmp/vcom2'].master_source.type"
-mock_verify_value = "port_forwarding"
+# Step 8: Verify station configuration was copied
+[[workflow.verify_station_copy]]
+description = "Verify vcom2 has copied station config"
+mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].station_id"
+mock_verify_value = 1
 
-[[workflow.verify_forwarding_setup]]
-description = "Verify vcom2 is forwarding from vcom1"
-mock_verify_path = "$.ports['/tmp/vcom2'].master_source.source_port"
-mock_verify_value = "/tmp/vcom1"
+[[workflow.verify_station_copy]]
+mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].register_type"
+mock_verify_value = "Holding"
 
-# Step 5: Simulate external data feed to vcom1 - Round 1 (Sequential: 0-9)
-[[workflow.simulate_data_feed_round1]]
-description = "Simulate IPC pipe feeding data to vcom1 - Round 1"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[[workflow.verify_station_copy]]
+mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].start_address"
+mock_verify_value = 0
 
-[[workflow.simulate_data_feed_round1]]
-description = "Verify vcom1 has the data"
-mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[[workflow.verify_station_copy]]
+mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].register_count"
+mock_verify_value = 10
 
-[[workflow.simulate_data_feed_round1]]
-description = "Simulate port forwarding daemon copying data to vcom2"
-mock_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
-mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-[[workflow.simulate_data_feed_round1]]
-description = "Verify vcom2 receives forwarded data"
+# Step 9: Verify data - Round 1
+[[workflow.verify_data_round1]]
+description = "Verify vcom2 shows forwarded data from vcom1"
 mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-[[workflow.simulate_data_feed_round1]]
-description = "Verify data appears on screen for vcom2"
+[[workflow.verify_data_round1]]
 verify = "0x0000              0x0000 0x0001 0x0002 0x0003"
 
-# Step 6: Simulate external data feed - Round 2 (Reverse: 9-0)
-[[workflow.simulate_data_feed_round2]]
-description = "Simulate IPC pipe feeding data to vcom1 - Round 2"
+# Step 10: Update vcom1 registers - Round 2 (Reverse: 9-0)
+[[workflow.update_vcom1_registers_round2]]
+description = "Update vcom1 registers to reverse order"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
-[[workflow.simulate_data_feed_round2]]
-description = "Simulate port forwarding daemon copying data to vcom2"
+[[workflow.update_vcom1_registers_round2]]
+description = "Simulate port forwarding daemon sync"
 mock_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
-[[workflow.simulate_data_feed_round2]]
-description = "Verify vcom2 receives forwarded data"
+# Step 11: Verify data - Round 2
+[[workflow.verify_data_round2]]
 mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
-[[workflow.simulate_data_feed_round2]]
-description = "Verify data appears on screen for vcom2"
+[[workflow.verify_data_round2]]
 verify = "0x0000              0x0009 0x0008 0x0007 0x0006"
 
-# Step 7: Simulate external data feed - Round 3 (Custom pattern)
-[[workflow.simulate_data_feed_round3]]
-description = "Simulate IPC pipe feeding data to vcom1 - Round 3"
+# Step 12: Update vcom1 registers - Round 3 (Custom)
+[[workflow.update_vcom1_registers_round3]]
+description = "Update vcom1 registers to custom pattern"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
-[[workflow.simulate_data_feed_round3]]
-description = "Simulate port forwarding daemon copying data to vcom2"
+[[workflow.update_vcom1_registers_round3]]
+description = "Simulate port forwarding daemon sync"
 mock_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
-[[workflow.simulate_data_feed_round3]]
-description = "Verify vcom2 receives forwarded data"
+# Step 13: Verify data - Round 3
+[[workflow.verify_data_round3]]
 mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_verify_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
-[[workflow.simulate_data_feed_round3]]
-description = "Verify data appears on screen for vcom2"
+[[workflow.verify_data_round3]]
 verify = "0x0000              0x1111 0x2222 0x3333 0x4444"

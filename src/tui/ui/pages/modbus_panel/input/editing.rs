@@ -492,20 +492,58 @@ fn commit_selector_edit(
 
                             let mut should_restart = false;
                             write_status(|status| {
+                                // First, get the source port's station configurations
+                                let source_stations = if let Some(source_port_data) =
+                                    status.ports.map.get(selected_port_name)
+                                {
+                                    let types::port::PortConfig::Modbus { stations, .. } =
+                                        &source_port_data.config;
+                                    Some(stations.clone())
+                                } else {
+                                    None
+                                };
+
                                 let port = status
                                     .ports
                                     .map
                                     .get_mut(&port_name)
                                     .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
 
-                                let types::port::PortConfig::Modbus { master_source, .. } =
-                                    &mut port.config;
+                                let types::port::PortConfig::Modbus {
+                                    master_source,
+                                    stations,
+                                    ..
+                                } = &mut port.config;
+
                                 if let ModbusMasterDataSource::PortForwarding { source_port } =
                                     master_source
                                 {
                                     if *source_port != *selected_port_name {
                                         *source_port = selected_port_name.clone();
                                         port.config_modified = true;
+
+                                        // CRITICAL FIX: Copy station configurations from source port
+                                        if let Some(source_stations) = source_stations {
+                                            if !source_stations.is_empty() {
+                                                *stations = source_stations;
+                                                log::info!(
+                                                    "Copied {} station configuration(s) from source port '{}'",
+                                                    stations.len(),
+                                                    selected_port_name
+                                                );
+                                            } else {
+                                                log::warn!(
+                                                    "Source port '{}' has no station configurations to copy",
+                                                    selected_port_name
+                                                );
+                                            }
+                                        } else {
+                                            log::warn!(
+                                                "Source port '{}' not found or not accessible",
+                                                selected_port_name
+                                            );
+                                        }
+
                                         if matches!(port.state, PortState::OccupiedByThis) {
                                             should_restart = true;
                                         }
