@@ -123,6 +123,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             write_status(|status| {
                 status.temporarily.new_port_creation.active = true;
                 status.temporarily.new_port_creation.port_type_index = 0;
+                
+                // Automatically navigate cursor to the editing node
+                status.page = Page::Entry {
+                    cursor: Some(types::cursor::EntryCursor::CreateVirtual),
+                    view_offset: 0, // Will be recalculated by smart viewport
+                };
                 Ok(())
             })?;
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;

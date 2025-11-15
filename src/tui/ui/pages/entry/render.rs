@@ -193,8 +193,8 @@ fn render_node_grid(
         // This ensures the thumb size reflects the actual visible portion
         let scrollbar_max = total_nodes.saturating_sub(1).max(1);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
-            .thumb_symbol("─")  // Use horizontal line for thumb instead of block
-            .track_symbol(Some("─"));  // Use horizontal line for track
+            .thumb_symbol("━")  // Use thick horizontal line for occupied part
+            .track_symbol(Some("─"));  // Use thin horizontal line for unoccupied part
         frame.render_stateful_widget(
             scrollbar,
             scrollbar_area,
