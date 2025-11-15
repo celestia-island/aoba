@@ -104,7 +104,7 @@ mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "AddLine" }
 
 [[workflow.enter_modbus_panel]]
-verify_regex = "ModBus Master/Slave"
+verify = "ModBus Master/Slave Settings"
 
 # Step 5: Configure Data Source
 [[workflow.configure_data_source]]

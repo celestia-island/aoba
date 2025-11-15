@@ -188,7 +188,7 @@ description = "Update connection mode in mock state"
 mock_path = "$.page_state.modbus_dashboard.connection_mode"
 mock_set_value = "slave"
 [[workflow.enter_modbus_panel]]
-verify_regex = "ModBus Master/Slave"
+verify = "ModBus Master/Slave Settings"
 
 
 # Step 4.5: Switch to Slave Mode
