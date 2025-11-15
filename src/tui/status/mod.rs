@@ -673,6 +673,13 @@ derive_struct! {
                 /// Cursor position inside the buffer
                 cursor_pos: usize = 0,
             },
+            // New port creation state (for virtual port creation in entry page)
+            new_port_creation: {
+                /// Whether we're currently creating a new port
+                active: bool = false,
+                /// Selected port type: 0 = IPC, 1 = HTTP
+                port_type_index: usize = 0,
+            },
         }
     }
 }
