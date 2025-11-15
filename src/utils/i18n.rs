@@ -33,6 +33,18 @@ derive_struct! {
             entry_page_required: String = "entry_page_required".to_string(),
             error_loading_content: String = "error_loading_content".to_string(),
             err_modbus_config_empty: String = "err-modbus-config-empty".to_string(),
+            port_suffix: String = "port_suffix".to_string(),
+            virtual_port_prefix: String = "virtual_port_prefix".to_string(),
+            new_action: String = "new_action".to_string(),
+            delete_action: String = "delete_action".to_string(),
+            port_creation_new_label: String = "port_creation_new_label".to_string(),
+            port_creation_ipc_pipe: String = "port_creation_ipc_pipe".to_string(),
+            port_creation_http_server: String = "port_creation_http_server".to_string(),
+            press_enter_confirm: String = "press_enter_confirm".to_string(),
+            press_esc_cancel_action: String = "press_esc_cancel_action".to_string(),
+            hint_press_n_new_port: String = "hint_press_n_new_port".to_string(),
+            hint_press_d_delete_port: String = "hint_press_d_delete_port".to_string(),
+            hint_press_a_about: String = "hint_press_a_about".to_string(),
         },
 
         about: {
@@ -74,6 +86,7 @@ derive_struct! {
             hint_back_list_save: String = "hint_back_list_save".to_string(),
             hint_switch_tab: String = "hint_switch_tab".to_string(),
             hint_move_vertical: String = "hint_move_vertical".to_string(),
+            hint_move_horizontal: String = "hint_move_horizontal".to_string(),
             hint_move_with_panels: String = "hint_move_with_panels".to_string(),
             hint_switch_options: String = "hint_switch_options".to_string(),
 
