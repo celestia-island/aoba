@@ -225,7 +225,18 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
     let app = Arc::new(RwLock::new(Status::default()));
     crate::tui::status::init_status(app.clone())?;
 
-    let backend = TestBackend::new(120, 40);
+    // Allow test runner to override TestBackend dimensions via environment variables
+    // (AOBA_TUI_WIDTH / AOBA_TUI_HEIGHT) so that IPC-driven TUI can use the same
+    // geometry as the TestBackend used by the E2E harness.
+    let width = std::env::var("AOBA_TUI_WIDTH")
+        .ok()
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(120);
+    let height = std::env::var("AOBA_TUI_HEIGHT")
+        .ok()
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(40);
+    let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend)?;
 
     let (core_tx, core_rx) = flume::unbounded::<crate::core::bus::CoreToUi>();

@@ -39,6 +39,11 @@ pub struct ExecutionContext {
     pub in_modbus_panel: bool,
 }
 
+// Default terminal size used for E2E tests. Keep a single source of truth here so
+// both screen-capture mode and IPC-driven DrillDown mode use the same dimensions.
+const E2E_TUI_WIDTH: u16 = 120;
+const E2E_TUI_HEIGHT: u16 = 40;
+
 /// Execute a complete workflow
 pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -> Result<()> {
     log::info!("🚀 Starting workflow execution: {}", workflow.manifest.id);
@@ -186,6 +191,10 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
     cmd.env("LANGUAGE", "en_US");
     cmd.env("LC_ALL", "en_US.UTF-8");
     cmd.env("LANG", "en_US.UTF-8");
+    // Provide E2E terminal size to the spawned TUI so that the `--debug-ci` process
+    // renders with the same geometry as the simulated TestBackend used in screen-capture mode.
+    cmd.env("AOBA_TUI_WIDTH", E2E_TUI_WIDTH.to_string());
+    cmd.env("AOBA_TUI_HEIGHT", E2E_TUI_HEIGHT.to_string());
 
     let child = cmd
         .stdin(std::process::Stdio::null())
@@ -502,7 +511,7 @@ async fn execute_step_group_with_retry(
 /// Capture screenshot from current TUI state
 async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
     match ctx.mode {
-        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(120, 50),
+        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(E2E_TUI_WIDTH, E2E_TUI_HEIGHT),
         ExecutionMode::DrillDown => {
             if let Some(sender) = ctx.ipc_sender.as_mut() {
                 let (content, _width, _height) =
@@ -631,8 +640,8 @@ async fn execute_single_step(
         // Render the TUI to a string based on execution mode
         let screen_content = match ctx.mode {
             ExecutionMode::ScreenCaptureOnly => {
-                // Use TestBackend directly
-                render_tui_to_string(68, 50)?
+                // Use TestBackend directly with the configured default size
+                render_tui_to_string(E2E_TUI_WIDTH, E2E_TUI_HEIGHT)?
             }
             ExecutionMode::DrillDown => {
                 // Request screen from TUI process via IPC
