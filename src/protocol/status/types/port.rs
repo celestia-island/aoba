@@ -160,11 +160,6 @@ pub enum PortStatusIndicator {
     Syncing,
     /// Config was just successfully applied (green ✔ checkmark, shown for 3 seconds)
     AppliedSuccess { timestamp: DateTime<Local> },
-    /// Port failed to start (red text with error message)
-    StartupFailed {
-        error_message: String,
-        timestamp: DateTime<Local>,
-    },
 }
 
 #[derive(Debug, Clone)]

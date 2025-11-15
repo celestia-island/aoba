@@ -171,6 +171,7 @@ async fn main() -> Result<()> {
             log::info!("    - data_source_ipc_pipe");
             log::info!("    - data_source_http_server");
             log::info!("    - data_source_mqtt_client");
+            log::info!("    - data_source_port_forwarding");
             log::info!("");
             log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
             log::info!("       cargo run --package tui_e2e -- --list");
@@ -319,6 +320,10 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
     workflows.insert(
         "data_source_mqtt_client".to_string(),
         parse_workflow(include_str!("../workflow/data_source/mqtt_client.toml"))?,
+    );
+    workflows.insert(
+        "data_source_port_forwarding".to_string(),
+        parse_workflow(include_str!("../workflow/data_source/port_forwarding.toml"))?,
     );
 
     Ok(workflows)

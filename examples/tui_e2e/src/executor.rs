@@ -39,6 +39,11 @@ pub struct ExecutionContext {
     pub in_modbus_panel: bool,
 }
 
+// Default terminal size used for E2E tests. Keep a single source of truth here so
+// both screen-capture mode and IPC-driven DrillDown mode use the same dimensions.
+const E2E_TUI_WIDTH: u16 = 120;
+const E2E_TUI_HEIGHT: u16 = 40;
+
 /// Execute a complete workflow
 pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -> Result<()> {
     log::info!("🚀 Starting workflow execution: {}", workflow.manifest.id);
@@ -186,6 +191,10 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
     cmd.env("LANGUAGE", "en_US");
     cmd.env("LC_ALL", "en_US.UTF-8");
     cmd.env("LANG", "en_US.UTF-8");
+    // Provide E2E terminal size to the spawned TUI so that the `--debug-ci` process
+    // renders with the same geometry as the simulated TestBackend used in screen-capture mode.
+    cmd.env("AOBA_TUI_WIDTH", E2E_TUI_WIDTH.to_string());
+    cmd.env("AOBA_TUI_HEIGHT", E2E_TUI_HEIGHT.to_string());
 
     let child = cmd
         .stdin(std::process::Stdio::null())
@@ -502,7 +511,7 @@ async fn execute_step_group_with_retry(
 /// Capture screenshot from current TUI state
 async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
     match ctx.mode {
-        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(160, 50),
+        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(E2E_TUI_WIDTH, E2E_TUI_HEIGHT),
         ExecutionMode::DrillDown => {
             if let Some(sender) = ctx.ipc_sender.as_mut() {
                 let (content, _width, _height) =
@@ -622,7 +631,7 @@ async fn execute_single_step(
     }
 
     // Handle screen verification - render and verify content
-    if step.verify.is_some() {
+    if step.verify.is_some() || step.verify_regex.is_some() {
         // In DrillDown mode, give extra time for TUI to render before requesting screen
         if ctx.mode == ExecutionMode::DrillDown {
             sleep_1s().await;
@@ -631,8 +640,8 @@ async fn execute_single_step(
         // Render the TUI to a string based on execution mode
         let screen_content = match ctx.mode {
             ExecutionMode::ScreenCaptureOnly => {
-                // Use TestBackend directly
-                render_tui_to_string(160, 50)?
+                // Use TestBackend directly with the configured default size
+                render_tui_to_string(E2E_TUI_WIDTH, E2E_TUI_HEIGHT)?
             }
             ExecutionMode::DrillDown => {
                 // Request screen from TUI process via IPC
@@ -646,8 +655,13 @@ async fn execute_single_step(
             }
         };
 
-        // Get expected text
-        let expected_text = step.verify.as_ref().unwrap().clone();
+        // Determine if we're using regex or plain text matching
+        let use_regex = step.verify_regex.is_some();
+        let expected_text = if use_regex {
+            step.verify_regex.as_ref().unwrap().clone()
+        } else {
+            step.verify.as_ref().unwrap().clone()
+        };
 
         let verification_result: Result<(), VerificationFailure> =
             if let Some(mut line_num) = step.at_line {
@@ -676,7 +690,19 @@ async fn execute_single_step(
                     ))
                 } else {
                     let actual_line = lines[line_num];
-                    if actual_line.contains(&expected_text) {
+                    let matches = if use_regex {
+                        let re = regex::Regex::new(&expected_text).map_err(|e| {
+                            VerificationFailure::new(
+                                expected_text.clone(),
+                                Some(format!("invalid regex pattern: {}", e)),
+                            )
+                        })?;
+                        re.is_match(actual_line)
+                    } else {
+                        actual_line.contains(&expected_text)
+                    };
+
+                    if matches {
                         Ok(())
                     } else {
                         Err(VerificationFailure::new(
@@ -689,25 +715,39 @@ async fn execute_single_step(
                         ))
                     }
                 }
-            } else if screen_content.contains(&expected_text) {
-                Ok(())
             } else {
-                // Log the actual screen content for debugging
-                log::error!(
-                    "❌ Verification failed. Expected text not found: '{}'",
-                    expected_text
-                );
-                log::error!("📺 Actual screen content:\n{}", screen_content);
-                log::error!(
-                    "📏 Screen size: {} lines, {} chars total",
-                    screen_content.lines().count(),
-                    screen_content.len()
-                );
+                let matches = if use_regex {
+                    let re = regex::Regex::new(&expected_text).map_err(|e| {
+                        VerificationFailure::new(
+                            expected_text.clone(),
+                            Some(format!("invalid regex pattern: {}", e)),
+                        )
+                    })?;
+                    re.is_match(&screen_content)
+                } else {
+                    screen_content.contains(&expected_text)
+                };
 
-                Err(VerificationFailure::new(
-                    expected_text.clone(),
-                    Some("expected text not present on screen".to_string()),
-                ))
+                if matches {
+                    Ok(())
+                } else {
+                    // Log the actual screen content for debugging
+                    log::error!(
+                        "❌ Verification failed. Expected text not found: '{}'",
+                        expected_text
+                    );
+                    log::error!("📺 Actual screen content:\n{}", screen_content);
+                    log::error!(
+                        "📏 Screen size: {} lines, {} chars total",
+                        screen_content.lines().count(),
+                        screen_content.len()
+                    );
+
+                    Err(VerificationFailure::new(
+                        expected_text.clone(),
+                        Some("expected text not present on screen".to_string()),
+                    ))
+                }
             };
 
         verification_result.map_err(anyhow::Error::from)?;

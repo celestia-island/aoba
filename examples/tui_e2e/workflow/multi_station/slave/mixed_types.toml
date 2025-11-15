@@ -158,7 +158,7 @@ mock_set_value = { kind = "AddLine" }
 
 [[workflow.enter_modbus_panel]]
 description = "Verify Modbus panel header"
-verify = "ModBus Master/Slave Set"
+verify = "ModBus Master/Slave Settings"
 at_line = 0
 
 # Step 5: Create two stations
@@ -1027,6 +1027,15 @@ mock_verify_value = true
 description = "Check port state is Running"
 mock_verify_path = "$.ports['/tmp/vcom1'].state"
 mock_verify_value = { type = "occupied_by_this" }
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows Modbus configuration page"
+verify_regex = "ModBus Master/Slave"
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows correct port"
+verify_regex = "/tmp/vcom1"
+
 
 # Round 2 updates
 [[workflow.edit_station1_round2]]

@@ -134,12 +134,6 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
                     let elapsed = Local::now().signed_duration_since(timestamp);
                     elapsed.num_seconds() < 3
                 }
-                PortStatusIndicator::StartupFailed { timestamp, .. } => {
-                    // Show startup failure for 10 seconds
-                    use chrono::Local;
-                    let elapsed = Local::now().signed_duration_since(timestamp);
-                    elapsed.num_seconds() < 10
-                }
                 _ => true,
             };
 
@@ -233,21 +227,5 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             "✔".to_string(),
             Color::Green,
         )),
-        PortStatusIndicator::StartupFailed { error_message, .. } => {
-            // Show truncated error message in red
-            let truncated_msg = if error_message.len() > 30 {
-                format!("{}...", &error_message[..27])
-            } else {
-                error_message.clone()
-            };
-            Ok((
-                format!(
-                    "{}: {}",
-                    lang.protocol.common.status_startup_failed, truncated_msg
-                ),
-                "✘".to_string(),
-                Color::Red,
-            ))
-        }
     }
 }

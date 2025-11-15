@@ -44,6 +44,18 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                 Some(error.clone()),
             );
             crate::tui::status::write_status(|status| {
+                // Update port status to indicate startup failure
+                if let Some(port) = status.ports.map.get_mut(port_name) {
+                    // Clear subprocess info since it failed to start properly
+                    port.subprocess_info = None;
+                    port.state = types::port::PortState::Free;
+                    // Set status indicator to NotStarted (error shown in bottom bar)
+                    port.status_indicator = types::port::PortStatusIndicator::NotStarted;
+                    log::info!(
+                        "Port {port_name} status updated to NotStarted due to error: {error}"
+                    );
+                }
+                // Also set global error message for user notification
                 status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                     message: msg.clone(),
                     timestamp: chrono::Local::now(),

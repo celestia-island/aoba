@@ -358,7 +358,7 @@ pub async fn run_core_thread(
         if !dead_processes.is_empty() {
             let mut cleanup_paths: HashMap<String, Option<String>> = HashMap::new();
             crate::tui::status::write_status(|status| {
-                for (port_name, _) in &dead_processes {
+                for (port_name, exit_status) in &dead_processes {
                     if let Some(port) = status.ports.map.get_mut(port_name) {
                         if port.state.is_occupied_by_this() {
                             if let Some(info) = &port.subprocess_info {
@@ -367,7 +367,38 @@ pub async fn run_core_thread(
                             }
                             port.state = PortState::Free;
                             port.subprocess_info = None;
-                            port.status_indicator = types::port::PortStatusIndicator::NotStarted;
+
+                            // Check if process exited abnormally
+                            let is_abnormal_exit = match exit_status {
+                                Some(status) if !status.success() => true,
+                                None => true, // Process was terminated by signal
+                                _ => false,
+                            };
+
+                            if is_abnormal_exit {
+                                let error_msg = match exit_status {
+                                    Some(status) => {
+                                        format!("Process exited with status: {}", status)
+                                    }
+                                    None => "Process was terminated by signal".to_string(),
+                                };
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::NotStarted;
+                                log::warn!(
+                                    "Port {port_name} subprocess exited abnormally: {error_msg}"
+                                );
+
+                                // Set global error message
+                                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                                    message: format!(
+                                        "Port {port_name} subprocess failed: {error_msg}"
+                                    ),
+                                    timestamp: Local::now(),
+                                });
+                            } else {
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::NotStarted;
+                            }
                         }
                     }
                 }
@@ -387,9 +418,23 @@ pub async fn run_core_thread(
             }
         }
 
-        for (port_name, message) in subprocess_manager.poll_ipc_messages() {
+        let ipc_messages = subprocess_manager.poll_ipc_messages();
+        let mut needs_refresh = false;
+        for (port_name, message) in ipc_messages {
+            // Check if this is a PortError message that needs immediate UI refresh
+            let is_error_msg =
+                matches!(message, crate::protocol::ipc::IpcMessage::PortError { .. });
             if let Err(err) = handle_cli_ipc_message(port_name.as_str(), message) {
                 log::warn!("Failed to handle IPC message for {port_name}: {err}");
+            }
+            // Request UI refresh after error messages to show status change immediately
+            if is_error_msg {
+                needs_refresh = true;
+            }
+        }
+        if needs_refresh {
+            if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                log::warn!("Failed to send Refreshed after IPC error: {err}");
             }
         }
 
@@ -406,7 +451,7 @@ pub async fn run_core_thread(
             Ok(())
         })?;
 
-        // Check and auto-transition temporary statuses (AppliedSuccess, StartupFailed)
+        // Check and auto-transition temporary statuses (AppliedSuccess)
         // Pass core_tx to trigger immediate UI refresh when status changes
         crate::tui::status_utils::check_and_update_temporary_statuses(Some(&core_tx))?;
 
@@ -652,6 +697,12 @@ async fn start_runtime(
                             Some(err_text.clone()),
                         );
                         crate::tui::status::write_status(|status| {
+                            if let Some(port) = status.ports.map.get_mut(port_name) {
+                                port.state = PortState::Free;
+                                port.subprocess_info = None;
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::NotStarted;
+                            }
                             status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                 message: msg.clone(),
                                 timestamp: Local::now(),
@@ -745,10 +796,7 @@ async fn start_runtime(
                         crate::tui::status::write_status(|status| {
                             if let Some(port) = status.ports.map.get_mut(port_name) {
                                 port.status_indicator =
-                                    types::port::PortStatusIndicator::StartupFailed {
-                                        error_message: err_text.clone(),
-                                        timestamp: Local::now(),
-                                    };
+                                    types::port::PortStatusIndicator::NotStarted;
                             }
                             status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                 message: msg.clone(),
