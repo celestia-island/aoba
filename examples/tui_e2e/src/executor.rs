@@ -622,7 +622,7 @@ async fn execute_single_step(
     }
 
     // Handle screen verification - render and verify content
-    if step.verify.is_some() {
+    if step.verify.is_some() || step.verify_regex.is_some() {
         // In DrillDown mode, give extra time for TUI to render before requesting screen
         if ctx.mode == ExecutionMode::DrillDown {
             sleep_1s().await;
@@ -646,8 +646,13 @@ async fn execute_single_step(
             }
         };
 
-        // Get expected text
-        let expected_text = step.verify.as_ref().unwrap().clone();
+        // Determine if we're using regex or plain text matching
+        let use_regex = step.verify_regex.is_some();
+        let expected_text = if use_regex {
+            step.verify_regex.as_ref().unwrap().clone()
+        } else {
+            step.verify.as_ref().unwrap().clone()
+        };
 
         let verification_result: Result<(), VerificationFailure> =
             if let Some(mut line_num) = step.at_line {
@@ -676,7 +681,19 @@ async fn execute_single_step(
                     ))
                 } else {
                     let actual_line = lines[line_num];
-                    if actual_line.contains(&expected_text) {
+                    let matches = if use_regex {
+                        let re = regex::Regex::new(&expected_text).map_err(|e| {
+                            VerificationFailure::new(
+                                expected_text.clone(),
+                                Some(format!("invalid regex pattern: {}", e)),
+                            )
+                        })?;
+                        re.is_match(actual_line)
+                    } else {
+                        actual_line.contains(&expected_text)
+                    };
+                    
+                    if matches {
                         Ok(())
                     } else {
                         Err(VerificationFailure::new(
@@ -689,25 +706,39 @@ async fn execute_single_step(
                         ))
                     }
                 }
-            } else if screen_content.contains(&expected_text) {
-                Ok(())
             } else {
-                // Log the actual screen content for debugging
-                log::error!(
-                    "❌ Verification failed. Expected text not found: '{}'",
-                    expected_text
-                );
-                log::error!("📺 Actual screen content:\n{}", screen_content);
-                log::error!(
-                    "📏 Screen size: {} lines, {} chars total",
-                    screen_content.lines().count(),
-                    screen_content.len()
-                );
+                let matches = if use_regex {
+                    let re = regex::Regex::new(&expected_text).map_err(|e| {
+                        VerificationFailure::new(
+                            expected_text.clone(),
+                            Some(format!("invalid regex pattern: {}", e)),
+                        )
+                    })?;
+                    re.is_match(&screen_content)
+                } else {
+                    screen_content.contains(&expected_text)
+                };
+                
+                if matches {
+                    Ok(())
+                } else {
+                    // Log the actual screen content for debugging
+                    log::error!(
+                        "❌ Verification failed. Expected text not found: '{}'",
+                        expected_text
+                    );
+                    log::error!("📺 Actual screen content:\n{}", screen_content);
+                    log::error!(
+                        "📏 Screen size: {} lines, {} chars total",
+                        screen_content.lines().count(),
+                        screen_content.len()
+                    );
 
-                Err(VerificationFailure::new(
-                    expected_text.clone(),
-                    Some("expected text not present on screen".to_string()),
-                ))
+                    Err(VerificationFailure::new(
+                        expected_text.clone(),
+                        Some("expected text not present on screen".to_string()),
+                    ))
+                }
             };
 
         verification_result.map_err(anyhow::Error::from)?;

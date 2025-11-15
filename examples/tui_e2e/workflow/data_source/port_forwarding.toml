@@ -323,15 +323,15 @@ mock_set_value = 9
 
 [[workflow.edit_vcom1_registers_round1]]
 description = "Verify row 0x0000 (registers 0-3)"
-verify = "0x0000              0x0000 0x0001 0x0002 0x0003"
+verify_regex = "0x0000\\s+0x0000 0x0001 0x0002 0x0003"
 
 [[workflow.edit_vcom1_registers_round1]]
 description = "Verify row 0x0004 (registers 4-7)"
-verify = "0x0004              0x0004 0x0005 0x0006 0x0007"
+verify_regex = "0x0004\\s+0x0004 0x0005 0x0006 0x0007"
 
 [[workflow.edit_vcom1_registers_round1]]
 description = "Verify row 0x0008 (registers 8-9)"
-verify = "0x0008              0x0008 0x0009"
+verify_regex = "0x0008\\s+0x0008 0x0009"
 
 [[workflow.edit_vcom1_registers_round1]]
 description = "Return to top"
@@ -560,15 +560,15 @@ mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 [[workflow.verify_data_round1]]
 description = "Verify row 0x0000 (registers 0-3)"
-verify = "0x0000              0x0000 0x0001 0x0002 0x0003"
+verify_regex = "0x0000\\s+0x0000 0x0001 0x0002 0x0003"
 
 [[workflow.verify_data_round1]]
 description = "Verify row 0x0004 (registers 4-7)"
-verify = "0x0004              0x0004 0x0005 0x0006 0x0007"
+verify_regex = "0x0004\\s+0x0004 0x0005 0x0006 0x0007"
 
 [[workflow.verify_data_round1]]
 description = "Verify row 0x0008 (registers 8-9)"
-verify = "0x0008              0x0008 0x0009"
+verify_regex = "0x0008\\s+0x0008 0x0009"
 
 # Step 10: Return to vcom1 for Round 2
 [[workflow.return_to_vcom1_for_round2]]
@@ -871,15 +871,15 @@ mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
 [[workflow.verify_data_round2]]
 description = "Verify row 0x0000 (registers 0-3)"
-verify = "0x0000              0x0009 0x0008 0x0007 0x0006"
+verify_regex = "0x0000\\s+0x0009 0x0008 0x0007 0x0006"
 
 [[workflow.verify_data_round2]]
 description = "Verify row 0x0004 (registers 4-7)"
-verify = "0x0004              0x0005 0x0004 0x0003 0x0002"
+verify_regex = "0x0004\\s+0x0005 0x0004 0x0003 0x0002"
 
 [[workflow.verify_data_round2]]
 description = "Verify row 0x0008 (registers 8-9)"
-verify = "0x0008              0x0001 0x0000"
+verify_regex = "0x0008\\s+0x0001 0x0000"
 
 # Step 13: Return to vcom1 for Round 3
 [[workflow.return_to_vcom1_for_round3]]
@@ -1177,12 +1177,12 @@ mock_verify_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8
 
 [[workflow.verify_data_round3]]
 description = "Verify row 0x0000 (registers 0-3)"
-verify = "0x0000              0x1111 0x2222 0x3333 0x4444"
+verify_regex = "0x0000\\s+0x1111 0x2222 0x3333 0x4444"
 
 [[workflow.verify_data_round3]]
 description = "Verify row 0x0004 (registers 4-7)"
-verify = "0x0004              0x5555 0x6666 0x7777 0x8888"
+verify_regex = "0x0004\\s+0x5555 0x6666 0x7777 0x8888"
 
 [[workflow.verify_data_round3]]
 description = "Verify row 0x0008 (registers 8-9)"
-verify = "0x0008              0x9999 0xAAAA"
+verify_regex = "0x0008\\s+0x9999 0xAAAA"
