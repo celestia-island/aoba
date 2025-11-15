@@ -84,6 +84,10 @@ pub struct WorkflowStep {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verify: Option<String>,
 
+    /// Screen verification - regex pattern match
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verify_regex: Option<String>,
+
     /// Line number to verify text at
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at_line: Option<usize>,
