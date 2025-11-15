@@ -38,9 +38,13 @@ init_order = [
 ]
 
 recycle_order = [
-  "update_vcom1_registers_round2",
+  "return_to_vcom1_for_round2",
+  "edit_vcom1_registers_round2",
+  "return_to_vcom2_verify_round2",
   "verify_data_round2",
-  "update_vcom1_registers_round3",
+  "return_to_vcom1_for_round3",
+  "edit_vcom1_registers_round3",
+  "return_to_vcom2_verify_round3",
   "verify_data_round3",
 ]
 
@@ -115,7 +119,7 @@ mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "AddLine" }
 
 [[workflow.setup_vcom1_manual_master]]
-verify = "ModBus Master/Slave Set"
+verify = "Create Station"
 
 # Step 3: Configure station on vcom1
 [[workflow.configure_vcom1_station]]
@@ -318,8 +322,12 @@ mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
 mock_set_value = 9
 
 [[workflow.edit_vcom1_registers_round1]]
-description = "Verify row 0x0000 (registers 0-7)"
-verify = "0x0000              0x0000 0x0001 0x0002 0x0003 0x0004 0x0005 0x0006 0x0007"
+description = "Verify row 0x0000 (registers 0-3)"
+verify = "0x0000              0x0000 0x0001 0x0002 0x0003"
+
+[[workflow.edit_vcom1_registers_round1]]
+description = "Verify row 0x0004 (registers 4-7)"
+verify = "0x0004              0x0004 0x0005 0x0006 0x0007"
 
 [[workflow.edit_vcom1_registers_round1]]
 description = "Verify row 0x0008 (registers 8-9)"
@@ -551,20 +559,307 @@ mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 [[workflow.verify_data_round1]]
-description = "Verify row 0x0000 (registers 0-7)"
-verify = "0x0000              0x0000 0x0001 0x0002 0x0003 0x0004 0x0005 0x0006 0x0007"
+description = "Verify row 0x0000 (registers 0-3)"
+verify = "0x0000              0x0000 0x0001 0x0002 0x0003"
+
+[[workflow.verify_data_round1]]
+description = "Verify row 0x0004 (registers 4-7)"
+verify = "0x0004              0x0004 0x0005 0x0006 0x0007"
 
 [[workflow.verify_data_round1]]
 description = "Verify row 0x0008 (registers 8-9)"
 verify = "0x0008              0x0008 0x0009"
 
-# Step 10: Update vcom1 registers - Round 2 (Reverse: 9-0)
-[[workflow.update_vcom1_registers_round2]]
-description = "Update vcom1 registers to reverse order"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+# Step 10: Return to vcom1 for Round 2
+[[workflow.return_to_vcom1_for_round2]]
+description = "Press Escape to return from modbus panel"
+key = "Escape"
 
-[[workflow.update_vcom1_registers_round2]]
+[[workflow.return_to_vcom1_for_round2]]
+description = "Press Escape again to return to entry"
+key = "Escape"
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Switch to entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Reset entry page selected port to 0"
+mock_path = "$.page_state.entry.selected_port"
+mock_set_value = 0
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Press Up to select vcom1 (if needed)"
+key = "Up"
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Select vcom1"
+key = "Enter"
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Switch to config panel for vcom1"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Set config panel selected_port to 0"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 0
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Navigate to Business Configuration"
+key = "Down"
+times = 2
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Enter Modbus panel"
+key = "Enter"
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Switch to Modbus dashboard for vcom1"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.return_to_vcom1_for_round2]]
+description = "Set modbus dashboard selected_port to 0"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 0
+
+# Step 11: Edit vcom1 registers - Round 2 (Reverse: 9-0)
+[[workflow.edit_vcom1_registers_round2]]
+description = "Navigate to station registers"
+key = "Down"
+times = 5
+
+[[workflow.edit_vcom1_registers_round2]]
+description = "Edit register 0 = 0x0009"
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0009
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value = 9
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0008
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
+mock_set_value = 8
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0007
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
+mock_set_value = 7
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0006
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
+mock_set_value = 6
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0005
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
+mock_set_value = 5
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0004
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
+mock_set_value = 4
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0003
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
+mock_set_value = 3
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0002
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
+mock_set_value = 2
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0001
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
+mock_set_value = 1
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+input = "hex"
+value = 0x0000
+
+[[workflow.edit_vcom1_registers_round2]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round2]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
+mock_set_value = 0
+
+[[workflow.edit_vcom1_registers_round2]]
+description = "Save vcom1 configuration"
+key = "Ctrl+S"
+
+[[workflow.edit_vcom1_registers_round2]]
+description = "Wait for port to stabilize"
+sleep_ms = 3000
+
+# Step 12: Return to vcom2 to verify Round 2
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Press Escape to return"
+key = "Escape"
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Press Escape again"
+key = "Escape"
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Switch to entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Navigate to vcom2"
+key = "Down"
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Select vcom2"
+key = "Enter"
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Switch to config panel for vcom2"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Set config panel selected_port to 1"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 1
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Navigate to Business Configuration"
+key = "Down"
+times = 2
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Enter Modbus panel"
+key = "Enter"
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Switch to Modbus dashboard for vcom2"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.return_to_vcom2_verify_round2]]
+description = "Set modbus dashboard selected_port to 1"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 1
+
+[[workflow.return_to_vcom2_verify_round2]]
 description = "Simulate port forwarding daemon sync"
 mock_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
@@ -575,20 +870,302 @@ mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
 [[workflow.verify_data_round2]]
-description = "Verify row 0x0000 (registers 0-7)"
-verify = "0x0000              0x0009 0x0008 0x0007 0x0006 0x0005 0x0004 0x0003 0x0002"
+description = "Verify row 0x0000 (registers 0-3)"
+verify = "0x0000              0x0009 0x0008 0x0007 0x0006"
+
+[[workflow.verify_data_round2]]
+description = "Verify row 0x0004 (registers 4-7)"
+verify = "0x0004              0x0005 0x0004 0x0003 0x0002"
 
 [[workflow.verify_data_round2]]
 description = "Verify row 0x0008 (registers 8-9)"
 verify = "0x0008              0x0001 0x0000"
 
-# Step 12: Update vcom1 registers - Round 3 (Custom)
-[[workflow.update_vcom1_registers_round3]]
-description = "Update vcom1 registers to custom pattern"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+# Step 13: Return to vcom1 for Round 3
+[[workflow.return_to_vcom1_for_round3]]
+description = "Press Escape to return from modbus panel"
+key = "Escape"
 
-[[workflow.update_vcom1_registers_round3]]
+[[workflow.return_to_vcom1_for_round3]]
+description = "Press Escape again to return to entry"
+key = "Escape"
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Switch to entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Navigate to vcom1 (press Up)"
+key = "Up"
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Select vcom1"
+key = "Enter"
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Switch to config panel for vcom1"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Set config panel selected_port to 0"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 0
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Navigate to Business Configuration"
+key = "Down"
+times = 2
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Enter Modbus panel"
+key = "Enter"
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Switch to Modbus dashboard for vcom1"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.return_to_vcom1_for_round3]]
+description = "Set modbus dashboard selected_port to 0"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 0
+
+# Step 14: Edit vcom1 registers - Round 3 (Custom: 0x1111-0xAAAA)
+[[workflow.edit_vcom1_registers_round3]]
+description = "Navigate to station registers"
+key = "Down"
+times = 5
+
+[[workflow.edit_vcom1_registers_round3]]
+description = "Edit register 0 = 0x1111"
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x1111
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value = 0x1111
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x2222
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
+mock_set_value = 0x2222
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x3333
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
+mock_set_value = 0x3333
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x4444
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
+mock_set_value = 0x4444
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x5555
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
+mock_set_value = 0x5555
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x6666
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
+mock_set_value = 0x6666
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x7777
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
+mock_set_value = 0x7777
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x8888
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
+mock_set_value = 0x8888
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0x9999
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
+mock_set_value = 0x9999
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Right"
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+input = "hex"
+value = 0xAAAA
+
+[[workflow.edit_vcom1_registers_round3]]
+key = "Enter"
+
+[[workflow.edit_vcom1_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
+mock_set_value = 0xAAAA
+
+[[workflow.edit_vcom1_registers_round3]]
+description = "Save vcom1 configuration"
+key = "Ctrl+S"
+
+[[workflow.edit_vcom1_registers_round3]]
+description = "Wait for port to stabilize"
+sleep_ms = 3000
+
+# Step 15: Return to vcom2 to verify Round 3
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Press Escape to return"
+key = "Escape"
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Press Escape again"
+key = "Escape"
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Switch to entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Navigate to vcom2"
+key = "Down"
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Select vcom2"
+key = "Enter"
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Switch to config panel for vcom2"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Set config panel selected_port to 1"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 1
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Navigate to Business Configuration"
+key = "Down"
+times = 2
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Enter Modbus panel"
+key = "Enter"
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Switch to Modbus dashboard for vcom2"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.return_to_vcom2_verify_round3]]
+description = "Set modbus dashboard selected_port to 1"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 1
+
+[[workflow.return_to_vcom2_verify_round3]]
 description = "Simulate port forwarding daemon sync"
 mock_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
@@ -599,8 +1176,12 @@ mock_verify_path = "$.ports['/tmp/vcom2'].modbus_masters[0].registers"
 mock_verify_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
 [[workflow.verify_data_round3]]
-description = "Verify row 0x0000 (registers 0-7)"
-verify = "0x0000              0x1111 0x2222 0x3333 0x4444 0x5555 0x6666 0x7777 0x8888"
+description = "Verify row 0x0000 (registers 0-3)"
+verify = "0x0000              0x1111 0x2222 0x3333 0x4444"
+
+[[workflow.verify_data_round3]]
+description = "Verify row 0x0004 (registers 4-7)"
+verify = "0x0004              0x5555 0x6666 0x7777 0x8888"
 
 [[workflow.verify_data_round3]]
 description = "Verify row 0x0008 (registers 8-9)"

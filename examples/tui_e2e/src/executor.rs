@@ -502,7 +502,7 @@ async fn execute_step_group_with_retry(
 /// Capture screenshot from current TUI state
 async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
     match ctx.mode {
-        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(160, 50),
+        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(68, 50),
         ExecutionMode::DrillDown => {
             if let Some(sender) = ctx.ipc_sender.as_mut() {
                 let (content, _width, _height) =
@@ -632,7 +632,7 @@ async fn execute_single_step(
         let screen_content = match ctx.mode {
             ExecutionMode::ScreenCaptureOnly => {
                 // Use TestBackend directly
-                render_tui_to_string(160, 50)?
+                render_tui_to_string(68, 50)?
             }
             ExecutionMode::DrillDown => {
                 // Request screen from TUI process via IPC
