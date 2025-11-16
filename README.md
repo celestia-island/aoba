@@ -97,6 +97,20 @@ aoba --tui
 
 Configuration is automatically saved to `./aoba_tui_config.json`.
 
+### Configuration cache and CLI flags
+
+`--config-file <FILE>` is used to explicitly select a TUI configuration file to load and save (daemon mode uses `--daemon-config <FILE>` for the same purpose). This option conflicts with `--no-config-cache`, which disables loading and saving of configuration (i.e., it turns off the config cache). Do not use `--config-file <FILE>` (or `--daemon-config <FILE>`) and `--no-config-cache` together — the CLI will reject the combination.
+
+Examples:
+
+```bash
+# Start TUI and explicitly use a config file (load/save enabled)
+aoba --tui --config-file /path/to/config.json
+
+# Start TUI but disable any loading/saving of config, this is the default option
+aoba --tui --no-config-cache
+```
+
 ### Error Handling
 
 If the configuration file doesn't exist, daemon mode will exit with an error:
