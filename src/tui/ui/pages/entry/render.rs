@@ -243,6 +243,10 @@ fn render_node_grid(
         );
     }
 
+    // Render config file path indicator at the bottom of the panel
+    // Position it inside the border, at the bottom, with 1 padding from left and right
+    render_config_path_indicator(frame, area)?;
+
     Ok(())
 }
 
@@ -600,6 +604,46 @@ fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) ->
             .alignment(Alignment::Center);
         frame.render_widget(type_widget, type_area);
     }
+
+    Ok(())
+}
+
+/// Render the config file path indicator at the bottom of the entry panel
+fn render_config_path_indicator(frame: &mut Frame, area: Rect) -> Result<()> {
+    let config_path = read_status(|status| Ok(status.config_file_path.clone()))?;
+
+    let is_temp_mode = config_path.is_none();
+    
+    let indicator_text = if let Some(path) = config_path {
+        // Show config file path
+        format!("{} {}", lang().index.config_path_label, path.display())
+    } else {
+        // Show temporary mode (in italics)
+        lang().index.config_temporary_mode.clone()
+    };
+
+    // Position at bottom of the panel, inside the border (y = area.y + area.height - 2)
+    // with 1 padding from left (x = area.x + 2, accounting for border)
+    let indicator_area = Rect {
+        x: area.x + 2, // 1 padding from left border
+        y: area.y + area.height.saturating_sub(2), // Bottom, inside border
+        width: area.width.saturating_sub(4), // Leave 1 padding on each side
+        height: 1,
+    };
+
+    // Gray color for the indicator, italic if temporary mode
+    let style = if is_temp_mode {
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+
+    let indicator_widget = Paragraph::new(indicator_text)
+        .style(style)
+        .alignment(Alignment::Left);
+    frame.render_widget(indicator_widget, indicator_area);
 
     Ok(())
 }

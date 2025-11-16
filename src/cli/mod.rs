@@ -252,5 +252,12 @@ pub fn parse_args() -> ArgMatches {
                 .action(clap::ArgAction::SetTrue)
                 .hide(false), // Visible in help
         )
+        .arg(
+            Arg::new("config-file")
+                .long("config-file")
+                .help("TUI configuration file path (if not specified, TUI starts in temporary mode without loading/saving config)")
+                .value_name("FILE")
+                .conflicts_with("no-config-cache"),
+        )
         .get_matches()
 }

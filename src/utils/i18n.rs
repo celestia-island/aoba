@@ -45,6 +45,8 @@ derive_struct! {
             hint_press_n_new_port: String = "hint_press_n_new_port".to_string(),
             hint_press_d_delete_port: String = "hint_press_d_delete_port".to_string(),
             hint_press_a_about: String = "hint_press_a_about".to_string(),
+            config_path_label: String = "config_path_label".to_string(),
+            config_temporary_mode: String = "config_temporary_mode".to_string(),
         },
 
         about: {
