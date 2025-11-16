@@ -12,7 +12,7 @@ use crate::utils::{
 use _main::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
-    utils::sleep::sleep_1s,
+    utils::{sleep::sleep_1s, sleep_3s},
 };
 
 // File-level constants to avoid magic numbers
@@ -34,7 +34,9 @@ fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
 /// Test IPC channel data source - master with IPC socket, E2E sends data via IPC, slave polls master
 /// Tests 3 rounds of IPC write followed by slave poll verification
 pub async fn test_ipc_channel_data_source() -> Result<()> {
-    log::info!("🧪 Testing IPC channel data source mode (master with IPC, E2E as client, slave polls)...");
+    log::info!(
+        "🧪 Testing IPC channel data source mode (master with IPC, E2E as client, slave polls)..."
+    );
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
@@ -70,8 +72,11 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
         master_stderr
     );
 
-    log::info!("🚀 Starting master daemon with IPC socket on {}", ports.port1_name);
-    
+    log::info!(
+        "🚀 Starting master daemon with IPC socket on {}",
+        ports.port1_name
+    );
+
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -99,7 +104,7 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
 
     // Write initial empty data to stdin to initialize master
     if let Some(mut stdin) = master.stdin.take() {
-        let empty_payload = build_station_payload(&vec![0; REGISTER_LENGTH]);
+        let empty_payload = build_station_payload(&[0u16; REGISTER_LENGTH]);
         let json = serde_json::to_string(&*empty_payload)?;
         writeln!(stdin, "{}", json)?;
         stdin.flush()?;
@@ -109,14 +114,13 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
     // Wait for master to be ready and create IPC socket
     wait_for_process_ready(&mut master, 3000).await?;
     log::info!("⏳ Waiting for IPC socket to be created...");
-    sleep_1s().await;
-    sleep_1s().await;
+    sleep_3s().await;
 
     // Helper function to send data via IPC with retry
     let send_data_via_ipc = |values: &[u16]| -> Result<()> {
         let payload = build_station_payload(values);
         let json = serde_json::to_string(&*payload)?;
-        
+
         // Wait for IPC socket to be created (with retry)
         let mut retries = 20;
         let stream = loop {
@@ -130,22 +134,22 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
                 Err(e) => return Err(anyhow!("Failed to connect to IPC socket: {}", e)),
             }
         };
-        
+
         // Send data
         let mut stream = stream;
         writeln!(stream, "{}", json)?;
         stream.flush()?;
-        
+
         // Read response
         let mut reader = BufReader::new(stream);
         let mut response = String::new();
         reader.read_line(&mut response)?;
-        
+
         let response_json: serde_json::Value = serde_json::from_str(response.trim())?;
         if !response_json["success"].as_bool().unwrap_or(false) {
             return Err(anyhow!("IPC write failed: {:?}", response_json));
         }
-        
+
         Ok(())
     };
 

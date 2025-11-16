@@ -646,7 +646,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     // Create IPC socket server if --ipc-socket-path is provided
     if let Some(ipc_socket_path) = matches.get_one::<String>("ipc-socket-path") {
         log::info!("🔌 IPC: Starting IPC socket server at {}", ipc_socket_path);
-        
+
         let ipc_socket_path = ipc_socket_path.clone();
         let ipc_storage = storage.clone();
         let ipc_station_id = station_id;
@@ -654,7 +654,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let ipc_register_address = register_address;
         let ipc_register_length = register_length;
         let ipc_changed_ranges = changed_ranges.clone();
-        
+
         // Spawn IPC server in a blocking thread since interprocess accept() is blocking
         let _ipc_handle = tokio::task::spawn_blocking(move || {
             log::info!("🔌 IPC: Task spawned, calling run_ipc_socket_server");
@@ -2025,18 +2025,19 @@ fn run_ipc_socket_server_sync(
         let storage_clone = storage.clone();
         let changed_ranges_clone = changed_ranges.clone();
 
+        // Build a context object to reduce function parameters
+        let ipc_ctx = Arc::new(IpcConnectionContext {
+            storage: storage_clone,
+            station_id,
+            reg_mode,
+            register_address,
+            register_length,
+            changed_ranges: changed_ranges_clone,
+        });
+
         // Handle connection in a separate thread (synchronous)
         std::thread::spawn(move || {
-            if let Err(e) = handle_ipc_connection_sync(
-                stream,
-                conn_id,
-                storage_clone,
-                station_id,
-                reg_mode,
-                register_address,
-                register_length,
-                changed_ranges_clone,
-            ) {
+            if let Err(e) = handle_ipc_connection_sync(stream, conn_id, ipc_ctx.clone()) {
                 log::error!("Connection #{conn_id} error: {e}");
             }
             log::info!("Connection #{conn_id} closed");
@@ -2044,17 +2045,22 @@ fn run_ipc_socket_server_sync(
     }
 }
 
-/// Handle a single IPC connection for master mode (synchronous)
-/// Accepts JSON data (Vec<StationConfig>) and updates storage
-fn handle_ipc_connection_sync(
-    mut stream: interprocess::local_socket::Stream,
-    conn_id: usize,
+/// Context for IPC connection handler to avoid too many function arguments
+struct IpcConnectionContext {
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     station_id: u8,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     register_address: u16,
     register_length: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
+}
+
+/// Handle a single IPC connection for master mode (synchronous)
+/// Accepts JSON data (Vec<StationConfig>) and updates storage
+fn handle_ipc_connection_sync(
+    mut stream: interprocess::local_socket::Stream,
+    conn_id: usize,
+    ctx: Arc<IpcConnectionContext>,
 ) -> Result<()> {
     use std::io::{BufRead, BufReader, Write};
 
@@ -2101,10 +2107,10 @@ fn handle_ipc_connection_sync(
         // Extract values from StationConfig
         let values = match extract_values_from_station_configs(
             &stations,
-            station_id,
-            reg_mode,
-            register_address,
-            register_length,
+            ctx.station_id,
+            ctx.reg_mode,
+            ctx.register_address,
+            ctx.register_length,
         ) {
             Ok(vals) => vals,
             Err(e) => {
@@ -2123,31 +2129,31 @@ fn handle_ipc_connection_sync(
         log::info!(
             "Connection #{conn_id}: Extracted {} values for station_id={}, updating storage",
             values.len(),
-            station_id
+            ctx.station_id
         );
 
         // Update storage with new values
         {
-            let mut context = storage.lock().unwrap();
-            match reg_mode {
+            let mut context = ctx.storage.lock().unwrap();
+            match ctx.reg_mode {
                 crate::protocol::status::types::modbus::RegisterMode::Holding => {
                     for (i, &val) in values.iter().enumerate() {
-                        context.set_holding(register_address + i as u16, val)?;
+                        context.set_holding(ctx.register_address + i as u16, val)?;
                     }
                 }
                 crate::protocol::status::types::modbus::RegisterMode::Coils => {
                     for (i, &val) in values.iter().enumerate() {
-                        context.set_coil(register_address + i as u16, val != 0)?;
+                        context.set_coil(ctx.register_address + i as u16, val != 0)?;
                     }
                 }
                 crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
                     for (i, &val) in values.iter().enumerate() {
-                        context.set_discrete(register_address + i as u16, val != 0)?;
+                        context.set_discrete(ctx.register_address + i as u16, val != 0)?;
                     }
                 }
                 crate::protocol::status::types::modbus::RegisterMode::Input => {
                     for (i, &val) in values.iter().enumerate() {
-                        context.set_input(register_address + i as u16, val)?;
+                        context.set_input(ctx.register_address + i as u16, val)?;
                     }
                 }
             }
@@ -2155,9 +2161,9 @@ fn handle_ipc_connection_sync(
 
         // Update changed ranges to bypass debounce
         {
-            let mut ranges = changed_ranges.lock().unwrap();
-            let end_addr = register_address + register_length;
-            ranges.push((register_address, end_addr, Instant::now()));
+            let mut ranges = ctx.changed_ranges.lock().unwrap();
+            let end_addr = ctx.register_address + ctx.register_length;
+            ranges.push((ctx.register_address, end_addr, Instant::now()));
         }
 
         log::info!("Connection #{conn_id}: Storage updated successfully");
