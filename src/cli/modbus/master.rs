@@ -655,9 +655,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let ipc_register_length = register_length;
         let ipc_changed_ranges = changed_ranges.clone();
         
-        let _ipc_handle = spawn_task(async move {
+        // Spawn IPC server in a blocking thread since interprocess accept() is blocking
+        let _ipc_handle = tokio::task::spawn_blocking(move || {
             log::info!("🔌 IPC: Task spawned, calling run_ipc_socket_server");
-            match run_ipc_socket_server(
+            match run_ipc_socket_server_sync(
                 &ipc_socket_path,
                 ipc_storage,
                 ipc_station_id,
@@ -665,16 +666,12 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 ipc_register_address,
                 ipc_register_length,
                 ipc_changed_ranges,
-            )
-            .await
-            {
+            ) {
                 Ok(()) => {
                     log::info!("🔌 IPC: Socket server ended normally");
-                    Ok(())
                 }
                 Err(e) => {
                     log::error!("🔌 IPC: Socket server error: {}", e);
-                    Err(e)
                 }
             }
         });
@@ -1978,9 +1975,9 @@ async fn read_one_data_update(
     }
 }
 
-/// Run IPC socket server for master mode
+/// Run IPC socket server for master mode (synchronous, blocking)
 /// Accepts connections from clients and updates the modbus storage with received data
-async fn run_ipc_socket_server(
+fn run_ipc_socket_server_sync(
     socket_path: &str,
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     station_id: u8,
@@ -1991,8 +1988,6 @@ async fn run_ipc_socket_server(
 ) -> Result<()> {
     use interprocess::local_socket::{prelude::*, ListenerOptions};
 
-    // Debug log to file to ensure we know the function is called
-    let _ = std::fs::write("/tmp/ipc_debug.log", format!("IPC server starting at {}\n", socket_path));
     log::info!("Creating IPC Unix socket listener at {socket_path}");
 
     // Remove existing socket file if it exists (Unix only)
@@ -2004,49 +1999,21 @@ async fn run_ipc_socket_server(
         }
     }
 
-    let listener = match socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>()
-    {
-        Ok(name) => {
-            let _ = std::fs::write("/tmp/ipc_debug.log", format!("Trying namespaced...\n"));
-            match ListenerOptions::new().name(name).create_sync() {
-                Ok(l) => {
-                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("Namespaced created!\n"));
-                    Ok(l)
-                }
-                Err(e) => {
-                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("Namespaced error: {}\n", e));
-                    Err(e)
-                }
-            }
-        },
-        Err(_) => {
-            // Fall back to file path
-            let _ = std::fs::write("/tmp/ipc_debug.log", format!("Trying file path...\n"));
-            let path = socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
-            match ListenerOptions::new().name(path).create_sync() {
-                Ok(l) => {
-                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("File path created!\n"));
-                    Ok(l)
-                }
-                Err(e) => {
-                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("File path error: {}\n", e));
-                    Err(e)
-                }
-            }
-        }
-    }?;
+    // Use filesystem-based socket (not abstract namespace) for compatibility with test code
+    let path = socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
+    let listener = ListenerOptions::new().name(path).create_sync()?;
 
     log::info!("IPC socket listener created, waiting for connections...");
 
     let connection_counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
     loop {
-        // Accept incoming connection (blocking)
+        // Accept incoming connection (blocking - this is ok since we're in a blocking thread)
         let stream = match listener.accept() {
             Ok(stream) => stream,
             Err(e) => {
                 log::error!("Failed to accept connection: {e}");
-                sleep_1s().await;
+                std::thread::sleep(std::time::Duration::from_secs(1));
                 continue;
             }
         };
@@ -2058,9 +2025,9 @@ async fn run_ipc_socket_server(
         let storage_clone = storage.clone();
         let changed_ranges_clone = changed_ranges.clone();
 
-        // Spawn a task to handle this connection
-        crate::core::task_manager::spawn_task(async move {
-            if let Err(e) = handle_ipc_connection(
+        // Handle connection in a separate thread (synchronous)
+        std::thread::spawn(move || {
+            if let Err(e) = handle_ipc_connection_sync(
                 stream,
                 conn_id,
                 storage_clone,
@@ -2069,20 +2036,17 @@ async fn run_ipc_socket_server(
                 register_address,
                 register_length,
                 changed_ranges_clone,
-            )
-            .await
-            {
+            ) {
                 log::error!("Connection #{conn_id} error: {e}");
             }
             log::info!("Connection #{conn_id} closed");
-            Ok(())
         });
     }
 }
 
-/// Handle a single IPC connection for master mode
+/// Handle a single IPC connection for master mode (synchronous)
 /// Accepts JSON data (Vec<StationConfig>) and updates storage
-async fn handle_ipc_connection(
+fn handle_ipc_connection_sync(
     mut stream: interprocess::local_socket::Stream,
     conn_id: usize,
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,

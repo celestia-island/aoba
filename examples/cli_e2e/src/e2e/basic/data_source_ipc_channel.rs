@@ -111,7 +111,6 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
     log::info!("⏳ Waiting for IPC socket to be created...");
     sleep_1s().await;
     sleep_1s().await;
-    sleep_1s().await;
 
     // Helper function to send data via IPC with retry
     let send_data_via_ipc = |values: &[u16]| -> Result<()> {
@@ -123,7 +122,7 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
         let stream = loop {
             match UnixStream::connect(IPC_SOCKET_PATH) {
                 Ok(s) => break s,
-                Err(e) if retries > 0 => {
+                Err(_e) if retries > 0 => {
                     log::debug!("Waiting for IPC socket... ({} retries left)", retries);
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     retries -= 1;
