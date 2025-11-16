@@ -137,7 +137,18 @@ key = "Enter"
 description = "Initialize slave station structure with coils"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_station]]
@@ -326,6 +337,10 @@ description = "Verify local coil value updated to ON"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[2]", expected = 1 }
 
 [[workflow.verify_write_complete_round1]]
+description = "Verify remote master coil value updated to ON"
+check_status = { path = "$.ports[0].modbus_masters[0].registers[2]", expected = 1 }
+
+[[workflow.verify_write_complete_round1]]
 description = "Verify coil displays ON"
 verify = "ON"
 
@@ -365,6 +380,10 @@ check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
 [[workflow.verify_write_complete_round2]]
 description = "Verify local coil value updated to ON"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[3]", expected = 1 }
+
+[[workflow.verify_write_complete_round2]]
+description = "Verify remote master coil value updated to ON"
+check_status = { path = "$.ports[0].modbus_masters[0].registers[3]", expected = 1 }
 
 [[workflow.verify_write_complete_round2]]
 verify = "ON"
@@ -417,6 +436,10 @@ check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
 [[workflow.verify_write_complete_round3]]
 description = "Verify local coil value is OFF"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[4]", expected = 0 }
+
+[[workflow.verify_write_complete_round3]]
+description = "Verify remote master coil value is OFF"
+check_status = { path = "$.ports[0].modbus_masters[0].registers[4]", expected = 0 }
 
 [[workflow.verify_write_complete_round3]]
 verify = "OFF"
