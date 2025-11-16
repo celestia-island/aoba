@@ -4,6 +4,7 @@ pub mod ui;
 pub mod utils;
 
 // Split implementation into smaller modules for maintainability
+pub mod daemon;
 pub mod ipc;
 pub mod logs;
 pub mod rendering;
