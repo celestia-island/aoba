@@ -174,9 +174,8 @@ pub fn parse_args() -> ArgMatches {
         .arg(
             Arg::new("ipc-socket-path")
                 .long("ipc-socket-path")
-                .help("IPC Unix socket path for half-duplex JSON request-response mode (slave mode only)")
-                .value_name("SOCKET_PATH")
-                .requires("slave-listen-persist"),
+                .help("IPC Unix socket path for half-duplex JSON request-response mode (master-provide-persist or slave-listen-persist)")
+                .value_name("SOCKET_PATH"),
         )
         .arg(
             Arg::new("baud-rate")
