@@ -16,8 +16,8 @@ use clap::Parser;
 // use config_mode::test_config_mode;
 use e2e::{
     basic::{
-        test_basic_master_slave_communication, test_http_data_source, test_ipc_pipe_data_source,
-        test_manual_data_source, test_mqtt_data_source,
+        test_basic_master_slave_communication, test_http_data_source, test_ipc_channel_data_source,
+        test_ipc_pipe_data_source, test_manual_data_source, test_mqtt_data_source,
     },
     multi_masters::{test_multi_masters, test_multi_masters_same_station},
     multi_slaves::{
@@ -161,6 +161,7 @@ async fn main() -> Result<()> {
             log::info!("  Data Source Tests:");
             log::info!("    - data_source_manual");
             log::info!("    - data_source_ipc_pipe");
+            log::info!("    - data_source_ipc_channel");
             log::info!("    - data_source_http");
             log::info!("    - data_source_mqtt");
             log::info!("");
@@ -199,6 +200,7 @@ async fn main() -> Result<()> {
         // Data source tests
         "data_source_manual" => test_manual_data_source().await?,
         "data_source_ipc_pipe" => test_ipc_pipe_data_source().await?,
+        "data_source_ipc_channel" => test_ipc_channel_data_source().await?,
         "data_source_http" => test_http_data_source().await?,
         "data_source_mqtt" => test_mqtt_data_source().await?,
 
