@@ -965,21 +965,19 @@ pub async fn handle_slave_listen_ipc_channel(
         // Clone resources for the connection handler
         let port_arc_clone = port_arc.clone();
         let storage_clone = storage.clone();
+        // Build context to avoid too many arguments
+        let ctx = IpcConnectionContext {
+            port_arc: port_arc_clone,
+            station_id,
+            register_address,
+            register_length,
+            reg_mode,
+            storage: storage_clone,
+        };
 
         // Spawn a task to handle this connection
         crate::core::task_manager::spawn_task(async move {
-            if let Err(e) = handle_ipc_connection(
-                stream,
-                conn_id,
-                port_arc_clone,
-                station_id,
-                register_address,
-                register_length,
-                reg_mode,
-                storage_clone,
-            )
-            .await
-            {
+            if let Err(e) = handle_ipc_connection(stream, conn_id, ctx.clone()).await {
                 log::error!("Connection #{conn_id} error: {e}");
             }
             log::info!("Connection #{conn_id} closed");
@@ -989,15 +987,20 @@ pub async fn handle_slave_listen_ipc_channel(
 }
 
 /// Handle a single IPC connection (half-duplex JSON request-response)
-async fn handle_ipc_connection(
-    mut stream: interprocess::local_socket::Stream,
-    conn_id: usize,
+#[derive(Clone)]
+struct IpcConnectionContext {
     port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     register_address: u16,
     register_length: u16,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+}
+
+async fn handle_ipc_connection(
+    mut stream: interprocess::local_socket::Stream,
+    conn_id: usize,
+    ctx: IpcConnectionContext,
 ) -> Result<()> {
     use std::io::{BufRead, BufReader, Write};
 
@@ -1043,12 +1046,12 @@ async fn handle_ipc_connection(
 
         // Process request and generate response
         let response = match listen_for_one_request(
-            port_arc.clone(),
-            station_id,
-            register_address,
-            register_length,
-            reg_mode,
-            storage.clone(),
+            ctx.port_arc.clone(),
+            ctx.station_id,
+            ctx.register_address,
+            ctx.register_length,
+            ctx.reg_mode,
+            ctx.storage.clone(),
         ) {
             Ok(modbus_response) => {
                 serde_json::json!({
