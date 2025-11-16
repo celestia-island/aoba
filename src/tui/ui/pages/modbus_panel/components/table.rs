@@ -112,7 +112,7 @@ pub fn render_register_row_line(
 
                 let relative_index = (addr - item.register_address) as usize;
                 let stored_value = item.last_values.get(relative_index).copied().unwrap_or(0);
-                
+
                 // Check if this register has a pending write
                 let pending_value = item.pending_writes.get(&relative_index).copied();
                 let has_pending_write = pending_value.is_some();
@@ -122,15 +122,18 @@ pub fn render_register_row_line(
                         let display_value = pending_value.unwrap_or(stored_value);
                         let is_on = display_value != 0;
                         let mut spans = switch_spans(is_on, "ON", "OFF", state)?;
-                        
+
                         // Apply gray italic style if pending write
                         if has_pending_write {
-                            spans = spans.into_iter().map(|span| {
-                                Span::styled(
-                                    span.content,
-                                    span.style.add_modifier(Modifier::ITALIC).fg(Color::Gray)
-                                )
-                            }).collect();
+                            spans = spans
+                                .into_iter()
+                                .map(|span| {
+                                    Span::styled(
+                                        span.content,
+                                        span.style.add_modifier(Modifier::ITALIC).fg(Color::Gray),
+                                    )
+                                })
+                                .collect();
                         }
                         spans
                     }
@@ -138,15 +141,18 @@ pub fn render_register_row_line(
                         let display_value = pending_value.unwrap_or(stored_value);
                         let hex_str = format!("0x{display_value:04X}");
                         let mut spans = input_spans(hex_str.clone(), state)?;
-                        
+
                         // Apply gray italic style if pending write
                         if has_pending_write {
-                            spans = spans.into_iter().map(|span| {
-                                Span::styled(
-                                    span.content,
-                                    span.style.add_modifier(Modifier::ITALIC).fg(Color::Gray)
-                                )
-                            }).collect();
+                            spans = spans
+                                .into_iter()
+                                .map(|span| {
+                                    Span::styled(
+                                        span.content,
+                                        span.style.add_modifier(Modifier::ITALIC).fg(Color::Gray),
+                                    )
+                                })
+                                .collect();
                         }
                         spans
                     }

@@ -232,7 +232,7 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                         if station.station_id == station_id {
                             let register_index =
                                 (register_address - station.register_address) as usize;
-                            
+
                             // Remove from pending writes
                             station.pending_writes.remove(&register_index);
 
@@ -257,10 +257,10 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                             break;
                         }
                     }
-                    
+
                     // Check if there are any remaining pending writes
                     let has_pending_writes = stations.iter().any(|s| !s.pending_writes.is_empty());
-                    
+
                     // Update status indicator
                     if !has_pending_writes {
                         // No more pending writes, restore to Running status
