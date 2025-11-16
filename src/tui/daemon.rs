@@ -274,6 +274,7 @@ fn load_config_from_file(path: &PathBuf) -> Result<HashMap<String, PortConfig>> 
                             last_request_time: None,
                             last_response_time: None,
                             pending_requests: Vec::new(),
+                            pending_writes: std::collections::HashMap::new(),
                         }
                     })
                     .collect();
