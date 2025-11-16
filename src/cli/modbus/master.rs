@@ -16,8 +16,8 @@ use rmodbus::{
 };
 
 use super::{
-    emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
-    ModbusIpcLogPayload, ModbusResponse,
+    emit_modbus_ipc_log, extract_values_from_station_configs, open_serial_port, parse_data_line,
+    parse_register_mode, DataSource, ModbusIpcLogPayload, ModbusResponse,
 };
 use crate::{
     cli::{actions, cleanup, http_daemon_registry as http_registry},
@@ -642,6 +642,43 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     } else {
         None
     };
+
+    // Create IPC socket server if --ipc-socket-path is provided
+    if let Some(ipc_socket_path) = matches.get_one::<String>("ipc-socket-path") {
+        log::info!("🔌 IPC: Starting IPC socket server at {}", ipc_socket_path);
+        
+        let ipc_socket_path = ipc_socket_path.clone();
+        let ipc_storage = storage.clone();
+        let ipc_station_id = station_id;
+        let ipc_reg_mode = reg_mode;
+        let ipc_register_address = register_address;
+        let ipc_register_length = register_length;
+        let ipc_changed_ranges = changed_ranges.clone();
+        
+        let _ipc_handle = spawn_task(async move {
+            log::info!("🔌 IPC: Task spawned, calling run_ipc_socket_server");
+            match run_ipc_socket_server(
+                &ipc_socket_path,
+                ipc_storage,
+                ipc_station_id,
+                ipc_reg_mode,
+                ipc_register_address,
+                ipc_register_length,
+                ipc_changed_ranges,
+            )
+            .await
+            {
+                Ok(()) => {
+                    log::info!("🔌 IPC: Socket server ended normally");
+                    Ok(())
+                }
+                Err(e) => {
+                    log::error!("🔌 IPC: Socket server error: {}", e);
+                    Err(e)
+                }
+            }
+        });
+    }
 
     let update_args = UpdateStorageArgs {
         storage: storage_clone,
@@ -1939,4 +1976,238 @@ async fn read_one_data_update(
             )
         }
     }
+}
+
+/// Run IPC socket server for master mode
+/// Accepts connections from clients and updates the modbus storage with received data
+async fn run_ipc_socket_server(
+    socket_path: &str,
+    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    station_id: u8,
+    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    register_address: u16,
+    register_length: u16,
+    changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
+) -> Result<()> {
+    use interprocess::local_socket::{prelude::*, ListenerOptions};
+
+    // Debug log to file to ensure we know the function is called
+    let _ = std::fs::write("/tmp/ipc_debug.log", format!("IPC server starting at {}\n", socket_path));
+    log::info!("Creating IPC Unix socket listener at {socket_path}");
+
+    // Remove existing socket file if it exists (Unix only)
+    #[cfg(unix)]
+    {
+        if std::path::Path::new(socket_path).exists() {
+            log::warn!("Removing existing socket file: {socket_path}");
+            let _ = std::fs::remove_file(socket_path);
+        }
+    }
+
+    let listener = match socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>()
+    {
+        Ok(name) => {
+            let _ = std::fs::write("/tmp/ipc_debug.log", format!("Trying namespaced...\n"));
+            match ListenerOptions::new().name(name).create_sync() {
+                Ok(l) => {
+                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("Namespaced created!\n"));
+                    Ok(l)
+                }
+                Err(e) => {
+                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("Namespaced error: {}\n", e));
+                    Err(e)
+                }
+            }
+        },
+        Err(_) => {
+            // Fall back to file path
+            let _ = std::fs::write("/tmp/ipc_debug.log", format!("Trying file path...\n"));
+            let path = socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
+            match ListenerOptions::new().name(path).create_sync() {
+                Ok(l) => {
+                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("File path created!\n"));
+                    Ok(l)
+                }
+                Err(e) => {
+                    let _ = std::fs::write("/tmp/ipc_debug.log", format!("File path error: {}\n", e));
+                    Err(e)
+                }
+            }
+        }
+    }?;
+
+    log::info!("IPC socket listener created, waiting for connections...");
+
+    let connection_counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+    loop {
+        // Accept incoming connection (blocking)
+        let stream = match listener.accept() {
+            Ok(stream) => stream,
+            Err(e) => {
+                log::error!("Failed to accept connection: {e}");
+                sleep_1s().await;
+                continue;
+            }
+        };
+
+        let conn_id = connection_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        log::info!("Accepted IPC connection #{conn_id}");
+
+        // Clone resources for the connection handler
+        let storage_clone = storage.clone();
+        let changed_ranges_clone = changed_ranges.clone();
+
+        // Spawn a task to handle this connection
+        crate::core::task_manager::spawn_task(async move {
+            if let Err(e) = handle_ipc_connection(
+                stream,
+                conn_id,
+                storage_clone,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+                changed_ranges_clone,
+            )
+            .await
+            {
+                log::error!("Connection #{conn_id} error: {e}");
+            }
+            log::info!("Connection #{conn_id} closed");
+            Ok(())
+        });
+    }
+}
+
+/// Handle a single IPC connection for master mode
+/// Accepts JSON data (Vec<StationConfig>) and updates storage
+async fn handle_ipc_connection(
+    mut stream: interprocess::local_socket::Stream,
+    conn_id: usize,
+    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    station_id: u8,
+    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    register_address: u16,
+    register_length: u16,
+    changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
+) -> Result<()> {
+    use std::io::{BufRead, BufReader, Write};
+
+    log::info!("Connection #{conn_id}: Ready to receive JSON data");
+
+    // Use BufReader for line-based reading
+    let mut reader = BufReader::new(&mut stream);
+
+    loop {
+        // Read one line (JSON data)
+        let mut line = String::new();
+        let bytes_read = reader.read_line(&mut line)?;
+
+        if bytes_read == 0 {
+            // Connection closed
+            log::info!("Connection #{conn_id}: Client closed connection");
+            break;
+        }
+
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        log::info!("Connection #{conn_id}: Received data: {line}");
+
+        // Parse JSON data as Vec<StationConfig>
+        let stations: Vec<crate::protocol::status::types::modbus::StationConfig> =
+            match serde_json::from_str(line) {
+                Ok(data) => data,
+                Err(e) => {
+                    let error_response = serde_json::json!({
+                        "success": false,
+                        "error": format!("Invalid JSON: {e}")
+                    });
+                    let response_str = serde_json::to_string(&error_response)?;
+                    let stream_ref = reader.get_mut();
+                    writeln!(stream_ref, "{response_str}")?;
+                    stream_ref.flush()?;
+                    continue;
+                }
+            };
+
+        // Extract values from StationConfig
+        let values = match extract_values_from_station_configs(
+            &stations,
+            station_id,
+            reg_mode,
+            register_address,
+            register_length,
+        ) {
+            Ok(vals) => vals,
+            Err(e) => {
+                let error_response = serde_json::json!({
+                    "success": false,
+                    "error": format!("Failed to extract values: {e}")
+                });
+                let response_str = serde_json::to_string(&error_response)?;
+                let stream_ref = reader.get_mut();
+                writeln!(stream_ref, "{response_str}")?;
+                stream_ref.flush()?;
+                continue;
+            }
+        };
+
+        log::info!(
+            "Connection #{conn_id}: Extracted {} values for station_id={}, updating storage",
+            values.len(),
+            station_id
+        );
+
+        // Update storage with new values
+        {
+            let mut context = storage.lock().unwrap();
+            match reg_mode {
+                crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                    for (i, &val) in values.iter().enumerate() {
+                        context.set_holding(register_address + i as u16, val)?;
+                    }
+                }
+                crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                    for (i, &val) in values.iter().enumerate() {
+                        context.set_coil(register_address + i as u16, val != 0)?;
+                    }
+                }
+                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                    for (i, &val) in values.iter().enumerate() {
+                        context.set_discrete(register_address + i as u16, val != 0)?;
+                    }
+                }
+                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                    for (i, &val) in values.iter().enumerate() {
+                        context.set_input(register_address + i as u16, val)?;
+                    }
+                }
+            }
+        }
+
+        // Update changed ranges to bypass debounce
+        {
+            let mut ranges = changed_ranges.lock().unwrap();
+            let end_addr = register_address + register_length;
+            ranges.push((register_address, end_addr, Instant::now()));
+        }
+
+        log::info!("Connection #{conn_id}: Storage updated successfully");
+
+        // Send success response
+        let success_response = serde_json::json!({
+            "success": true,
+            "message": format!("Updated {} values", values.len())
+        });
+        let response_str = serde_json::to_string(&success_response)?;
+        let stream_ref = reader.get_mut();
+        writeln!(stream_ref, "{response_str}")?;
+        stream_ref.flush()?;
+    }
+
+    Ok(())
 }
