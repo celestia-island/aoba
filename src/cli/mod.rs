@@ -172,6 +172,13 @@ pub fn parse_args() -> ArgMatches {
                 .value_name("OUTPUT"),
         )
         .arg(
+            Arg::new("ipc-socket-path")
+                .long("ipc-socket-path")
+                .help("IPC Unix socket path for half-duplex JSON request-response mode (slave mode only)")
+                .value_name("SOCKET_PATH")
+                .requires("slave-listen-persist"),
+        )
+        .arg(
             Arg::new("baud-rate")
                 .long("baud-rate")
                 .help("Serial port baud rate")
