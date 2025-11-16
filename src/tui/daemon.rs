@@ -228,10 +228,8 @@ fn load_config_from_file(path: &PathBuf) -> Result<HashMap<String, PortConfig>> 
                 let master_source_enum = if mode_enum.is_master() {
                     master_source
                         .and_then(|src| {
-                            let crate::core::persistence::SerializableMasterSource {
-                                kind,
-                                value,
-                            } = src;
+                            let crate::core::persistence::SerializableMasterSource { kind, value } =
+                                src;
                             match kind.as_str() {
                                 "mqtt" => Some(ModbusMasterDataSource::MqttServer {
                                     url: value.unwrap_or_default(),
