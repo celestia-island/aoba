@@ -15,7 +15,23 @@ pub fn parse_args() -> ArgMatches {
                 .long("tui")
                 .short('t')
                 .help("Force TUI mode")
-                .action(clap::ArgAction::SetTrue),
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with("daemon"),
+        )
+        .arg(
+            Arg::new("daemon")
+                .long("daemon")
+                .short('d')
+                .help("Run in daemon mode (non-interactive): load config and auto-start all ports without TUI interface")
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with("tui"),
+        )
+        .arg(
+            Arg::new("daemon-config")
+                .long("daemon-config")
+                .help("Configuration file path for daemon mode (default: ./aoba_tui_config.json)")
+                .value_name("FILE")
+                .requires("daemon"),
         )
         .arg(
             Arg::new("list-ports")
