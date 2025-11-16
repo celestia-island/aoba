@@ -613,7 +613,7 @@ fn render_config_path_indicator(frame: &mut Frame, area: Rect) -> Result<()> {
     let config_path = read_status(|status| Ok(status.config_file_path.clone()))?;
 
     let is_temp_mode = config_path.is_none();
-    
+
     let indicator_text = if let Some(path) = config_path {
         // Show config file path
         format!("{} {}", lang().index.config_path_label, path.display())
@@ -625,9 +625,9 @@ fn render_config_path_indicator(frame: &mut Frame, area: Rect) -> Result<()> {
     // Position at bottom of the panel, inside the border (y = area.y + area.height - 2)
     // with 1 padding from left (x = area.x + 2, accounting for border)
     let indicator_area = Rect {
-        x: area.x + 2, // 1 padding from left border
+        x: area.x + 2,                             // 1 padding from left border
         y: area.y + area.height.saturating_sub(2), // Bottom, inside border
-        width: area.width.saturating_sub(4), // Leave 1 padding on each side
+        width: area.width.saturating_sub(4),       // Leave 1 padding on each side
         height: 1,
     };
 
