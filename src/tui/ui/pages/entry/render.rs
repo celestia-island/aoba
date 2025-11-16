@@ -303,7 +303,8 @@ fn render_node(
         let state = port_data.state.clone();
         let ptype = port_data.port_type.clone();
         let master_source = if state.is_occupied_by_this() {
-            let crate::tui::status::port::PortConfig::Modbus { master_source, .. } = &port_data.config;
+            let crate::tui::status::port::PortConfig::Modbus { master_source, .. } =
+                &port_data.config;
             Some(master_source.clone())
         } else {
             None
@@ -446,29 +447,33 @@ fn render_node(
 
     // Render port forwarding references outside the box (below the node)
     // Only show green-colored references, not the cyan station entries (port info already in box)
-    
+
     // Collect all references first to determine proper timeline characters
     let mut references: Vec<String> = Vec::new();
-    
+
     // Check if this port references another port (data consumer)
-    if let Some(master_source) = &master_source {
-        if let crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding { source_port } = master_source {
-            if !source_port.is_empty() {
-                // This port references source_port (consumes data from it)
-                // Show left arrow: ├<─ source_port
-                references.push(format!(
-                    "<─ {}",
-                    format_port_name_for_display(source_port)
-                ));
-            }
+    if let Some(crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding {
+        source_port,
+    }) = &master_source
+    {
+        if !source_port.is_empty() {
+            // This port references source_port (consumes data from it)
+            // Show left arrow: ├<─ source_port
+            references.push(format!("<─ {}", format_port_name_for_display(source_port)));
         }
     }
-    
+
     // Check if any other port references this port (this port is a data source)
     for (other_port_name, other_port_data) in ports_map.iter() {
         if other_port_name != port_name && other_port_data.state.is_occupied_by_this() {
-            let crate::tui::status::port::PortConfig::Modbus { master_source: other_master_source, .. } = &other_port_data.config;
-            if let crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding { source_port } = other_master_source {
+            let crate::tui::status::port::PortConfig::Modbus {
+                master_source: other_master_source,
+                ..
+            } = &other_port_data.config;
+            if let crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding {
+                source_port,
+            } = other_master_source
+            {
                 if source_port == port_name {
                     // Other port references this port (this port is the data source)
                     // Show right arrow: ├─> other_port_name
@@ -480,12 +485,12 @@ fn render_node(
             }
         }
     }
-    
+
     // Render all references with proper timeline characters
     if !references.is_empty() {
         let reference_style = Style::default().fg(Color::Green);
         let mut current_y = area.y + area.height;
-        
+
         for (idx, reference_text) in references.iter().enumerate() {
             // Use └─ for the last reference, ├─ for others
             let timeline_char = if idx == references.len() - 1 {
@@ -493,21 +498,21 @@ fn render_node(
             } else {
                 "├"
             };
-            
+
             let full_text = format!(" {}{}", timeline_char, reference_text);
-            
+
             let reference_area = Rect {
                 x: area.x,
                 y: current_y,
                 width: area.width,
                 height: 1,
             };
-            
+
             let reference_widget = Paragraph::new(full_text)
                 .style(reference_style)
                 .alignment(Alignment::Left);
             frame.render_widget(reference_widget, reference_area);
-            
+
             current_y += 1;
         }
     }
@@ -520,8 +525,14 @@ fn format_port_name_for_display(port_name: &str) -> String {
     // Check if this looks like a UUID (36 chars with 4 hyphens)
     if port_name.len() == 36 && port_name.chars().filter(|c| *c == '-').count() == 4 {
         // Show last 7 characters for UUID
-        port_name.chars().rev().take(7).collect::<String>()
-            .chars().rev().collect()
+        port_name
+            .chars()
+            .rev()
+            .take(7)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect()
     } else {
         // Show full name for regular serial ports
         port_name.to_string()
