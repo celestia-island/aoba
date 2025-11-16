@@ -841,3 +841,240 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         }
     }
 }
+
+/// Handle IPC channel mode for slave-listen-persist
+/// Creates a Unix socket server that accepts connections and responds to JSON requests
+/// Each connection is handled in a separate async task to support multiple clients
+pub async fn handle_slave_listen_ipc_channel(
+    matches: &ArgMatches,
+    port: &str,
+    ipc_socket_path: &str,
+) -> Result<()> {
+    use interprocess::local_socket::{prelude::*, ListenerOptions};
+
+    let station_id = *matches.get_one::<u8>("station-id").unwrap();
+    let register_address = *matches.get_one::<u16>("register-address").unwrap();
+    let register_length = *matches.get_one::<u16>("register-length").unwrap();
+    let register_mode = matches.get_one::<String>("register-mode").unwrap();
+    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+
+    let reg_mode = parse_register_mode(register_mode)?;
+
+    log::info!(
+        "Starting IPC channel slave listen on {port} (socket={ipc_socket_path}, station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate}, timeout={timeout_ms}ms)"
+    );
+
+    // Setup IPC if requested
+    let mut ipc = actions::setup_ipc(matches);
+
+    // Open serial port with configured timeout
+    let port_handle =
+        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+            Ok(handle) => handle,
+            Err(err) => {
+                if let Some(ref mut ipc_conns) = ipc {
+                    let _ = ipc_conns
+                        .status
+                        .send(&crate::protocol::ipc::IpcMessage::PortError {
+                            port_name: port.to_string(),
+                            error: err.to_string(),
+                            timestamp: None,
+                        });
+                }
+                return Err(err);
+            }
+        };
+
+    let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Notify IPC that port was opened successfully
+    if let Some(ref mut ipc_conns) = ipc {
+        let _ = ipc_conns
+            .status
+            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+                port_name: port.to_string(),
+                timestamp: None,
+            });
+        log::info!("IPC: Sent PortOpened message for {port}");
+    }
+
+    // Register cleanup to ensure port is released on program exit
+    {
+        let pa = port_arc.clone();
+        let port_name_clone = port.to_string();
+        cleanup::register_cleanup(move || {
+            log::debug!("Cleanup handler: Releasing port {port_name_clone}");
+            if let Ok(mut port) = pa.lock() {
+                let _ = std::io::Write::flush(&mut **port);
+                log::debug!("Cleanup handler: Flushed port {port_name_clone}");
+            }
+            drop(pa);
+            log::debug!("Cleanup handler: Port {port_name_clone} released");
+        });
+        log::debug!("Registered cleanup handler for port {port}");
+    }
+
+    // Initialize modbus storage
+    let storage = Arc::new(Mutex::new(
+        rmodbus::server::storage::ModbusStorageSmall::new(),
+    ));
+
+    // Create IPC Unix socket listener
+    log::info!("Creating IPC Unix socket listener at {ipc_socket_path}");
+
+    // Remove existing socket file if it exists (Unix only)
+    #[cfg(unix)]
+    {
+        if std::path::Path::new(ipc_socket_path).exists() {
+            log::warn!("Removing existing socket file: {ipc_socket_path}");
+            let _ = std::fs::remove_file(ipc_socket_path);
+        }
+    }
+
+    let listener =
+        match ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() {
+            Ok(name) => ListenerOptions::new().name(name).create_sync(),
+            Err(_) => {
+                // Fall back to file path
+                let path =
+                    ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
+                ListenerOptions::new().name(path).create_sync()
+            }
+        }?;
+
+    log::info!("IPC socket listener created, waiting for connections...");
+
+    // Spawn a task to handle incoming connections
+    let connection_counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+    loop {
+        // Accept incoming connection (blocking)
+        let stream = match listener.accept() {
+            Ok(stream) => stream,
+            Err(e) => {
+                log::error!("Failed to accept connection: {e}");
+                sleep_1s().await;
+                continue;
+            }
+        };
+
+        let conn_id = connection_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        log::info!("Accepted IPC connection #{conn_id}");
+
+        // Clone resources for the connection handler
+        let port_arc_clone = port_arc.clone();
+        let storage_clone = storage.clone();
+        // Build context to avoid too many arguments
+        let ctx = IpcConnectionContext {
+            port_arc: port_arc_clone,
+            station_id,
+            register_address,
+            register_length,
+            reg_mode,
+            storage: storage_clone,
+        };
+
+        // Spawn a task to handle this connection
+        crate::core::task_manager::spawn_task(async move {
+            if let Err(e) = handle_ipc_connection(stream, conn_id, ctx.clone()).await {
+                log::error!("Connection #{conn_id} error: {e}");
+            }
+            log::info!("Connection #{conn_id} closed");
+            Ok(())
+        });
+    }
+}
+
+/// Handle a single IPC connection (half-duplex JSON request-response)
+#[derive(Clone)]
+struct IpcConnectionContext {
+    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    station_id: u8,
+    register_address: u16,
+    register_length: u16,
+    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+}
+
+async fn handle_ipc_connection(
+    mut stream: interprocess::local_socket::Stream,
+    conn_id: usize,
+    ctx: IpcConnectionContext,
+) -> Result<()> {
+    use std::io::{BufRead, BufReader, Write};
+
+    log::info!("Connection #{conn_id}: Ready to receive JSON requests");
+
+    // Use BufReader for line-based reading
+    let mut reader = BufReader::new(&mut stream);
+
+    loop {
+        // Read one line (JSON request)
+        let mut line = String::new();
+        let bytes_read = reader.read_line(&mut line)?;
+
+        if bytes_read == 0 {
+            // Connection closed
+            log::info!("Connection #{conn_id}: Client closed connection");
+            break;
+        }
+
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        log::info!("Connection #{conn_id}: Received request: {line}");
+
+        // Parse JSON request (we don't actually use it, just validate it's valid JSON)
+        let _request: serde_json::Value = match serde_json::from_str(line) {
+            Ok(req) => req,
+            Err(e) => {
+                let error_response = serde_json::json!({
+                    "success": false,
+                    "error": format!("Invalid JSON: {e}")
+                });
+                let response_str = serde_json::to_string(&error_response)?;
+                // Get mutable access to stream to write
+                let stream_ref = reader.get_mut();
+                writeln!(stream_ref, "{response_str}")?;
+                stream_ref.flush()?;
+                continue;
+            }
+        };
+
+        // Process request and generate response
+        let response = match listen_for_one_request(
+            ctx.port_arc.clone(),
+            ctx.station_id,
+            ctx.register_address,
+            ctx.register_length,
+            ctx.reg_mode,
+            ctx.storage.clone(),
+        ) {
+            Ok(modbus_response) => {
+                serde_json::json!({
+                    "success": true,
+                    "data": modbus_response
+                })
+            }
+            Err(e) => {
+                serde_json::json!({
+                    "success": false,
+                    "error": format!("{e}")
+                })
+            }
+        };
+
+        // Send response (JSON line)
+        let response_str = serde_json::to_string(&response)?;
+        log::info!("Connection #{conn_id}: Sending response: {response_str}");
+        // Get mutable access to stream to write
+        let stream_ref = reader.get_mut();
+        writeln!(stream_ref, "{response_str}")?;
+        stream_ref.flush()?;
+    }
+
+    Ok(())
+}
