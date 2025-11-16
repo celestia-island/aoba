@@ -14,8 +14,7 @@ pub use crate::protocol::status::types::{cli, modbus, port};
 use anyhow::Result;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use yuuka::derive_struct;
 
@@ -592,6 +591,9 @@ pub use serializable::TuiStatus;
 
 derive_struct! {
     pub Status {
+        // Config file path (None means temporary mode)
+        config_file_path?: PathBuf,
+
         ports: {
             order: Vec<String> = vec![],
             map: HashMap<String, port::PortData> = HashMap::new(),
