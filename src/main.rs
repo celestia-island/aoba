@@ -15,8 +15,12 @@ async fn main() -> Result<()> {
         std::env::set_var("AOBA_LOG_FILE", log_file);
     }
 
-    // Console launcher: keep it simple and let the OS / terminal manage stdio.
-    init_common();
+    // For daemon mode, skip init_common and initialize dual logger later
+    // For all other modes, use normal initialization
+    if !matches.get_flag("daemon") {
+        // Console launcher: keep it simple and let the OS / terminal manage stdio.
+        init_common();
+    }
 
     if matches.get_flag("enable-virtual-ports") {
         enable_virtual_port_hint();
@@ -53,6 +57,33 @@ async fn main() -> Result<()> {
     let matches_clone = matches.clone();
     if actions::run_one_shot_actions(&matches_clone).await {
         std::process::exit(0);
+    }
+
+    // Handle daemon mode
+    if matches.get_flag("daemon") {
+        // Initialize i18n (normally done in init_common)
+        aoba::utils::i18n::init_i18n();
+
+        // Initialize dual logger for daemon mode (outputs to both file and terminal)
+        let log_file = if let Ok(log_file) = std::env::var("AOBA_LOG_FILE") {
+            log_file
+        } else {
+            // If no log file specified, set a default one for daemon mode
+            let file = format!(
+                "./aoba_daemon_{}.log",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            );
+            std::env::set_var("AOBA_LOG_FILE", &file);
+            file
+        };
+
+        if let Err(err) = aoba::init_daemon_logger(&log_file) {
+            eprintln!("⚠️ Failed to initialize daemon logger: {err}");
+            eprintln!("⚠️ Continuing without logging...");
+        }
+
+        aoba::start_daemon(&matches).await?;
+        return Ok(());
     }
 
     // If TUI requested, run in this process so it inherits the terminal.
