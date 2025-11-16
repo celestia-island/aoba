@@ -97,6 +97,20 @@ aoba --tui
 
 配置文件将自动保存到 `./aoba_tui_config.json`。
 
+### 配置缓存与命令行参数
+
+`--config-file <FILE>` 用于显式指定 TUI 的配置文件路径（守护进程可通过 `--daemon-config` 指定），该选项与 `--no-config-cache` 冲突。`--no-config-cache` 会禁用配置的加载与保存（即不开启配置缓存），因此不能与 `--config-file <FILE>` 同时使用，命令行会拒绝此组合。
+
+示例：
+
+```bash
+# 启动 TUI 并显式使用自定义配置文件（允许加载/保存）
+aoba --tui --config-file /path/to/config.json
+
+# 启动 TUI 并禁用配置缓存（不加载/保存配置），这是默认选项
+aoba --tui --no-config-cache
+```
+
 ### 错误处理
 
 如果配置文件不存在，守护进程会提示错误并退出：

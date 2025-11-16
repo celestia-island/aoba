@@ -48,6 +48,10 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     let no_cache = matches.get_flag("no-config-cache");
     crate::tui::persistence::set_no_cache(no_cache);
 
+    // Set config file path if specified
+    let config_path = matches.get_one::<String>("config-file").map(PathBuf::from);
+    crate::tui::persistence::set_config_path(config_path.clone());
+
     let screen_capture_mode = matches.get_flag("debug-screen-capture");
     if screen_capture_mode {
         log::info!("📸 Screen capture mode enabled - will render once and exit");
@@ -61,6 +65,12 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let app = Arc::new(RwLock::new(Status::default()));
     crate::tui::status::init_status(app.clone())?;
+
+    // Store config path in status for UI display
+    crate::tui::status::write_status(|status| {
+        status.config_file_path = config_path.clone();
+        Ok(())
+    })?;
 
     let debug_ci_e2e_enabled = matches.get_flag("debug-ci-e2e-test");
     let debug_dump_shutdown = if debug_ci_e2e_enabled {

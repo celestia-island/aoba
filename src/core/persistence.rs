@@ -13,6 +13,7 @@
 //! interference. Call `set_no_cache(true)` early in application startup to enable this.
 
 use anyhow::{Context, Result};
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -28,6 +29,9 @@ use crate::protocol::status::types::{
 
 /// Global flag to disable config cache (set via --no-config-cache)
 static NO_CONFIG_CACHE: AtomicBool = AtomicBool::new(false);
+
+/// Global config file path (set via --config-file)
+static CONFIG_FILE_PATH: OnceCell<Option<PathBuf>> = OnceCell::new();
 
 /// Set the no-cache flag (should be called early in TUI startup)
 ///
@@ -45,6 +49,34 @@ pub fn set_no_cache(enabled: bool) {
     if enabled {
         log::info!("🚫 Config cache disabled (--no-config-cache)");
     }
+}
+
+/// Set the config file path (should be called early in TUI startup)
+///
+/// # Parameters
+/// - `path`: Optional config file path. If None, TUI operates in temporary mode.
+///
+/// # Example
+/// ```rust,ignore
+/// // In TUI startup (src/tui/runtime.rs):
+/// let config_path = matches.get_one::<String>("config-file").map(PathBuf::from);
+/// persistence::set_config_path(config_path);
+/// ```
+pub fn set_config_path(path: Option<PathBuf>) {
+    if CONFIG_FILE_PATH.set(path.clone()).is_err() {
+        log::warn!("⚠️ Config path already set, ignoring new value");
+        return;
+    }
+    if let Some(ref p) = path {
+        log::info!("📂 Config file path set to: {}", p.display());
+    } else {
+        log::info!("⚡ TUI starting in temporary mode (no config file specified)");
+    }
+}
+
+/// Get the configured config file path
+pub fn get_config_path_setting() -> Option<PathBuf> {
+    CONFIG_FILE_PATH.get().and_then(|p| p.clone())
 }
 
 /// Get the current no-cache flag value
@@ -88,23 +120,19 @@ pub struct SerializableStation {
 /// Get the path to the configuration file
 ///
 /// This configuration file is **TUI-only** and should NOT be used by CLI processes
-/// to avoid communication conflicts. The file is stored in the working directory
-/// for cross-platform compatibility.
-fn get_config_path() -> Result<PathBuf> {
-    // Get the current working directory (where the program binary is located)
-    let config_dir = std::env::current_dir().context("Failed to get current working directory")?;
-
-    // Store config in working directory for cross-platform compatibility
-    // File name includes "tui" prefix to clearly indicate it's TUI-only
-    Ok(config_dir.join("aoba_tui_config.json"))
+/// to avoid communication conflicts.
+///
+/// Returns the explicitly configured path via --config-file, or None if no path was set.
+fn get_config_path() -> Result<Option<PathBuf>> {
+    Ok(get_config_path_setting())
 }
 
 /// Save port configurations to disk (TUI-only)
 ///
-/// This function saves TUI port configurations to the working directory.
+/// This function saves TUI port configurations to the specified config file.
 /// CLI processes should NOT call this function.
 ///
-/// Save is automatically skipped if `--no-config-cache` flag is set.
+/// Save is automatically skipped if `--no-config-cache` flag is set or no config path is specified.
 ///
 /// # Returns
 /// - `Ok(())` if save succeeded or was skipped
@@ -115,7 +143,13 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
         return Ok(());
     }
 
-    let path = get_config_path()?;
+    let path = match get_config_path()? {
+        Some(p) => p,
+        None => {
+            log::debug!("⏭️  Skipping config save (no config file specified - temporary mode)");
+            return Ok(());
+        }
+    };
 
     let persisted: Vec<PersistedPortConfig> = configs
         .iter()
@@ -193,9 +227,15 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
     let json =
         serde_json::to_string_pretty(&persisted).context("Failed to serialize port configs")?;
 
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory {parent:?}"))?;
+    }
+
     fs::write(&path, json).with_context(|| format!("Failed to write config to {path:?}"))?;
 
-    log::debug!(
+    log::info!(
         "💾 Saved {} port configurations to {:?}",
         configs.len(),
         path
@@ -205,10 +245,10 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
 
 /// Load port configurations from disk (TUI-only)
 ///
-/// This function loads TUI port configurations from the working directory.
+/// This function loads TUI port configurations from the specified config file.
 /// CLI processes should NOT call this function.
 ///
-/// Load is automatically skipped if `--no-config-cache` flag is set.
+/// Load is automatically skipped if `--no-config-cache` flag is set or no config path is specified.
 ///
 /// # Returns
 /// - `Ok(HashMap)` with loaded configs, or empty HashMap if skipped/not found
@@ -219,10 +259,16 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
         return Ok(HashMap::new());
     }
 
-    let path = get_config_path()?;
+    let path = match get_config_path()? {
+        Some(p) => p,
+        None => {
+            log::debug!("⏭️  Skipping config load (no config file specified - temporary mode)");
+            return Ok(HashMap::new());
+        }
+    };
 
     if !path.exists() {
-        log::debug!("📂 No saved config found at {path:?}");
+        log::info!("📂 Config file does not exist yet: {path:?} (will be created on save)");
         return Ok(HashMap::new());
     }
 
