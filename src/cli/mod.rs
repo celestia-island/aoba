@@ -15,7 +15,23 @@ pub fn parse_args() -> ArgMatches {
                 .long("tui")
                 .short('t')
                 .help("Force TUI mode")
-                .action(clap::ArgAction::SetTrue),
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with("daemon"),
+        )
+        .arg(
+            Arg::new("daemon")
+                .long("daemon")
+                .short('d')
+                .help("Run in daemon mode (non-interactive): load config and auto-start all ports without TUI interface")
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with("tui"),
+        )
+        .arg(
+            Arg::new("daemon-config")
+                .long("daemon-config")
+                .help("Configuration file path for daemon mode (default: ./aoba_tui_config.json)")
+                .value_name("FILE")
+                .requires("daemon"),
         )
         .arg(
             Arg::new("list-ports")
@@ -154,6 +170,13 @@ pub fn parse_args() -> ArgMatches {
                 .long("output")
                 .help("Output destination for slave mode: file:<path> or pipe:<name> (default: stdout)")
                 .value_name("OUTPUT"),
+        )
+        .arg(
+            Arg::new("ipc-socket-path")
+                .long("ipc-socket-path")
+                .help("IPC Unix socket path for half-duplex JSON request-response mode (slave mode only)")
+                .value_name("SOCKET_PATH")
+                .requires("slave-listen-persist"),
         )
         .arg(
             Arg::new("baud-rate")
