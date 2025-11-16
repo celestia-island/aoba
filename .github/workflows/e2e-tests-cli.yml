@@ -23,6 +23,7 @@ jobs:
           - modbus_basic_master_slave
           - data_source_http
           - data_source_manual
+          - data_source_ipc_channel
           - data_source_mqtt
 
     steps:

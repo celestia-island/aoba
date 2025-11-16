@@ -137,7 +137,18 @@ key = "Enter"
 description = "Initialize slave station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
 ]
 
 [[workflow.create_station]]
@@ -336,6 +347,10 @@ description = "Verify local register value updated"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[2]", expected = 0x1234 }
 
 [[workflow.verify_write_complete_round1]]
+description = "Verify remote master register value updated"
+check_status = { path = "$.ports[0].modbus_masters[0].registers[2]", expected = 0x1234 }
+
+[[workflow.verify_write_complete_round1]]
 description = "Verify register displays new value"
 verify = "0x1234"
 
@@ -386,6 +401,10 @@ description = "Verify local register value updated"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[3]", expected = 0x5678 }
 
 [[workflow.verify_write_complete_round2]]
+description = "Verify remote master register value updated"
+check_status = { path = "$.ports[0].modbus_masters[0].registers[3]", expected = 0x5678 }
+
+[[workflow.verify_write_complete_round2]]
 verify = "0x5678"
 
 # Round 3: Write to register 4 with value 0x9ABC
@@ -433,6 +452,10 @@ check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
 [[workflow.verify_write_complete_round3]]
 description = "Verify local register value updated"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[4]", expected = 0x9ABC }
+
+[[workflow.verify_write_complete_round3]]
+description = "Verify remote master register value updated"
+check_status = { path = "$.ports[0].modbus_masters[0].registers[4]", expected = 0x9ABC }
 
 [[workflow.verify_write_complete_round3]]
 verify = "0x9ABC"
