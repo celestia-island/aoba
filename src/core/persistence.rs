@@ -13,6 +13,7 @@
 //! interference. Call `set_no_cache(true)` early in application startup to enable this.
 
 use anyhow::{Context, Result};
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -25,8 +26,6 @@ use crate::protocol::status::types::{
     modbus::{ModbusMasterDataSource, ModbusRegisterItem},
     port::PortConfig,
 };
-
-use once_cell::sync::OnceCell;
 
 /// Global flag to disable config cache (set via --no-config-cache)
 static NO_CONFIG_CACHE: AtomicBool = AtomicBool::new(false);
