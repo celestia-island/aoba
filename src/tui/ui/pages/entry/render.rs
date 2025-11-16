@@ -78,6 +78,13 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     Ok(())
 }
 
+/// Get the base node height (always fixed at 4 lines)
+/// Stations are now rendered outside the box, so node height doesn't include them
+fn get_node_height() -> u16 {
+    // Base height: 2 content lines (name + type) + 2 border lines = 4
+    4u16
+}
+
 /// Render nodes in a horizontal single-row layout with scrolling support
 fn render_node_grid(
     frame: &mut Frame,
@@ -96,10 +103,12 @@ fn render_node_grid(
     let inner_area = canvas_block.inner(area);
     frame.render_widget(canvas_block, area);
 
-    // Node dimensions: two lines (name + type), horizontal only
+    // Node dimensions
     let node_width = 20u16; // Total width including borders
-    let node_height = 4u16; // Two lines + borders (4 total)
     let spacing = 1u16; // Spacing between nodes
+
+    // Get port data for calculating heights
+    let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
 
     // Calculate total number of nodes for rendering (ports + editing node if in creation mode)
     let total_nodes_for_rendering = if in_creation {
@@ -107,9 +116,6 @@ fn render_node_grid(
     } else {
         ports_order.len()
     };
-
-    // Get port data for status indicators
-    let ports_map = read_status(|status| Ok(status.ports.map.clone()))?;
 
     // Calculate how many nodes fit in the viewport
     let viewport_width = inner_area.width;
@@ -173,6 +179,9 @@ fn render_node_grid(
             break;
         }
 
+        // Node height is fixed; stations are rendered outside the box
+        let node_height = get_node_height();
+
         let node_area = Rect {
             x,
             y,
@@ -203,7 +212,7 @@ fn render_node_grid(
                     x,
                     y,
                     width: node_width,
-                    height: node_height,
+                    height: 4u16, // Base height for editing node
                 };
 
                 render_editing_node(frame, node_area, port_type_index)?;
@@ -289,11 +298,21 @@ fn render_node(
     is_selected: bool,
     ports_map: &std::collections::HashMap<String, PortData>,
 ) -> Result<()> {
-    // Get port state
-    let port_state = ports_map
-        .get(port_name)
-        .map(|p| p.state.clone())
-        .unwrap_or(PortState::Free);
+    // Get port data
+    let (port_state, port_type, master_source) = if let Some(port_data) = ports_map.get(port_name) {
+        let state = port_data.state.clone();
+        let ptype = port_data.port_type.clone();
+        let master_source = if state.is_occupied_by_this() {
+            let crate::tui::status::port::PortConfig::Modbus { master_source, .. } =
+                &port_data.config;
+            Some(master_source.clone())
+        } else {
+            None
+        };
+        (state, ptype, master_source)
+    } else {
+        (PortState::Free, String::new(), None)
+    };
 
     // Determine status indicator
     let status_indicator = match port_state {
@@ -356,12 +375,6 @@ fn render_node(
     // Build node content - two lines (node height is 4: top border + 2 content lines + bottom border)
     // No angle brackets in the text - selection is shown via the indicator above
     if inner.height >= 2 && inner.width >= 3 {
-        // Get port type from port data
-        let port_type = ports_map
-            .get(port_name)
-            .map(|p| p.port_type.as_str())
-            .unwrap_or("");
-
         // Determine port type display label
         let port_type_label = if port_type.contains("http") || port_type.contains("HTTP") {
             if lang().index.title.contains("中") {
@@ -432,7 +445,98 @@ fn render_node(
         frame.render_widget(type_widget, type_area);
     }
 
+    // Render port forwarding references outside the box (below the node)
+    // Only show green-colored references, not the cyan station entries (port info already in box)
+
+    // Collect all references first to determine proper timeline characters
+    let mut references: Vec<String> = Vec::new();
+
+    // Check if this port references another port (data consumer)
+    if let Some(crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding {
+        source_port,
+    }) = &master_source
+    {
+        if !source_port.is_empty() {
+            // This port references source_port (consumes data from it)
+            // Show left arrow: ├<─ source_port
+            references.push(format!("<─ {}", format_port_name_for_display(source_port)));
+        }
+    }
+
+    // Check if any other port references this port (this port is a data source)
+    for (other_port_name, other_port_data) in ports_map.iter() {
+        if other_port_name != port_name && other_port_data.state.is_occupied_by_this() {
+            let crate::tui::status::port::PortConfig::Modbus {
+                master_source: other_master_source,
+                ..
+            } = &other_port_data.config;
+            if let crate::tui::status::modbus::ModbusMasterDataSource::PortForwarding {
+                source_port,
+            } = other_master_source
+            {
+                if source_port == port_name {
+                    // Other port references this port (this port is the data source)
+                    // Show right arrow: ├─> other_port_name
+                    references.push(format!(
+                        "─> {}",
+                        format_port_name_for_display(other_port_name)
+                    ));
+                }
+            }
+        }
+    }
+
+    // Render all references with proper timeline characters
+    if !references.is_empty() {
+        let reference_style = Style::default().fg(Color::Green);
+        let mut current_y = area.y + area.height;
+
+        for (idx, reference_text) in references.iter().enumerate() {
+            // Use └─ for the last reference, ├─ for others
+            let timeline_char = if idx == references.len() - 1 {
+                "└"
+            } else {
+                "├"
+            };
+
+            let full_text = format!(" {}{}", timeline_char, reference_text);
+
+            let reference_area = Rect {
+                x: area.x,
+                y: current_y,
+                width: area.width,
+                height: 1,
+            };
+
+            let reference_widget = Paragraph::new(full_text)
+                .style(reference_style)
+                .alignment(Alignment::Left);
+            frame.render_widget(reference_widget, reference_area);
+
+            current_y += 1;
+        }
+    }
+
     Ok(())
+}
+
+/// Format port name for display: show last 7 chars for UUIDs, full name otherwise
+fn format_port_name_for_display(port_name: &str) -> String {
+    // Check if this looks like a UUID (36 chars with 4 hyphens)
+    if port_name.len() == 36 && port_name.chars().filter(|c| *c == '-').count() == 4 {
+        // Show last 7 characters for UUID
+        port_name
+            .chars()
+            .rev()
+            .take(7)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect()
+    } else {
+        // Show full name for regular serial ports
+        port_name.to_string()
+    }
 }
 
 /// Render the "editing" node for new port creation
