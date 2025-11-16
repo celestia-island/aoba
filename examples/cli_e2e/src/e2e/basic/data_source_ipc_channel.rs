@@ -12,62 +12,14 @@ use crate::utils::{
 use _main::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
-    utils::sleep::sleep_1s,
+    utils::{sleep::sleep_1s, sleep_3s},
 };
 
 // File-level constants to avoid magic numbers
 const REGISTER_LENGTH: usize = 10;
 const IPC_SOCKET_PATH: &str = "/tmp/aoba_test_ipc_channel.sock";
 
-/// Send a JSON request to the IPC socket and receive response
-fn send_ipc_request(socket_path: &str, request: &str) -> Result<String> {
-    // Remove existing socket file if any
-    let _ = std::fs::remove_file(socket_path);
-
-    // Wait for server to be ready
-    let mut retries = 10;
-    let mut stream = None;
-    while retries > 0 {
-        match UnixStream::connect(socket_path) {
-            Ok(s) => {
-                stream = Some(s);
-                break;
-            }
-            Err(_) => {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                retries -= 1;
-            }
-        }
-    }
-
-    let mut stream = stream.ok_or_else(|| anyhow!("Failed to connect to IPC socket"))?;
-
-    // Send request
-    writeln!(stream, "{}", request)?;
-    stream.flush()?;
-
-    // Read response
-    let mut reader = BufReader::new(stream);
-    let mut response = String::new();
-    reader.read_line(&mut response)?;
-
-    Ok(response.trim().to_string())
-}
-
-/// Parse IPC response
-fn parse_ipc_response(response: &str) -> Result<ModbusResponse> {
-    let json: serde_json::Value = serde_json::from_str(response)?;
-
-    if !json["success"].as_bool().unwrap_or(false) {
-        return Err(anyhow!("IPC request failed: {:?}", json["error"]));
-    }
-
-    let data = &json["data"];
-    let response: ModbusResponse = serde_json::from_value(data.clone())?;
-    Ok(response)
-}
-
-/// Build station payload for writing data
+/// Build station payload for data transmission
 fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
     Arc::new(vec![StationConfig::single_range(
         1,
@@ -79,10 +31,12 @@ fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
     )])
 }
 
-/// Test IPC channel data source - master writes, slave provides data via IPC
-/// Tests 3 rounds of write-read cycles to verify register operations
+/// Test IPC channel data source - master with IPC socket, E2E sends data via IPC, slave polls master
+/// Tests 3 rounds of IPC write followed by slave poll verification
 pub async fn test_ipc_channel_data_source() -> Result<()> {
-    log::info!("🧪 Testing IPC channel data source mode (3 rounds of write-read cycles)...");
+    log::info!(
+        "🧪 Testing IPC channel data source mode (master with IPC, E2E as client, slave polls)..."
+    );
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
@@ -103,25 +57,30 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
     let binary = build_debug_bin("aoba")?;
     let register_length_arg = REGISTER_LENGTH.to_string();
 
-    // Start slave with IPC socket
-    let slave_output = temp_dir.join("slave_ipc_persist_output.log");
-    let slave_output_file = std::fs::File::create(&slave_output)?;
-    let slave_stderr = temp_dir.join("slave_ipc_persist_stderr.log");
-    let slave_stderr_file = std::fs::File::create(&slave_stderr)?;
-
-    log::info!(
-        "📋 Slave logs will be at: stdout={:?}, stderr={:?}",
-        slave_output,
-        slave_stderr
-    );
-
     // Remove old socket file if exists
     let _ = std::fs::remove_file(IPC_SOCKET_PATH);
 
-    let mut slave = std::process::Command::new(&binary)
+    // Start master daemon with IPC socket on vcom1
+    let master_output = temp_dir.join("master_ipc_persist_output.log");
+    let master_output_file = std::fs::File::create(&master_output)?;
+    let master_stderr = temp_dir.join("master_ipc_persist_stderr.log");
+    let master_stderr_file = std::fs::File::create(&master_stderr)?;
+
+    log::info!(
+        "📋 Master logs will be at: stdout={:?}, stderr={:?}",
+        master_output,
+        master_stderr
+    );
+
+    log::info!(
+        "🚀 Starting master daemon with IPC socket on {}",
+        ports.port1_name
+    );
+
+    let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
-            "--slave-listen-persist",
+            "--master-provide-persist",
             &ports.port1_name,
             "--ipc-socket-path",
             IPC_SOCKET_PATH,
@@ -135,23 +94,76 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
             "holding",
             "--baud-rate",
             "9600",
+            "--data-source",
+            "manual",
         ])
-        .stdout(Stdio::from(slave_output_file))
-        .stderr(Stdio::from(slave_stderr_file))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::from(master_output_file))
+        .stderr(Stdio::from(master_stderr_file))
         .spawn()?;
 
-    // Wait for slave to be ready
-    wait_for_process_ready(&mut slave, 3000).await?;
-    sleep_1s().await;
+    // Write initial empty data to stdin to initialize master
+    if let Some(mut stdin) = master.stdin.take() {
+        let empty_payload = build_station_payload(&[0u16; REGISTER_LENGTH]);
+        let json = serde_json::to_string(&*empty_payload)?;
+        writeln!(stdin, "{}", json)?;
+        stdin.flush()?;
+        // Keep stdin open for persist mode
+    }
+
+    // Wait for master to be ready and create IPC socket
+    wait_for_process_ready(&mut master, 3000).await?;
+    log::info!("⏳ Waiting for IPC socket to be created...");
+    sleep_3s().await;
+
+    // Helper function to send data via IPC with retry
+    let send_data_via_ipc = |values: &[u16]| -> Result<()> {
+        let payload = build_station_payload(values);
+        let json = serde_json::to_string(&*payload)?;
+
+        // Wait for IPC socket to be created (with retry)
+        let mut retries = 20;
+        let stream = loop {
+            match UnixStream::connect(IPC_SOCKET_PATH) {
+                Ok(s) => break s,
+                Err(_e) if retries > 0 => {
+                    log::debug!("Waiting for IPC socket... ({} retries left)", retries);
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    retries -= 1;
+                }
+                Err(e) => return Err(anyhow!("Failed to connect to IPC socket: {}", e)),
+            }
+        };
+
+        // Send data
+        let mut stream = stream;
+        writeln!(stream, "{}", json)?;
+        stream.flush()?;
+
+        // Read response
+        let mut reader = BufReader::new(stream);
+        let mut response = String::new();
+        reader.read_line(&mut response)?;
+
+        let response_json: serde_json::Value = serde_json::from_str(response.trim())?;
+        if !response_json["success"].as_bool().unwrap_or(false) {
+            return Err(anyhow!("IPC write failed: {:?}", response_json));
+        }
+
+        Ok(())
+    };
 
     // Test Round 1: Sequential values
-    log::info!("🔄 Round 1: Writing sequential values via master");
-    let payload_round1 = build_station_payload(&round1_values);
+    log::info!("🔄 Round 1: Sending sequential values via IPC");
+    send_data_via_ipc(&round1_values)?;
+    sleep_1s().await;
 
-    let mut master_proc = std::process::Command::new(&binary)
+    // Verify by polling master with slave
+    log::info!("🔍 Round 1: Polling master with slave to verify");
+    let poll_output = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
-            "--master-provide",
+            "--slave-poll",
             &ports.port2_name,
             "--station-id",
             "1",
@@ -163,45 +175,27 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
             "holding",
             "--baud-rate",
             "9600",
-            "--data-source",
-            "manual",
         ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .output()?;
 
-    // Write data to stdin
-    if let Some(mut stdin) = master_proc.stdin.take() {
-        let json = serde_json::to_string(&*payload_round1)?;
-        writeln!(stdin, "{}", json)?;
-        stdin.flush()?;
-        drop(stdin);
-    }
-
-    let output = master_proc.wait_with_output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        slave.kill().ok();
-        let _ = slave.wait();
+    if !poll_output.status.success() {
+        let stderr = String::from_utf8_lossy(&poll_output.stderr);
+        master.kill().ok();
+        let _ = master.wait();
         return Err(anyhow!(
-            "Round 1: Master write command failed: {} (stderr: {})",
-            output.status,
+            "Round 1: Slave poll failed: {} (stderr: {})",
+            poll_output.status,
             stderr
         ));
     }
 
-    sleep_1s().await;
-
-    // Read data via IPC
-    log::info!("🔍 Round 1: Reading data via IPC channel");
-    let ipc_response = send_ipc_request(IPC_SOCKET_PATH, r#"{"action":"read"}"#)?;
-    let response = parse_ipc_response(&ipc_response)?;
-    log::info!("✅ Round 1: Received values: {:?}", response.values);
+    let stdout = String::from_utf8_lossy(&poll_output.stdout);
+    let response: ModbusResponse = serde_json::from_str(stdout.trim())?;
+    log::info!("✅ Round 1: Polled values: {:?}", response.values);
 
     if response.values != round1_values {
-        slave.kill().ok();
-        let _ = slave.wait();
+        master.kill().ok();
+        let _ = master.wait();
         return Err(anyhow!(
             "Round 1: Received values {:?} do not match expected {:?}",
             response.values,
@@ -210,13 +204,15 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
     }
 
     // Test Round 2: Reverse values
-    log::info!("🔄 Round 2: Writing reverse values via master");
-    let payload_round2 = build_station_payload(&round2_values);
+    log::info!("🔄 Round 2: Sending reverse values via IPC");
+    send_data_via_ipc(&round2_values)?;
+    sleep_1s().await;
 
-    let mut master_proc = std::process::Command::new(&binary)
+    log::info!("🔍 Round 2: Polling master with slave to verify");
+    let poll_output2 = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
-            "--master-provide",
+            "--slave-poll",
             &ports.port2_name,
             "--station-id",
             "1",
@@ -228,58 +224,44 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
             "holding",
             "--baud-rate",
             "9600",
-            "--data-source",
-            "manual",
         ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .output()?;
 
-    if let Some(mut stdin) = master_proc.stdin.take() {
-        let json = serde_json::to_string(&*payload_round2)?;
-        writeln!(stdin, "{}", json)?;
-        stdin.flush()?;
-        drop(stdin);
-    }
-
-    let output = master_proc.wait_with_output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        slave.kill().ok();
-        let _ = slave.wait();
+    if !poll_output2.status.success() {
+        let stderr = String::from_utf8_lossy(&poll_output2.stderr);
+        master.kill().ok();
+        let _ = master.wait();
         return Err(anyhow!(
-            "Round 2: Master write command failed: {} (stderr: {})",
-            output.status,
+            "Round 2: Slave poll failed: {} (stderr: {})",
+            poll_output2.status,
             stderr
         ));
     }
 
-    sleep_1s().await;
+    let stdout2 = String::from_utf8_lossy(&poll_output2.stdout);
+    let response2: ModbusResponse = serde_json::from_str(stdout2.trim())?;
+    log::info!("✅ Round 2: Polled values: {:?}", response2.values);
 
-    log::info!("🔍 Round 2: Reading data via IPC channel");
-    let ipc_response = send_ipc_request(IPC_SOCKET_PATH, r#"{"action":"read"}"#)?;
-    let response = parse_ipc_response(&ipc_response)?;
-    log::info!("✅ Round 2: Received values: {:?}", response.values);
-
-    if response.values != round2_values {
-        slave.kill().ok();
-        let _ = slave.wait();
+    if response2.values != round2_values {
+        master.kill().ok();
+        let _ = master.wait();
         return Err(anyhow!(
             "Round 2: Received values {:?} do not match expected {:?}",
-            response.values,
+            response2.values,
             round2_values
         ));
     }
 
     // Test Round 3: Custom hex values
-    log::info!("🔄 Round 3: Writing custom hex values via master");
-    let payload_round3 = build_station_payload(&round3_values);
+    log::info!("🔄 Round 3: Sending custom hex values via IPC");
+    send_data_via_ipc(&round3_values)?;
+    sleep_1s().await;
 
-    let mut master_proc = std::process::Command::new(&binary)
+    log::info!("🔍 Round 3: Polling master with slave to verify");
+    let poll_output3 = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
         .args([
-            "--master-provide",
+            "--slave-poll",
             &ports.port2_name,
             "--station-id",
             "1",
@@ -291,55 +273,39 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
             "holding",
             "--baud-rate",
             "9600",
-            "--data-source",
-            "manual",
         ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .output()?;
 
-    if let Some(mut stdin) = master_proc.stdin.take() {
-        let json = serde_json::to_string(&*payload_round3)?;
-        writeln!(stdin, "{}", json)?;
-        stdin.flush()?;
-        drop(stdin);
-    }
-
-    let output = master_proc.wait_with_output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        slave.kill().ok();
-        let _ = slave.wait();
+    if !poll_output3.status.success() {
+        let stderr = String::from_utf8_lossy(&poll_output3.stderr);
+        master.kill().ok();
+        let _ = master.wait();
         return Err(anyhow!(
-            "Round 3: Master write command failed: {} (stderr: {})",
-            output.status,
+            "Round 3: Slave poll failed: {} (stderr: {})",
+            poll_output3.status,
             stderr
         ));
     }
 
-    sleep_1s().await;
+    let stdout3 = String::from_utf8_lossy(&poll_output3.stdout);
+    let response3: ModbusResponse = serde_json::from_str(stdout3.trim())?;
+    log::info!("✅ Round 3: Polled values: {:?}", response3.values);
 
-    log::info!("🔍 Round 3: Reading data via IPC channel");
-    let ipc_response = send_ipc_request(IPC_SOCKET_PATH, r#"{"action":"read"}"#)?;
-    let response = parse_ipc_response(&ipc_response)?;
-    log::info!("✅ Round 3: Received values: {:?}", response.values);
-
-    if response.values != round3_values {
-        slave.kill().ok();
-        let _ = slave.wait();
+    if response3.values != round3_values {
+        master.kill().ok();
+        let _ = master.wait();
         return Err(anyhow!(
             "Round 3: Received values {:?} do not match expected {:?}",
-            response.values,
+            response3.values,
             round3_values
         ));
     }
 
     // Cleanup
-    slave.kill().ok();
-    let _ = slave.wait();
+    master.kill().ok();
+    let _ = master.wait();
     let _ = std::fs::remove_file(IPC_SOCKET_PATH);
-    std::fs::remove_file(&slave_output).ok();
+    std::fs::remove_file(&master_output).ok();
 
     log::info!("✅ IPC channel data source test completed successfully");
     Ok(())
