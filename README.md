@@ -40,6 +40,7 @@ Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, T
 - Protocol simulation (master/slave, client/server)
 - Automatic TUI/GUI switching
 - Create and manage virtual serial ports
+- **Daemon mode**: non-interactive background operation with auto-configuration loading
 
 ## Quick start
 
@@ -52,6 +53,67 @@ Notes:
 - Detailed documentation is still being written.
   - Examples and some reference material live in the `examples/` and `docs/` directories but are not yet comprehensive.
   - If you want to run automated tests or CI workflows, check `./scripts/` and the example test folders for guidance.
+
+## Daemon Mode
+
+Daemon mode allows `aoba` to run in non-interactive environments, perfect for scenarios requiring TUI configuration features (like transparent port forwarding) without the interactive interface.
+
+### Usage
+
+```bash
+# Use default config file (aoba_tui_config.json in current directory)
+aoba --daemon
+
+# Or use short form
+aoba -d
+
+# Specify custom config file path
+aoba --daemon --daemon-config /path/to/config.json
+
+# Specify log file (outputs to both terminal and file)
+aoba --daemon --log-file /path/to/daemon.log
+```
+
+### How It Works
+
+1. **Configuration Loading**: Loads TUI config from working directory or specified path
+2. **Auto-Start**: Automatically starts all configured ports and stations
+3. **Dual Logging**: Outputs logs to both terminal and file simultaneously
+4. **No UI**: Runs core threads only, no interactive interface
+
+### Preparing Configuration
+
+First use TUI mode to create and configure ports:
+
+```bash
+# Start TUI for configuration
+aoba --tui
+
+# In TUI:
+# 1. Configure ports and Modbus stations
+# 2. Press Ctrl+S to save configuration
+# 3. Exit TUI
+```
+
+Configuration is automatically saved to `./aoba_tui_config.json`.
+
+### Error Handling
+
+If the configuration file doesn't exist, daemon mode will exit with an error:
+
+```
+Error: Configuration file not found: ./aoba_tui_config.json
+
+Daemon mode requires a configuration file. You can:
+1. Run TUI mode first to create and save a configuration
+2. Specify a custom config path with --daemon-config <FILE>
+```
+
+### Typical Use Cases
+
+- **Transparent Port Forwarding**: Run forwarding services in the background
+- **Automated Testing**: Auto-start Modbus simulators in CI/CD environments
+- **Remote Deployment**: Run Modbus services on headless servers
 
 ## Contribution
 
