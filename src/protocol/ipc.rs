@@ -100,6 +100,20 @@ pub enum IpcMessage {
         #[serde(default)]
         timestamp: Option<i64>,
     },
+
+    /// Register write operation completed (success or failure)
+    RegisterWriteComplete {
+        port_name: String,
+        station_id: u8,
+        register_address: u16,
+        register_value: u16,
+        register_type: String, // "holding", "coil", etc.
+        success: bool,
+        #[serde(default)]
+        error: Option<String>,
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
 }
 
 impl IpcMessage {
@@ -191,6 +205,28 @@ impl IpcMessage {
     pub fn state_lock_ack(locked: bool) -> Self {
         Self::StateLockAck {
             locked,
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a RegisterWriteComplete message with current timestamp
+    pub fn register_write_complete(
+        port_name: String,
+        station_id: u8,
+        register_address: u16,
+        register_value: u16,
+        register_type: String,
+        success: bool,
+        error: Option<String>,
+    ) -> Self {
+        Self::RegisterWriteComplete {
+            port_name,
+            station_id,
+            register_address,
+            register_value,
+            register_type,
+            success,
+            error,
             timestamp: Some(Self::timestamp()),
         }
     }
