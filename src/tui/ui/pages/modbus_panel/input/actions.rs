@@ -290,6 +290,27 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     return Ok(());
                 }
 
+                // Check if this register has a pending write
+                let has_pending_write = read_status(|status| {
+                    if let Some(port_entry) = status.ports.map.get(&port_name) {
+                        let types::port::PortConfig::Modbus {
+                            mode: _,
+                            master_source: _,
+                            stations,
+                        } = &port_entry.config;
+                        if let Some(station) = stations.get(slave_index) {
+                            return Ok(station.pending_writes.contains_key(&register_index));
+                        }
+                    }
+                    Ok(false)
+                })?;
+
+                if has_pending_write {
+                    // Don't allow editing registers with pending writes
+                    log::info!("Register editing locked - write in progress");
+                    return Ok(());
+                }
+
                 // Get the register mode to determine behavior
                 let register_mode = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
@@ -660,6 +681,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     last_request_time: None,
                     last_response_time: None,
                     pending_requests: Vec::new(),
+                    pending_writes: std::collections::HashMap::new(),
                 };
                 log::info!("🟢 Pushing new station entry");
                 stations.push(new_entry);

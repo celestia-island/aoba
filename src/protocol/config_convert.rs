@@ -34,6 +34,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
                 last_request_time: None,
                 last_response_time: None,
                 pending_requests: Vec::new(),
+                pending_writes: std::collections::HashMap::new(),
             });
         }
 
@@ -51,6 +52,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
                 last_request_time: None,
                 last_response_time: None,
                 pending_requests: Vec::new(),
+                pending_writes: std::collections::HashMap::new(),
             });
         }
 
@@ -68,6 +70,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
                 last_request_time: None,
                 last_response_time: None,
                 pending_requests: Vec::new(),
+                pending_writes: std::collections::HashMap::new(),
             });
         }
 
@@ -85,6 +88,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
                 last_request_time: None,
                 last_response_time: None,
                 pending_requests: Vec::new(),
+                pending_writes: std::collections::HashMap::new(),
             });
         }
     }
@@ -205,6 +209,7 @@ mod tests {
                 last_request_time: None,
                 last_response_time: None,
                 pending_requests: Vec::new(),
+                pending_writes: std::collections::HashMap::new(),
             },
             ModbusRegisterItem {
                 station_id: 1,
@@ -218,6 +223,7 @@ mod tests {
                 last_request_time: None,
                 last_response_time: None,
                 pending_requests: Vec::new(),
+                pending_writes: std::collections::HashMap::new(),
             },
         ];
 

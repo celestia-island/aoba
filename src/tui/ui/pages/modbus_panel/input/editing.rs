@@ -848,7 +848,13 @@ fn commit_text_edit(
                                     );
 
                                     if needs_enqueue {
+                                        // Track this write as pending
+                                        item.pending_writes.insert(idx, sanitized_value);
                                         enqueue_slave_write(item, register_addr, sanitized_value);
+
+                                        // Set port status to Syncing
+                                        port.status_indicator =
+                                            types::port::PortStatusIndicator::Syncing;
                                     }
                                 }
                             }

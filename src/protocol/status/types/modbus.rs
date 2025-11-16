@@ -555,6 +555,9 @@ pub struct ModbusRegisterItem {
     pub last_request_time: Option<std::time::Instant>, // For timeout tracking in slave mode
     pub last_response_time: Option<std::time::Instant>, // For throttling responses in master mode
     pub pending_requests: Vec<u8>,                     // simplified type for now
+
+    /// Tracks which register indices have pending writes: (register_index, new_value)
+    pub pending_writes: std::collections::HashMap<usize, u16>,
 }
 
 #[repr(u8)]
