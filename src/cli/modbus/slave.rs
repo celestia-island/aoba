@@ -665,11 +665,14 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
                     match msg {
                         crate::protocol::ipc::IpcMessage::StationsUpdate {
-                            stations_data, ..
+                            stations_data,
+                            update_reason,
+                            ..
                         } => {
                             log::info!(
-                                "Received stations update ({} bytes), updating slave configuration",
-                                stations_data.len()
+                                "Received stations update ({} bytes), reason={:?}",
+                                stations_data.len(),
+                                update_reason
                             );
 
                             // Deserialize and use the stations configuration
@@ -687,66 +690,105 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                         // Update configuration from the first slave station
                                         current_station_id = first_station.station_id;
 
-                                        // Process pending writes from initial_values
-                                        // Check all register ranges for values that should be written
-                                        for range in &first_station.map.holding {
-                                            for (idx, &value) in
-                                                range.initial_values.iter().enumerate()
-                                            {
-                                                let addr = range.address_start + idx as u16;
-                                                // Check if this value differs from last read
-                                                let needs_write = match &last_written_values {
-                                                    Some(prev_vals) => {
+                                        // Determine write behavior based on update reason
+                                        // - "user_edit": Write all values including 0 (user intention)
+                                        // - "initial_config": Skip all writes (configuration initialization)
+                                        // - "sync" or None: Skip 0 values (likely defaults/heartbeat)
+                                        // - "read_response": Always apply (actual modbus read data)
+                                        let should_process_writes = match update_reason.as_deref() {
+                                            Some("user_edit") => true,     // User explicitly edited, write everything
+                                            Some("read_response") => true, // Actual read data, always apply
+                                            Some("initial_config") => false, // Initial config, skip writes
+                                            Some("sync") | None => last_written_values.is_some(), // Sync/unknown: only if we've read before
+                                            Some(other) => {
+                                                log::warn!("Unknown update_reason: {other}, defaulting to sync behavior");
+                                                last_written_values.is_some()
+                                            }
+                                        };
+
+                                        let allow_zero_writes =
+                                            matches!(update_reason.as_deref(), Some("user_edit"));
+
+                                        log::info!(
+                                            "Write decision: reason={:?}, should_process={}, allow_zeros={}",
+                                            update_reason,
+                                            should_process_writes,
+                                            allow_zero_writes
+                                        );
+
+                                        if should_process_writes {
+                                            // Check all register ranges for values that should be written
+                                            for range in &first_station.map.holding {
+                                                for (idx, &value) in
+                                                    range.initial_values.iter().enumerate()
+                                                {
+                                                    let addr = range.address_start + idx as u16;
+
+                                                    // Skip zero values unless this is a user edit
+                                                    if value == 0 && !allow_zero_writes {
+                                                        log::debug!("⏭️ Skipping write for holding register 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                                        continue;
+                                                    }
+
+                                                    let needs_write = if let Some(prev_vals) =
+                                                        &last_written_values
+                                                    {
                                                         let relative_idx = (addr
                                                             - current_register_address)
                                                             as usize;
                                                         relative_idx >= prev_vals.len()
                                                             || prev_vals[relative_idx] != value
-                                                    }
-                                                    None => true, // No previous values, write everything
-                                                };
+                                                    } else {
+                                                        false // Should not happen since we checked above
+                                                    };
 
-                                                if needs_write {
-                                                    log::info!("📤 Queueing write for holding register 0x{addr:04X} = 0x{value:04X}");
-                                                    pending_writes.push_back((
-                                                        addr,
-                                                        value,
-                                                        "holding".to_string(),
-                                                    ));
+                                                    if needs_write {
+                                                        log::info!("📤 Queueing write for holding register 0x{addr:04X} = 0x{value:04X}");
+                                                        pending_writes.push_back((
+                                                            addr,
+                                                            value,
+                                                            "holding".to_string(),
+                                                        ));
+                                                    }
                                                 }
                                             }
 
-                                            // Update tracking variables
-                                            current_register_address = range.address_start;
-                                            current_register_length = range.length;
-                                            current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Holding;
-                                        }
+                                            for range in &first_station.map.coils {
+                                                for (idx, &value) in
+                                                    range.initial_values.iter().enumerate()
+                                                {
+                                                    let addr = range.address_start + idx as u16;
 
-                                        for range in &first_station.map.coils {
-                                            for (idx, &value) in
-                                                range.initial_values.iter().enumerate()
-                                            {
-                                                let addr = range.address_start + idx as u16;
-                                                let needs_write = match &last_written_values {
-                                                    Some(prev_vals) => {
+                                                    // Skip zero values unless this is a user edit
+                                                    if value == 0 && !allow_zero_writes {
+                                                        log::debug!("⏭️ Skipping write for coil 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                                        continue;
+                                                    }
+
+                                                    let needs_write = if let Some(prev_vals) =
+                                                        &last_written_values
+                                                    {
                                                         let relative_idx = (addr
                                                             - current_register_address)
                                                             as usize;
                                                         relative_idx >= prev_vals.len()
                                                             || prev_vals[relative_idx] != value
-                                                    }
-                                                    None => true,
-                                                };
+                                                    } else {
+                                                        false
+                                                    };
 
-                                                if needs_write {
-                                                    log::info!("📤 Queueing write for coil 0x{addr:04X} = 0x{value:04X}");
-                                                    pending_writes.push_back((
-                                                        addr,
-                                                        value,
-                                                        "coil".to_string(),
-                                                    ));
+                                                    if needs_write {
+                                                        log::info!("📤 Queueing write for coil 0x{addr:04X} = 0x{value:04X}");
+                                                        pending_writes.push_back((
+                                                            addr,
+                                                            value,
+                                                            "coil".to_string(),
+                                                        ));
+                                                    }
                                                 }
                                             }
+                                        } else {
+                                            log::info!("⏸️  Skipping initial write queue - will sync after first read from master");
                                         }
 
                                         // Find the first register range to use as the polling target

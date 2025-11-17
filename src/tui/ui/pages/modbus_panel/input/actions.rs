@@ -266,27 +266,62 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             })?;
 
             if let Some(port_name) = port_name_opt {
-                // Check if register editing is allowed (only for Manual mode in Master)
+                // Check if register editing is allowed
+                // Master mode: only allow editing in Manual data source (no port state check)
+                // Slave mode: only allow editing 01 (Coils) and 03 (Holding) registers AND port must be running
                 let is_editable = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
                         let types::port::PortConfig::Modbus {
                             mode,
                             master_source,
-                            ..
+                            stations,
                         } = &port_entry.config;
-                        // Allow editing in slave mode or in master mode with Manual data source
-                        return Ok(mode.is_slave()
-                            || matches!(
-                                master_source,
-                                types::modbus::ModbusMasterDataSource::Manual
-                            ));
+
+                        // Get the register mode of the current station
+                        let register_mode = stations.get(slave_index).map(|s| s.register_mode);
+
+                        // Check editability based on mode
+                        match mode {
+                            types::modbus::ModbusConnectionMode::Master => {
+                                // Master mode: allow editing only in Manual data source
+                                // No port state check - can edit even when not running
+                                return Ok(matches!(
+                                    master_source,
+                                    types::modbus::ModbusMasterDataSource::Manual
+                                ));
+                            }
+                            types::modbus::ModbusConnectionMode::Slave { .. } => {
+                                // Slave mode: check port state first
+                                if !matches!(port_entry.state, PortState::OccupiedByThis) {
+                                    log::info!(
+                                        "Slave mode: Register editing not allowed when port is not running (state={:?})",
+                                        port_entry.state
+                                    );
+                                    return Ok(false);
+                                }
+
+                                // Slave mode: only allow editing 01 (Coils) and 03 (Holding) registers
+                                // These represent the slave's own controllable outputs/state
+                                // 02 (Discrete Inputs) and 04 (Input Registers) are read-only inputs
+                                if let Some(reg_mode) = register_mode {
+                                    return Ok(matches!(
+                                        reg_mode,
+                                        types::modbus::RegisterMode::Coils
+                                            | types::modbus::RegisterMode::Holding
+                                    ));
+                                }
+                                return Ok(false);
+                            }
+                        }
                     }
                     Ok(false)
                 })?;
 
                 if !is_editable {
-                    // Don't allow editing in non-Manual master modes
-                    log::info!("Register editing not allowed in non-Manual master mode");
+                    // Don't allow editing based on mode and register type
+                    log::info!(
+                        "Register editing not allowed for this mode/register type combination"
+                    );
                     return Ok(());
                 }
 

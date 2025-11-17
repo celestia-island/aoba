@@ -22,9 +22,12 @@ use super::{
 use crate::{
     cli::{actions, cleanup, http_daemon_registry as http_registry},
     core::task_manager::spawn_task,
-    protocol::modbus::{
-        build_slave_coils_response, build_slave_discrete_inputs_response,
-        build_slave_holdings_response, build_slave_inputs_response,
+    protocol::{
+        modbus::{
+            build_slave_coils_response, build_slave_discrete_inputs_response,
+            build_slave_holdings_response, build_slave_inputs_response,
+        },
+        status::crc16_modbus,
     },
 };
 
@@ -433,8 +436,14 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
             }
             ReadAction::FrameReady => {
                 let request = assembling.clone();
-                let (response, _) =
-                    respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
+                let (response, _) = respond_to_request(
+                    port_arc.clone(),
+                    &request,
+                    station_id,
+                    &storage,
+                    &mut None,
+                    "",
+                )?;
                 let json = serde_json::to_string(&response)?;
                 println!("{json}");
                 drop(port_arc);
@@ -795,6 +804,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             // Try to accept command connection - retry on each loop iteration until successful
             static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);
+            // Track if we've received the first StationsUpdate (initial configuration)
+            static FIRST_CONFIG_RECEIVED: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+
             if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
                 match ipc_conns.command_listener.accept() {
                     Ok(()) => {
@@ -813,9 +826,20 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
                     match msg {
                         crate::protocol::ipc::IpcMessage::StationsUpdate {
-                            stations_data, ..
+                            stations_data,
+                            update_reason,
+                            ..
                         } => {
-                            log::info!("Received stations update, {} bytes", stations_data.len());
+                            let is_first_config =
+                                !FIRST_CONFIG_RECEIVED.load(std::sync::atomic::Ordering::Relaxed);
+                            FIRST_CONFIG_RECEIVED.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                            log::info!(
+                                "Received stations update ({} bytes, is_first={}, reason={:?})",
+                                stations_data.len(),
+                                is_first_config,
+                                update_reason
+                            );
 
                             // Deserialize stations using postcard
                             if let Ok(stations) = postcard::from_bytes::<
@@ -823,6 +847,31 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             >(&stations_data)
                             {
                                 log::info!("Deserialized {} stations", stations.len());
+
+                                // Determine whether to accept zero values based on update reason
+                                // - "user_edit": Accept all values including 0 (user intention)
+                                // - "initial_config": Skip 0 values (avoid overwriting with defaults)
+                                // - "sync" or None: Skip 0 values on first config only
+                                // - "read_response": Always apply (actual modbus read data)
+                                let allow_zero_writes = match update_reason.as_deref() {
+                                    Some("user_edit") => true,
+                                    Some("read_response") => true,
+                                    Some("initial_config") => false,
+                                    Some("sync") | None => !is_first_config, // Legacy behavior
+                                    Some(other) => {
+                                        log::warn!(
+                                            "Unknown update_reason: {other}, using legacy behavior"
+                                        );
+                                        !is_first_config
+                                    }
+                                };
+
+                                log::info!(
+                                    "Master storage decision: reason={:?}, is_first={}, allow_zeros={}",
+                                    update_reason,
+                                    is_first_config,
+                                    allow_zero_writes
+                                );
 
                                 // Apply the station updates to storage
                                 let mut context = storage.lock().unwrap();
@@ -835,12 +884,26 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
                                     // Update holding registers
                                     for range in &station.map.holding {
+                                        log::info!(
+                                            "🔧 Processing holding range: addr=0x{:04X}, len={}, values={:?}, allow_zeros={}",
+                                            range.address_start,
+                                            range.initial_values.len(),
+                                            range.initial_values,
+                                            allow_zero_writes
+                                        );
                                         for (i, &val) in range.initial_values.iter().enumerate() {
                                             let addr = range.address_start + i as u16;
-                                            if let Err(e) = context.set_holding(addr, val) {
-                                                log::warn!(
-                                                    "Failed to set holding register at {addr}: {e}"
-                                                );
+                                            // Apply based on update reason
+                                            if allow_zero_writes || val != 0 {
+                                                if let Err(e) = context.set_holding(addr, val) {
+                                                    log::warn!(
+                                                        "❌ Failed to set holding register at 0x{addr:04X}: {e}"
+                                                    );
+                                                } else {
+                                                    log::info!("✅ Updated holding register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
+                                                }
+                                            } else {
+                                                log::info!("⏭️  Skipped holding register 0x{addr:04X} (value=0, reason={:?})", update_reason);
                                             }
                                         }
                                     }
@@ -849,8 +912,18 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                     for range in &station.map.coils {
                                         for (i, &val) in range.initial_values.iter().enumerate() {
                                             let addr = range.address_start + i as u16;
-                                            if let Err(e) = context.set_coil(addr, val != 0) {
-                                                log::warn!("Failed to set coil at {addr}: {e}");
+                                            // Apply based on update reason
+                                            if allow_zero_writes || val != 0 {
+                                                if let Err(e) = context.set_coil(addr, val != 0) {
+                                                    log::warn!("Failed to set coil at {addr}: {e}");
+                                                } else {
+                                                    log::info!(
+                                                        "✏️ Updated coil 0x{addr:04X} = {val} (reason={:?})",
+                                                        update_reason
+                                                    );
+                                                }
+                                            } else {
+                                                log::info!("⏭️  Skipped coil 0x{addr:04X} (value=0, reason={:?})", update_reason);
                                             }
                                         }
                                     }
@@ -859,10 +932,18 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                     for range in &station.map.discrete_inputs {
                                         for (i, &val) in range.initial_values.iter().enumerate() {
                                             let addr = range.address_start + i as u16;
-                                            if let Err(e) = context.set_discrete(addr, val != 0) {
-                                                log::warn!(
-                                                    "Failed to set discrete input at {addr}: {e}"
-                                                );
+                                            // Apply based on update reason
+                                            if allow_zero_writes || val != 0 {
+                                                if let Err(e) = context.set_discrete(addr, val != 0)
+                                                {
+                                                    log::warn!(
+                                                        "Failed to set discrete input at {addr}: {e}"
+                                                    );
+                                                } else {
+                                                    log::info!("✏️ Updated discrete input 0x{addr:04X} = {val} (reason={:?})", update_reason);
+                                                }
+                                            } else {
+                                                log::info!("⏭️  Skipped discrete input 0x{addr:04X} (value=0, reason={:?})", update_reason);
                                             }
                                         }
                                     }
@@ -871,10 +952,17 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                     for range in &station.map.input {
                                         for (i, &val) in range.initial_values.iter().enumerate() {
                                             let addr = range.address_start + i as u16;
-                                            if let Err(e) = context.set_input(addr, val) {
-                                                log::warn!(
-                                                    "Failed to set input register at {addr}: {e}"
-                                                );
+                                            // Apply based on update reason
+                                            if allow_zero_writes || val != 0 {
+                                                if let Err(e) = context.set_input(addr, val) {
+                                                    log::warn!(
+                                                        "Failed to set input register at {addr}: {e}"
+                                                    );
+                                                } else {
+                                                    log::info!("✏️ Updated input register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
+                                                }
+                                            } else {
+                                                log::info!("⏭️  Skipped input register 0x{addr:04X} (value=0, reason={:?})", update_reason);
                                             }
                                         }
                                     }
@@ -1092,7 +1180,14 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 assembling.clear();
                 last_byte_time = None;
 
-                match respond_to_request(port_arc.clone(), &request, station_id, &storage) {
+                match respond_to_request(
+                    port_arc.clone(),
+                    &request,
+                    station_id,
+                    &storage,
+                    &mut ipc_connections,
+                    port_name,
+                ) {
                     Ok((response, response_frame)) => {
                         let mut hasher = DefaultHasher::new();
                         hasher.write(&request);
@@ -1179,6 +1274,8 @@ fn respond_to_request(
     request: &[u8],
     station_id: u8,
     storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    ipc: &mut Option<crate::cli::actions::IpcConnections>,
+    _port_name: &str,
 ) -> Result<(ModbusResponse, Vec<u8>)> {
     use rmodbus::server::ModbusFrame;
 
@@ -1215,6 +1312,7 @@ fn respond_to_request(
         frame.count
     );
 
+    #[allow(unreachable_patterns)]
     let response = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => {
             match build_slave_holdings_response(&mut frame, &mut context) {
@@ -1275,6 +1373,255 @@ fn respond_to_request(
                     return Err(anyhow!("Failed to build discrete inputs response"));
                 }
             }
+        }
+        // Write function codes - Modbus allows slaves to write to master's registers
+        // This is used when slave device needs to update values in the master
+        rmodbus::consts::ModbusFunction::SetHolding => {
+            // 0x06 - Write Single Holding Register
+            if request.len() < 6 {
+                log::error!("respond_to_request: SetHolding request too short");
+                return Err(anyhow!("SetHolding request too short"));
+            }
+            let write_addr = u16::from_be_bytes([request[2], request[3]]);
+            let write_value = u16::from_be_bytes([request[4], request[5]]);
+            log::info!(
+                "respond_to_request: Write Single Holding Register - addr=0x{:04X}, value=0x{:04X}",
+                write_addr,
+                write_value
+            );
+
+            // Write to storage
+            log::info!(
+                "📝 Master: Writing to storage addr=0x{write_addr:04X} value=0x{write_value:04X}"
+            );
+            context.set_holdings_bulk(write_addr, &[write_value])?;
+            log::info!("✅ Master: Storage updated successfully");
+
+            // Read back the updated value to send in StationsUpdate
+            let updated_value = context.get_holding(write_addr)?;
+
+            // Notify TUI via IPC with StationsUpdate
+            // Note: Master doesn't send RegisterWriteComplete because it didn't initiate the write
+            // The slave CLI will send RegisterWriteComplete to its own TUI after receiving response
+            if let Some(ref mut ipc_conns) = ipc {
+                // Send StationsUpdate to reflect the new value in master TUI immediately
+                let station_config = crate::cli::config::StationConfig::single_range(
+                    station_id,
+                    crate::cli::config::StationMode::Master,
+                    crate::protocol::status::types::modbus::RegisterMode::Holding,
+                    write_addr,
+                    1, // Single register
+                    Some(vec![updated_value]),
+                );
+
+                match postcard::to_allocvec(&vec![station_config]) {
+                    Ok(stations_data) => {
+                        let msg = crate::protocol::ipc::IpcMessage::stations_update(stations_data);
+                        if let Err(e) = ipc_conns.status.send(&msg) {
+                            log::warn!("Failed to send StationsUpdate via IPC: {e}");
+                        } else {
+                            log::info!("📤 Master: Sent StationsUpdate IPC message addr=0x{write_addr:04X} value=0x{updated_value:04X}");
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to serialize StationConfig: {e}");
+                    }
+                }
+            }
+
+            // Echo back the request as response for function 0x06
+            request.to_vec()
+        }
+        rmodbus::consts::ModbusFunction::SetHoldingsBulk => {
+            // 0x10 - Write Multiple Holding Registers
+            if request.len() < 7 {
+                log::error!("respond_to_request: SetHoldingBulk request too short");
+                return Err(anyhow!("SetHoldingBulk request too short"));
+            }
+            let write_addr = u16::from_be_bytes([request[2], request[3]]);
+            let write_count = u16::from_be_bytes([request[4], request[5]]);
+            let byte_count = request[6] as usize;
+
+            if request.len() < 7 + byte_count {
+                log::error!("respond_to_request: SetHoldingBulk request incomplete");
+                return Err(anyhow!("SetHoldingBulk request incomplete"));
+            }
+
+            let mut values = Vec::new();
+            for i in 0..write_count {
+                let offset = 7 + (i as usize * 2);
+                let value = u16::from_be_bytes([request[offset], request[offset + 1]]);
+                values.push(value);
+            }
+
+            log::info!(
+                "respond_to_request: Write Multiple Holding Registers - addr=0x{:04X}, count={}, values={:?}",
+                write_addr,
+                write_count,
+                values
+            );
+
+            // Write to storage
+            context.set_holdings_bulk(write_addr, &values)?;
+
+            // Notify master TUI via StationsUpdate
+            if let Some(ref mut ipc_conns) = ipc {
+                let station_config = crate::cli::config::StationConfig::single_range(
+                    station_id,
+                    crate::cli::config::StationMode::Master,
+                    crate::protocol::status::types::modbus::RegisterMode::Holding,
+                    write_addr,
+                    write_count,
+                    Some(values.clone()),
+                );
+
+                match postcard::to_allocvec(&vec![station_config]) {
+                    Ok(stations_data) => {
+                        let msg = crate::protocol::ipc::IpcMessage::stations_update(stations_data);
+                        if let Err(e) = ipc_conns.status.send(&msg) {
+                            log::warn!("Failed to send StationsUpdate via IPC: {e}");
+                        } else {
+                            log::info!("📤 Master: Sent StationsUpdate for {} holdings starting at addr=0x{write_addr:04X}", write_count);
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to serialize StationConfig: {e}");
+                    }
+                }
+            }
+
+            // Response for 0x10: [station_id, func, addr_hi, addr_lo, count_hi, count_lo, crc_lo, crc_hi]
+            let mut resp = vec![
+                station_id, 0x10, request[2], request[3], request[4], request[5],
+            ];
+            let crc = crc16_modbus(&resp);
+            resp.push((crc & 0xFF) as u8);
+            resp.push(((crc >> 8) & 0xFF) as u8);
+            resp
+        }
+        rmodbus::consts::ModbusFunction::SetCoil => {
+            // 0x05 - Write Single Coil
+            if request.len() < 6 {
+                log::error!("respond_to_request: SetCoil request too short");
+                return Err(anyhow!("SetCoil request too short"));
+            }
+            let write_addr = u16::from_be_bytes([request[2], request[3]]);
+            let write_value = u16::from_be_bytes([request[4], request[5]]);
+            let coil_state = write_value == 0xFF00;
+            log::info!(
+                "respond_to_request: Write Single Coil - addr=0x{:04X}, value={}",
+                write_addr,
+                coil_state
+            );
+
+            // Write to storage
+            let coil_bytes = [if coil_state { 0xFF } else { 0x00 }];
+            context.set_coils_from_u8(write_addr, 1, &coil_bytes)?;
+
+            // Notify master TUI via StationsUpdate
+            if let Some(ref mut ipc_conns) = ipc {
+                let station_config = crate::cli::config::StationConfig::single_range(
+                    station_id,
+                    crate::cli::config::StationMode::Master,
+                    crate::protocol::status::types::modbus::RegisterMode::Coils,
+                    write_addr,
+                    1,
+                    Some(vec![if coil_state { 1 } else { 0 }]),
+                );
+
+                match postcard::to_allocvec(&vec![station_config]) {
+                    Ok(stations_data) => {
+                        let msg = crate::protocol::ipc::IpcMessage::stations_update(stations_data);
+                        if let Err(e) = ipc_conns.status.send(&msg) {
+                            log::warn!("Failed to send StationsUpdate via IPC: {e}");
+                        } else {
+                            log::info!("📤 Master: Sent StationsUpdate for coil addr=0x{write_addr:04X} state={coil_state}");
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to serialize StationConfig: {e}");
+                    }
+                }
+            }
+
+            // Echo back the request as response for function 0x05
+            request.to_vec()
+        }
+        rmodbus::consts::ModbusFunction::SetCoilsBulk => {
+            // 0x0F - Write Multiple Coils
+            if request.len() < 7 {
+                log::error!("respond_to_request: SetCoilBulk request too short");
+                return Err(anyhow!("SetCoilBulk request too short"));
+            }
+            let write_addr = u16::from_be_bytes([request[2], request[3]]);
+            let write_count = u16::from_be_bytes([request[4], request[5]]);
+            let byte_count = request[6] as usize;
+
+            if request.len() < 7 + byte_count {
+                log::error!("respond_to_request: SetCoilBulk request incomplete");
+                return Err(anyhow!("SetCoilBulk request incomplete"));
+            }
+
+            log::info!(
+                "respond_to_request: Write Multiple Coils - addr=0x{:04X}, count={}",
+                write_addr,
+                write_count
+            );
+
+            // Write to storage
+            context.set_coils_from_u8(write_addr, write_count, &request[7..7 + byte_count])?;
+
+            // Notify master TUI via StationsUpdate
+            if let Some(ref mut ipc_conns) = ipc {
+                // Extract coil values from the write request
+                let mut coil_values = Vec::new();
+                for i in 0..write_count {
+                    let byte_idx = (i / 8) as usize;
+                    let bit_idx = (i % 8) as usize;
+                    let coil_value = if byte_idx < byte_count {
+                        if (request[7 + byte_idx] & (1 << bit_idx)) != 0 {
+                            1
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    };
+                    coil_values.push(coil_value);
+                }
+
+                let station_config = crate::cli::config::StationConfig::single_range(
+                    station_id,
+                    crate::cli::config::StationMode::Master,
+                    crate::protocol::status::types::modbus::RegisterMode::Coils,
+                    write_addr,
+                    write_count,
+                    Some(coil_values),
+                );
+
+                match postcard::to_allocvec(&vec![station_config]) {
+                    Ok(stations_data) => {
+                        let msg = crate::protocol::ipc::IpcMessage::stations_update(stations_data);
+                        if let Err(e) = ipc_conns.status.send(&msg) {
+                            log::warn!("Failed to send StationsUpdate via IPC: {e}");
+                        } else {
+                            log::info!("📤 Master: Sent StationsUpdate for {} coils starting at addr=0x{write_addr:04X}", write_count);
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to serialize StationConfig: {e}");
+                    }
+                }
+            }
+
+            // Response for 0x0F: [station_id, func, addr_hi, addr_lo, count_hi, count_lo, crc_lo, crc_hi]
+            let mut resp = vec![
+                station_id, 0x0F, request[2], request[3], request[4], request[5],
+            ];
+            let crc = crc16_modbus(&resp);
+            resp.push((crc & 0xFF) as u8);
+            resp.push(((crc >> 8) & 0xFF) as u8);
+            resp
         }
         _ => {
             log::error!(

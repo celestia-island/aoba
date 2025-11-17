@@ -347,14 +347,18 @@ pub async fn run_core_thread(
                 } => {
                     log::info!("🔵 SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}");
                     log::debug!(
-                        "📡 Sending full stations update for {port_name} to ensure synchronization"
+                        "📡 Sending full stations update for {port_name} to ensure synchronization (reason=user_edit)"
                     );
-                    if let Err(err) = subprocess_manager
-                        .send_stations_update_for_port(&port_name, get_stations_from_status)
-                    {
+                    if let Err(err) = subprocess_manager.send_stations_update_for_port(
+                        &port_name,
+                        get_stations_from_status,
+                        Some("user_edit"),
+                    ) {
                         log::warn!("❌ Failed to send stations update for {port_name}: {err}");
                     } else {
-                        log::debug!("✅ Sent full stations update for {port_name}");
+                        log::debug!(
+                            "✅ Sent full stations update for {port_name} with user_edit reason"
+                        );
                     }
                 }
             }
@@ -679,6 +683,7 @@ async fn start_runtime(
                                 match subprocess_manager.send_stations_update_for_port(
                                     port_name,
                                     get_stations_from_status,
+                                    Some("initial_config"),
                                 ) {
                                     Ok(()) => {
                                         stations_sent = true;
@@ -775,6 +780,7 @@ async fn start_runtime(
                                 match subprocess_manager.send_stations_update_for_port(
                                     port_name,
                                     get_stations_from_status,
+                                    Some("initial_config"),
                                 ) {
                                     Ok(()) => {
                                         stations_sent = true;

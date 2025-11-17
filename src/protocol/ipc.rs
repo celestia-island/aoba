@@ -83,6 +83,13 @@ pub enum IpcMessage {
     StationsUpdate {
         /// Serialized stations data using postcard
         stations_data: Vec<u8>,
+        /// Reason for this update to help distinguish user intent from system operations
+        /// - "user_edit": User explicitly edited register values (should write even if 0)
+        /// - "initial_config": Initial configuration from TUI (skip writes, use defaults)
+        /// - "sync": Periodic sync/heartbeat (skip 0 values, likely uninitialized)
+        /// - "read_response": Update from actual modbus read (always apply)
+        #[serde(default)]
+        update_reason: Option<String>,
         #[serde(default)]
         timestamp: Option<i64>,
     },
@@ -186,9 +193,23 @@ impl IpcMessage {
     }
 
     /// Create a StationsUpdate message with current timestamp
+    ///
+    /// # Parameters
+    /// - `stations_data`: Serialized station configuration
+    /// - `update_reason`: Optional reason for update ("user_edit", "initial_config", "sync", "read_response")
     pub fn stations_update(stations_data: Vec<u8>) -> Self {
         Self::StationsUpdate {
             stations_data,
+            update_reason: None, // For backwards compatibility, default to None
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a StationsUpdate message with specific update reason
+    pub fn stations_update_with_reason(stations_data: Vec<u8>, reason: &str) -> Self {
+        Self::StationsUpdate {
+            stations_data,
+            update_reason: Some(reason.to_string()),
             timestamp: Some(Self::timestamp()),
         }
     }
