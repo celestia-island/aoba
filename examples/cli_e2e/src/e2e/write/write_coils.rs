@@ -1,8 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::{
-    process::Stdio,
-    time::Duration,
-};
+use std::{process::Stdio, time::Duration};
 
 use crate::utils::{build_debug_bin, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2};
 use _main::utils::{sleep_1s, sleep_3s};
@@ -30,7 +27,7 @@ pub async fn test_slave_write_coils() -> Result<()> {
         "🧪 Starting Modbus master (provide-persist) on {}...",
         ports.port1_name
     );
-    
+
     let binary = build_debug_bin("aoba")?;
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
@@ -60,9 +57,7 @@ pub async fn test_slave_write_coils() -> Result<()> {
     // Check if master is still running
     match master.try_wait()? {
         Some(status) => {
-            return Err(anyhow!(
-                "Master exited prematurely with status {status}"
-            ));
+            return Err(anyhow!("Master exited prematurely with status {status}"));
         }
         None => {
             log::info!("✅ Master is running");
@@ -105,9 +100,7 @@ pub async fn test_slave_write_coils() -> Result<()> {
         Some(status) => {
             master.kill()?;
             master.wait()?;
-            return Err(anyhow!(
-                "Slave exited prematurely with status {status}"
-            ));
+            return Err(anyhow!("Slave exited prematurely with status {status}"));
         }
         None => {
             log::info!("✅ Slave is running");
@@ -123,7 +116,7 @@ pub async fn test_slave_write_coils() -> Result<()> {
     //
     // For now, we just verify both processes started and can communicate
     // The actual write mechanism requires IPC integration which is tested in TUI E2E
-    
+
     log::info!("✅ Both master and slave processes started successfully");
     log::info!("✅ Connection established (full write test requires IPC/TUI integration)");
 
