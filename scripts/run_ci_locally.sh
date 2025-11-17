@@ -191,6 +191,7 @@ declare -a CLI_MODULES=(
     "modbus_basic_master_slave"
     "data_source_http"
     "data_source_manual"
+    "data_source_ipc_channel"
     "data_source_mqtt"
     "slave_write_coils"
     "slave_write_holding"
