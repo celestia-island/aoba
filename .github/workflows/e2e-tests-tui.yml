@@ -40,6 +40,9 @@ jobs:
           - data_source_http_server
           - data_source_mqtt_client
           - data_source_port_forwarding
+          # Write single station slave coils
+          - write_single_station_slave_coils
+          - write_single_station_slave_holding
 
     steps:
       - uses: actions/checkout@v5
