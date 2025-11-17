@@ -1,49 +1,51 @@
-# Write Single Station - Two Port Mode - Coils (01) Register Type
+# Write Single Station - Slave Mode - Coils (01) Register Type
 # Test ID: write_single_station_slave_coils
-# Port 1 (/tmp/vcom1): Master Station (ID=1, Type=Coils, Address=0x0000, Length=10)
-# Port 2 (/tmp/vcom2): Slave Station (ID=1, Type=Coils, Address=0x0000, Length=10)
+# Station: ID=1, Type=Coils, Address=0x0000, Length=10
 #
-# Test: Slave writes to coils and master receives the changes
-# Loop pattern for each round:
-# 1. Enter port 1 (master) config → Configure if first time only
-# 2. Return and switch to port 2 (slave) config → Configure and save (first time only)
-# 3. Slave modifies a coil value
-# 4. Wait for status to return to Running
-# 5. Verify modified value persists on slave
-# 6. Return and switch to port 1 business panel
-# 7. Verify modification synced to master
+# Test: Write operations to coils in slave mode
+# Each round writes to a different coil (2, 3, 4) and verifies:
+# 1. Status indicator changes to "Syncing"
+# 2. Coil shows gray italic during write
+# 3. After completion, status returns to "Running"
+# 4. Local coil value is updated
+# 5. Remote master station sees the change
 #
 # Test Values (coils are boolean):
-# Round 1 - Coil 2: OFF → ON (0 → 1)
-# Round 2 - Coil 3: OFF → ON (0 → 1)
-# Round 3 - Coil 4: OFF → ON, then ON → OFF (0 → 1 → 0)
+# Round 1 - Coil 2: ON (1)
+# Round 2 - Coil 3: ON (1)
+# Round 3 - Coil 4: OFF (0)
 
 [manifest]
 id = "write_single_station_slave_coils"
-description = "Write test for slave-to-master with Coils (two-port setup)"
+description = "Write test for single station Slave mode with Coils"
 station_id = 1
 register_type = "Coils"
 start_address = 0x0000
 register_count = 10
-mode = "two_port_write"
+mode = "slave"
 
 init_order = [
   "navigate_to_entry",
-  "setup_port1_master",
-  "setup_port2_slave",
-  "verify_connection",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "switch_to_slave_mode",
+  "create_station",
+  "configure_station_fields",
+  "set_register_count_to_10",
+  "save_configuration",
+  "verify_port_enabled",
+  "verify_initial_read",
 ]
 
 recycle_order = [
-  "write_round1",
-  "verify_sync_round1",
-  "write_round2",
-  "verify_sync_round2",
-  "write_round3",
-  "verify_sync_round3",
+  "write_coil_round1",
+  "verify_write_complete_round1",
+  "write_coil_round2",
+  "verify_write_complete_round2",
+  "write_coil_round3",
+  "verify_write_complete_round3",
 ]
-
-# ===== INITIALIZATION =====
 
 # Step 1: Navigate to Entry page
 [[workflow.navigate_to_entry]]
@@ -52,16 +54,15 @@ mock_path = "$.page"
 mock_set_value = { type = "entry" }
 
 [[workflow.navigate_to_entry]]
-description = "Ensure entry page port order (vcom1 = master, vcom2 = slave)"
+description = "Ensure entry page port order"
 mock_path = "$.port_order"
 mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
 
 [[workflow.navigate_to_entry]]
-description = "Verify port 1 visible"
+description = "Initial navigation to entry page"
 verify = "/tmp/vcom1"
 
 [[workflow.navigate_to_entry]]
-description = "Verify port 2 visible"
 verify = "/tmp/vcom2"
 
 # Step 2: Enter configuration panel
