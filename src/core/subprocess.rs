@@ -358,7 +358,15 @@ impl ManagedSubprocess {
     }
 
     /// Send a full stations configuration update to the subprocess via command channel
-    pub fn send_stations_update(&mut self, stations: &[StationConfig]) -> Result<()> {
+    ///
+    /// # Parameters
+    /// - `stations`: Station configurations to send
+    /// - `reason`: Optional reason for update ("user_edit", "initial_config", "sync", "read_response")
+    pub fn send_stations_update(
+        &mut self,
+        stations: &[StationConfig],
+        reason: Option<&str>,
+    ) -> Result<()> {
         self.try_complete_ipc_connection()?;
 
         if let Some(ref mut client) = self.command_client {
@@ -366,12 +374,17 @@ impl ManagedSubprocess {
             let stations_data = postcard::to_allocvec(stations)
                 .map_err(|e| anyhow!("Failed to serialize stations: {e}"))?;
 
-            let msg = IpcMessage::stations_update(stations_data);
+            let msg = if let Some(reason) = reason {
+                IpcMessage::stations_update_with_reason(stations_data, reason)
+            } else {
+                IpcMessage::stations_update(stations_data)
+            };
             client.send(&msg)?;
             log::info!(
-                "Sent stations update ({} stations) to CLI subprocess for port {}",
+                "Sent stations update ({} stations) to CLI subprocess for port {}, reason={:?}",
                 stations.len(),
-                self.config.port_name
+                self.config.port_name,
+                reason
             );
             Ok(())
         } else {
@@ -530,10 +543,16 @@ impl SubprocessManager {
     /// This sends the complete station configuration for the port
     ///
     /// The caller must provide a callback to retrieve station configuration
+    ///
+    /// # Parameters
+    /// - `port_name`: Name of the port to update
+    /// - `get_stations`: Callback to retrieve station configuration
+    /// - `reason`: Optional reason for update ("user_edit", "initial_config", "sync", "read_response")
     pub fn send_stations_update_for_port<F>(
         &mut self,
         port_name: &str,
         get_stations: F,
+        reason: Option<&str>,
     ) -> Result<()>
     where
         F: FnOnce(&str) -> Result<Vec<StationConfig>>,
@@ -547,10 +566,11 @@ impl SubprocessManager {
 
         // Send to subprocess
         if let Some(subprocess) = self.processes.get_mut(port_name) {
-            subprocess.send_stations_update(&stations)?;
+            subprocess.send_stations_update(&stations, reason)?;
             log::info!(
-                "✅ Sent stations update ({} stations) for {port_name}",
-                stations.len()
+                "✅ Sent stations update ({} stations) for {port_name}, reason={:?}",
+                stations.len(),
+                reason
             );
             Ok(())
         } else {

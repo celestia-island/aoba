@@ -108,10 +108,15 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
             append_modbus_log(port_name, &direction, &data, Some(hints));
         }
         IpcMessage::Heartbeat { .. } => {}
-        IpcMessage::StationsUpdate { stations_data, .. } => {
+        IpcMessage::StationsUpdate {
+            stations_data,
+            update_reason,
+            ..
+        } => {
             log::info!(
-                "CLI[{port_name}]: StationsUpdate received, {} bytes",
-                stations_data.len()
+                "🔄 CLI[{port_name}]: StationsUpdate received, {} bytes, reason={:?}",
+                stations_data.len(),
+                update_reason
             );
             match postcard::from_bytes::<Vec<StationConfig>>(&stations_data) {
                 Ok(stations) => {
@@ -127,15 +132,74 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                             for station_config in &stations {
                                 let mut update_registers = |ranges: &[types::modbus::RegisterRange], register_mode: types::modbus::RegisterMode| {
                                     for range in ranges {
+                                        // Find station by id, mode, and overlapping address range
+                                        // Check if incoming range overlaps with station's configured range
                                         let station_index = modbus_stations.iter().position(|s| {
-                                            s.station_id == station_config.station_id
-                                                && s.register_mode == register_mode
-                                                && s.register_address == range.address_start
-                                                && s.register_length == range.length
+                                            if s.station_id != station_config.station_id || s.register_mode != register_mode {
+                                                return false;
+                                            }
+                                            // Check if ranges overlap:
+                                            // Station: [s.register_address, s.register_address + s.register_length)
+                                            // Incoming: [range.address_start, range.address_start + range.length)
+                                            let station_end = s.register_address + s.register_length;
+                                            let range_end = range.address_start + range.length;
+                                            // Ranges overlap if: start1 < end2 && start2 < end1
+                                            s.register_address < range_end && range.address_start < station_end
                                         });
 
                                         if let Some(idx) = station_index {
-                                            modbus_stations[idx].last_values = range.initial_values.clone();
+                                            // Update last_values, but preserve pending writes
+                                            // If a register has pending write, don't overwrite its value
+                                            let pending_indices: std::collections::HashSet<usize> =
+                                                modbus_stations[idx]
+                                                    .pending_writes
+                                                    .keys()
+                                                    .copied()
+                                                    .collect();
+                                            log::info!(
+                                                "📊 StationsUpdate: station_id={}, addr=0x{:04X}, {} registers, {} pending",
+                                                modbus_stations[idx].station_id,
+                                                modbus_stations[idx].register_address,
+                                                range.initial_values.len(),
+                                                pending_indices.len()
+                                            );
+                                            // Calculate offset: incoming range may start at different address than station
+                                            let offset = (range.address_start - modbus_stations[idx].register_address) as usize;
+                                            for (incoming_idx, &value) in range.initial_values.iter().enumerate() {
+                                                // Convert to station's last_values index
+                                                let station_idx = offset + incoming_idx;
+                                                let old_value = modbus_stations[idx].last_values.get(station_idx).copied();
+                                                // Only update if this register doesn't have a pending write
+                                                if !pending_indices.contains(&station_idx) {
+                                                    // Ensure last_values is large enough
+                                                    if station_idx >= modbus_stations[idx].last_values.len() {
+                                                        modbus_stations[idx].last_values.resize(station_idx + 1, 0);
+                                                    }
+                                                    modbus_stations[idx].last_values[station_idx] = value;
+                                                    if let Some(old) = old_value {
+                                                        if old != value {
+                                                            log::info!(
+                                                                "  📝 Register addr=0x{:04X} (idx={}): 0x{old:04X} → 0x{value:04X}",
+                                                                range.address_start + incoming_idx as u16,
+                                                                station_idx
+                                                            );
+                                                        }
+                                                    } else {
+                                                        log::info!(
+                                                            "  📝 Register addr=0x{:04X} (idx={}): <new> → 0x{value:04X}",
+                                                            range.address_start + incoming_idx as u16,
+                                                            station_idx
+                                                        );
+                                                    }
+                                                } else {
+                                                    let pending_val = modbus_stations[idx].pending_writes.get(&station_idx).copied().unwrap_or(0);
+                                                    log::info!(
+                                                        "  ⏸️  Register addr=0x{:04X} (idx={}): Skipped (pending=0x{pending_val:04X}, incoming=0x{value:04X})",
+                                                        range.address_start + incoming_idx as u16,
+                                                        station_idx
+                                                    );
+                                                }
+                                            }
                                         } else if !range.initial_values.is_empty() {
                                             let new_item = types::modbus::ModbusRegisterItem {
                                                 station_id: station_config.station_id,
@@ -216,7 +280,7 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
             ..
         } => {
             log::info!(
-                "CLI[{port_name}]: RegisterWriteComplete station={station_id} addr=0x{register_address:04X} value=0x{register_value:04X} type={register_type} success={success}"
+                "✅ CLI[{port_name}]: RegisterWriteComplete station={station_id} addr=0x{register_address:04X} value=0x{register_value:04X} type={register_type} success={success}"
             );
 
             crate::tui::status::write_status(|status| {
@@ -239,9 +303,15 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                             if success {
                                 // Update local value on success
                                 if register_index < station.last_values.len() {
+                                    let old_value = station.last_values[register_index];
                                     station.last_values[register_index] = register_value;
                                     log::info!(
-                                        "✅ Write success: Updated local value for register #{register_index} to 0x{register_value:04X}"
+                                        "✅ Write success: Updated register #{register_index}: 0x{old_value:04X} → 0x{register_value:04X}"
+                                    );
+                                } else {
+                                    log::warn!(
+                                        "⚠️  Register index {register_index} out of bounds (len={})",
+                                        station.last_values.len()
                                     );
                                 }
                             } else if let Some(err_msg) = &error {

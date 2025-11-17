@@ -42,6 +42,36 @@ pub fn render_register_row_line(
     registers_per_row: usize,
 ) -> Result<Line<'static>> {
     let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
+
+    // Check if we should force display as 0x0000:
+    // - Only for Slave mode when port is not running
+    // - Master mode always shows actual values (even when not running)
+    let force_display_zero = read_status(|status| {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port_entry) = status.ports.map.get(port_name) {
+                    // Check if it's Slave mode
+                    let is_slave_mode = matches!(
+                        &port_entry.config,
+                        crate::tui::status::port::PortConfig::Modbus {
+                            mode: crate::tui::status::modbus::ModbusConnectionMode::Slave { .. },
+                            ..
+                        }
+                    );
+
+                    // Check if port is running
+                    let is_running = matches!(
+                        port_entry.state,
+                        crate::tui::status::port::PortState::OccupiedByThis
+                    );
+
+                    // Force zero only for Slave mode when not running
+                    return Ok(is_slave_mode && !is_running);
+                }
+            }
+        }
+        Ok(false)
+    })?;
     let row_selected = if let types::cursor::ModbusDashboardCursor::Register {
         slave_index: si,
         register_index: ri,
@@ -119,7 +149,12 @@ pub fn render_register_row_line(
 
                 let cell_spans = match item.register_mode {
                     RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                        let display_value = pending_value.unwrap_or(stored_value);
+                        // Slave mode + not running: force display as 0/OFF
+                        let display_value = if force_display_zero {
+                            0
+                        } else {
+                            pending_value.unwrap_or(stored_value)
+                        };
                         let is_on = display_value != 0;
                         let mut spans = switch_spans(is_on, "ON", "OFF", state)?;
 
@@ -138,7 +173,12 @@ pub fn render_register_row_line(
                         spans
                     }
                     RegisterMode::Holding | RegisterMode::Input => {
-                        let display_value = pending_value.unwrap_or(stored_value);
+                        // Slave mode + not running: force display as 0x0000
+                        let display_value = if force_display_zero {
+                            0
+                        } else {
+                            pending_value.unwrap_or(stored_value)
+                        };
                         let hex_str = format!("0x{display_value:04X}");
                         let mut spans = input_spans(hex_str.clone(), state)?;
 
