@@ -82,6 +82,7 @@ jobs:
           python-version: "3.x"
 
       - name: Compute build version
+        shell: bash
         id: build_version
         run: |
           set -euo pipefail
@@ -126,6 +127,7 @@ jobs:
           fi
 
       - name: Build (release)
+        shell: bash
         env:
           TARGET: ${{ matrix.target }}
         run: |
