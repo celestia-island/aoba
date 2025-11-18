@@ -6,8 +6,9 @@ license.workspace = true
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
+
 build = "build.rs"
-exclude = ["docs/**", "examples/**", "scripts/**", "res/mono-sc-nerd.ttf"]
+exclude.workspace = true
 
 [workspace]
 members = [".", "examples/*"]
@@ -16,12 +17,20 @@ resolver = "2"
 
 [workspace.package]
 authors = ["langyo <langyo.china@gmail.com>"]
-description = "Multi-protocol debug & simulation CLI tool (Modbus, MQTT, TTY, TCP/UDP, etc.)"
+description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus RTU."
 repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
 version = "0.0.3"
 edition = "2021"
-exclude = ["docs/**", "examples/**", "scripts/**", "res/mono-sc-nerd.ttf"]
+exclude = [
+  "docs/**",
+  "examples/**",
+  "scripts/**",
+  "res/mono-sc-nerd.ttf",
+  ".trae/**",
+  ".github/**",
+  "CLAUDE.md",
+]
 
 [profile.release]
 lto = true
