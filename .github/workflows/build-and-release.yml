@@ -141,13 +141,20 @@ jobs:
         run: |
           set -euo pipefail
           TARGET_TRIPLE=${{ matrix.target }}
-          BIN=target/${TARGET_TRIPLE}/release/aoba
+          HOST_TRIPLE="$(rustc -Vv | awk '/host/{print $2}')"
+          if [[ "${HOST_TRIPLE}" == "${TARGET_TRIPLE}" ]]; then
+            BIN=target/release/aoba
+          else
+            BIN=target/${TARGET_TRIPLE}/release/aoba
+          fi
           if [ -f "${BIN}" ]; then
             if [[ -n "${STRIP_CMD:-}" ]]; then
               ${STRIP_CMD} ${BIN} || true
             else
               strip ${BIN} || true
             fi
+          else
+            echo "No binary found to strip: ${BIN}"
           fi
 
       - name: Package artifacts
@@ -171,8 +178,16 @@ jobs:
           else
             DST_FILE="${GITHUB_WORKSPACE}/release/${PACKAGE_NAME}"
           fi
-          # Copy executable directly
-          cp -f target/${TARGET_TRIPLE}/release/${BIN_FILENAME} "${DST_FILE}" || true
+          # Copy executable from either target/<target>/release or target/release
+          SRC1="target/${TARGET_TRIPLE}/release/${BIN_FILENAME}"
+          SRC2="target/release/${BIN_FILENAME}"
+          if [ -f "${SRC1}" ]; then
+            cp -f "${SRC1}" "${DST_FILE}" || true
+          elif [ -f "${SRC2}" ]; then
+            cp -f "${SRC2}" "${DST_FILE}" || true
+          else
+            echo "Warning: binary not found at ${SRC1} or ${SRC2}"
+          fi
           # Ensure executable bit on non-windows
           if [[ "${TARGET_TRIPLE}" != *"windows"* ]]; then
             chmod +x "${DST_FILE}" || true
@@ -201,6 +216,12 @@ jobs:
           else
             echo "Cross-built target; skipping run"
           fi
+
+      - name: List release folder
+        shell: bash
+        run: |
+          echo "Release folder contents for ${TARGET_TRIPLE}:"
+          ls -la release || true
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
