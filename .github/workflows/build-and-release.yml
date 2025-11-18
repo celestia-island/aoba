@@ -1,4 +1,4 @@
-name: Build and Release (cross)
+name: Build and Release
 
 on:
   push:
@@ -9,25 +9,23 @@ on:
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: aoba
-  # Optional: set to a Docker image (e.g., ghcr.io/owner/cross-image:<tag>) that has pkg-config & libudev-dev installed
-  # Leave empty to use cross's default images.
-  CROSS_IMAGE: ""
 
 jobs:
   build-linux:
-    name: Build — Linux targets (native)
+    name: Build — Linux targets (native & cross)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # metrics: run each linux target in parallel (matrix)
-        target:
-          [
-            x86_64-unknown-linux-gnu,
-            aarch64-unknown-linux-gnu,
-            armv7-unknown-linux-gnueabihf,
-            i686-unknown-linux-gnu,
-          ]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            kind: native
+          - target: i686-unknown-linux-gnu
+            kind: native
+          - target: aarch64-unknown-linux-gnu
+            kind: cross
+          - target: armv7-unknown-linux-gnueabihf
+            kind: cross
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -42,24 +40,25 @@ jobs:
         shell: bash
         run: |
           uname -a || true
-          lsb_release -a || true
           cat /etc/os-release || true
 
-      - name: Install system packages for current linux target
+      - name: Install system packages (host, for pkg-config/libudev)
+        if: matrix.kind == 'native'
         shell: bash
         run: |
           set -euxo pipefail
-          TARGET=${{ matrix.target }}
-          echo "Installing packages for ${TARGET}"
           sudo apt-get update
+          # host-side deps for libudev-sys via pkg-config
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libudev-dev \
+            libx11-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            socat \
+            nasm
 
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat nasm || true
-
-          # Print installed libudev packages for diagnosis
-          dpkg -l | grep libudev || true
-          echo "pkg-config paths:"; pkg-config --variable pc_path pkg-config || true
-
-      - name: Cache linux target and cargo registry (per-target)
+      - name: Cache cargo target and registry (per-target)
         uses: actions/cache@v4
         with:
           path: |
@@ -67,32 +66,45 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-cargo-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-target-${{ matrix.target }}-
-
-      - name: Build for linux target
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET=${{ matrix.target }}
-          echo "Building for target ${TARGET}"
-          cargo build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
-
-      - name: Restore cargo cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.target }}-
 
+      - name: Add rustup target
+        shell: bash
+        run: |
+          rustup target add ${{ matrix.target }} || true
+
+      - name: Build (native linux)
+        if: matrix.kind == 'native'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          cargo build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
+
+      - name: Install cross (for non-x86 linux)
+        if: matrix.kind == 'cross'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build (cross, linux on x86_64)
+        if: matrix.kind == 'cross'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          # For libudev-sys: ensure pkg-config is available *inside* the cross image.
+          # We rely on cross's official images which already ship pkg-config & libudev-dev
+          cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
+
       - name: Package linux binary
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p release
           REF_NAME=${{ github.ref_name }}
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
@@ -104,24 +116,20 @@ jobs:
           TARGET=${{ matrix.target }}
           BIN_FILE="target/${TARGET}/release/${BINARY_NAME}"
           DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET}"
-            if [[ "${TARGET}" == *"windows"* ]]; then
-              BIN_FILE="target/${TARGET}/release/${BINARY_NAME}.exe"
-              DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET}.exe"
-            fi
-            if [ -f "${BIN_FILE}" ]; then
-              cp -f "${BIN_FILE}" "${DST}" || true
-            else
-              echo "Warning: ${BIN_FILE} not found"
-            fi
-            if [[ "${DST}" != *"windows"* ]] && [ -f "${DST}" ]; then
-              chmod +x "${DST}" || true
-            fi
+          if [ -f "${BIN_FILE}" ]; then
+            cp -f "${BIN_FILE}" "${DST}" || true
+          else
+            echo "Warning: ${BIN_FILE} not found"
+          fi
+          if [ -f "${DST}" ]; then
+            chmod +x "${DST}" || true
+          fi
 
       - name: Upload linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: aoba-linux-${{ matrix.target }}-${{ github.ref_name }}
-          path: release/${BINARY_NAME}-${{ github.ref_name }}-${{ matrix.target }}*
+          path: release/${BINARY_NAME}-*-${{ matrix.target }}
 
   build-nonlinux:
     name: Build — macOS & Windows (native)
