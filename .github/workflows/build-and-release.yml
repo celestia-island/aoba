@@ -58,6 +58,16 @@ jobs:
             socat \
             nasm
 
+          # extra 32-bit libc headers for i686-unknown-linux-gnu builds (aws-lc-sys)
+          if [ "${{ matrix.target }}" = "i686-unknown-linux-gnu" ]; then
+            sudo dpkg --add-architecture i386
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              gcc-multilib \
+              libc6-dev-i386 \
+              linux-libc-dev:i386
+          fi
+
       - name: Cache cargo target and registry (per-target)
         uses: actions/cache@v4
         with:
@@ -97,8 +107,32 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          # For libudev-sys: ensure pkg-config is available *inside* the cross image.
-          # We rely on cross's official images which already ship pkg-config & libudev-dev
+
+          # Generate a temporary .cross.toml so this setting only
+          # affects CI cross builds, not real-platform builds.
+          cat > .cross.toml << 'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          image = "aoba-cross:aarch64"
+
+          [target.armv7-unknown-linux-gnueabihf]
+          image = "aoba-cross:armv7"
+          EOF
+
+          # Build custom cross images for ARM targets using scripts/ci-cross.dockerfile
+          if [ "${TARGET}" = "armv7-unknown-linux-gnueabihf" ]; then
+            docker build \
+              --build-arg BASE_IMAGE=ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:latest \
+              --build-arg PC_ARCH=arm-linux-gnueabihf \
+              -f scripts/ci-cross.dockerfile \
+              -t aoba-cross:armv7 .
+          elif [ "${TARGET}" = "aarch64-unknown-linux-gnu" ]; then
+            docker build \
+              --build-arg BASE_IMAGE=ghcr.io/cross-rs/aarch64-unknown-linux-gnu:latest \
+              --build-arg PC_ARCH=aarch64-linux-gnu \
+              -f scripts/ci-cross.dockerfile \
+              -t aoba-cross:aarch64 .
+          fi
+
           cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
 
       - name: Package linux binary
