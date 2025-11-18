@@ -25,6 +25,8 @@ jobs:
           - data_source_manual
           - data_source_ipc_channel
           - data_source_mqtt
+          - slave_write_coils
+          - slave_write_holding
 
     steps:
       - uses: actions/checkout@v5

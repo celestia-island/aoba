@@ -23,6 +23,7 @@ use e2e::{
     multi_slaves::{
         test_multi_slaves, test_multi_slaves_adjacent_registers, test_multi_slaves_same_station,
     },
+    write::{test_slave_write_coils, test_slave_write_holding},
 };
 use help::test_cli_help;
 use list_ports::test_cli_list_ports;
@@ -164,6 +165,9 @@ async fn main() -> Result<()> {
             log::info!("    - data_source_ipc_channel");
             log::info!("    - data_source_http");
             log::info!("    - data_source_mqtt");
+            log::info!("  Write Tests (Slave-to-Master):");
+            log::info!("    - slave_write_coils");
+            log::info!("    - slave_write_holding");
             log::info!("");
             log::info!("Usage: cargo run --package cli_e2e -- --module <module_name>");
             return Ok(());
@@ -203,6 +207,10 @@ async fn main() -> Result<()> {
         "data_source_ipc_channel" => test_ipc_channel_data_source().await?,
         "data_source_http" => test_http_data_source().await?,
         "data_source_mqtt" => test_mqtt_data_source().await?,
+
+        // Write tests (slave-to-master)
+        "slave_write_coils" => test_slave_write_coils().await?,
+        "slave_write_holding" => test_slave_write_holding().await?,
 
         _ => {
             log::error!("❌ Unknown module: {module}");
