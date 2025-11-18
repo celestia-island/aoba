@@ -18,7 +18,7 @@ authors = ["langyo <langyo.china@gmail.com>"]
 description = "Multi-protocol debug & simulation CLI tool (Modbus, MQTT, TTY, TCP/UDP, etc.)"
 repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 
 [profile.release]
@@ -85,7 +85,7 @@ serialport = "^4"
 interprocess = "^2"
 ureq = { version = "^3", features = ["json"] }
 rumqttc = "^0.25"
-axum = "^0.7"
+axum = "^0.8"
 
 expectrl = "^0.8"
 regex = "^1"
