@@ -24,9 +24,9 @@ init_order = [
   "switch_to_slave_mode",
   "create_station",
   "configure_station_fields",
-  "edit_registers_round1",
   "save_configuration",
   "verify_port_enabled",
+  "edit_registers_round1",
 ]
 
 recycle_order = [
