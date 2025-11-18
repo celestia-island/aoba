@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::Path,
+    process::Command,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -166,6 +167,36 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
     virtual_ports
 }
 
+fn list_ports_from_shell() -> Vec<String> {
+    // Prefer ls over find to keep output simple; we only care about path strings.
+    // Use a conservative set of globs to avoid huge directory walks.
+    let candidates = [
+        "ls /dev/ttyS* /dev/ttyUSB* /dev/ttyACM* 2>/dev/null",
+        "ls /dev/tty.* /dev/cu.* 2>/dev/null",
+    ];
+
+    for cmd in candidates.iter() {
+        let output = Command::new("bash").arg("-lc").arg(cmd).output();
+        if let Ok(out) = output {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let mut ports = Vec::new();
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        ports.push(trimmed.to_string());
+                    }
+                }
+                if !ports.is_empty() {
+                    return ports;
+                }
+            }
+        }
+    }
+
+    Vec::new()
+}
+
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     // In CI debug mode (when --debug-ci-e2e-test is set), skip real serial port enumeration
@@ -175,7 +206,15 @@ pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
         log::debug!("CI debug mode: skipping real serial port enumeration");
         Vec::new()
     } else {
-        serialport::available_ports().unwrap_or_default()
+        // Avoid serialport's libudev-based enumeration and instead rely on
+        // shell-based detection of common TTY device paths.
+        list_ports_from_shell()
+            .into_iter()
+            .map(|name| SerialPortInfo {
+                port_name: name,
+                port_type: SerialPortType::Unknown,
+            })
+            .collect()
     };
 
     // Add virtual ports created by socat or similar tools

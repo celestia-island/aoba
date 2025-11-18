@@ -92,7 +92,7 @@ unicode-width = "^0.2"
 
 rmodbus = { version = "^0.12", features = ["with_serde"] }
 libc = "^0.2"
-serialport = "^4"
+serialport = { version = "^4", default-features = false }
 interprocess = "^2"
 ureq = { version = "^3", features = ["json"] }
 rumqttc = "^0.25"
