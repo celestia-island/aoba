@@ -9,6 +9,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: aoba
+  # Optional: set to a Docker image (e.g., ghcr.io/owner/cross-image:<tag>) that has pkg-config & libudev-dev installed
+  # Leave empty to use cross's default images.
+  CROSS_IMAGE: ""
 
 jobs:
   build-linux:
@@ -35,10 +38,48 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      - name: Install common system packages (Linux)
+      - name: Install system packages for current linux target
+        shell: bash
         run: |
+          set -euo pipefail
+          TARGET=${{ matrix.target }}
+          echo "Installing packages for ${TARGET}"
           sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat nasm libc6-dev-i386 gcc-multilib g++-multilib || true
+          sudo apt-get install -y pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat nasm || true
+
+          # Add architectures and install arch-specific dev packages only for the current matrix target
+          case "${TARGET}" in
+            x86_64-unknown-linux-gnu)
+              echo "Host target: x86_64 — installing host packages"
+              sudo apt-get install -y libudev-dev || true
+              ;;
+            aarch64-unknown-linux-gnu)
+              echo "Cross target: aarch64 — adding arm64 architecture and installing dev packages"
+              sudo dpkg --add-architecture arm64 || true
+              sudo apt-get update
+              sudo apt-get install -y libudev-dev:arm64 libc6-dev:arm64 || true
+              ;;
+            armv7-unknown-linux-gnueabihf)
+              echo "Cross target: armv7 — adding armhf architecture and installing dev packages"
+              sudo dpkg --add-architecture armhf || true
+              sudo apt-get update
+              sudo apt-get install -y libudev-dev:armhf libc6-dev:armhf || true
+              ;;
+            i686-unknown-linux-gnu)
+              echo "Cross target: i686 — adding i386 architecture and installing dev packages"
+              sudo dpkg --add-architecture i386 || true
+              sudo apt-get update
+              sudo apt-get install -y libudev-dev:i386 libc6-dev-i386 gcc-multilib g++-multilib || true
+              ;;
+            *)
+              echo "Unknown/unsupported target ${TARGET} — installing default libudev-dev"
+              sudo apt-get install -y libudev-dev || true
+              ;;
+          esac
+
+          # Print installed libudev packages for diagnosis
+          dpkg -l | grep libudev || true
+          echo "pkg-config paths:"; pkg-config --variable pc_path pkg-config || true
 
       - name: Cache cross and cargo registry
         id: cache-cross
@@ -76,13 +117,43 @@ jobs:
         run: |
           cross --version || echo "cross not installed"
 
+      - name: Verify libudev is visible in cross's container
+        shell: bash
+        run: |
+          TARGET=${{ matrix.target }}
+          echo "Checking pkg-config inside cross container for ${TARGET}"
+          # Try to run pkg-config inside the cross container using cross's runner
+          # This command will print libudev cflags/libs if present, or show an error
+          cross run --target ${TARGET} -- echo "running inside cross container" || true
+          # Try pkg-config (best-effort; might fail if not available in image)
+          if ! cross run --target ${TARGET} -- pkg-config --libs --cflags libudev >/dev/null 2>&1; then
+            echo "Warning: pkg-config did not find libudev inside cross image for ${TARGET}."
+            echo "Recommendations:"
+            echo "  1) Use a custom cross docker image that has pkg-config and libudev-dev installed;"
+            echo "     See https://github.com/rust-embedded/cross for guidance about custom images.";
+            echo "  2) Or remove unsupported target from the matrix (e.g. i686) if not required;"
+            echo "  3) Or build aarch64/arm targets via a build server with native qemu or custom image.";
+          else
+            echo "libudev found inside cross image for ${TARGET}."
+          fi
+
       - name: Build for linux target
         shell: bash
         run: |
           set -euo pipefail
           TARGET=${{ matrix.target }}
+          # Allow pkg-config to run for cross targets and prefer standard pkgconfig paths
+          export PKG_CONFIG_ALLOW_CROSS=1
+          export PKG_CONFIG_ALL_STATIC=0
+          export PKG_CONFIG_PATH="/usr/lib/${TARGET}/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
+          echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
           echo "Building ${TARGET}"
-          cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
+          if [[ -n "${CROSS_IMAGE:-}" ]]; then
+            echo "Using custom cross image: ${CROSS_IMAGE}"
+            cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET} --image ${CROSS_IMAGE}
+          else
+            cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
+          fi
 
       # macOS specific dependencies not required in this Linux job
 
