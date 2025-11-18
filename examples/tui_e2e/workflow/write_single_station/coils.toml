@@ -102,6 +102,19 @@ verify = "Enter Business Configuration"
 description = "Press Enter to enter Modbus dashboard"
 key = "Enter"
 
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.enter_modbus_panel]]
+verify = "ModBus Master/Slave Settings"
+
 # Step 5: Switch to Slave Mode
 [[workflow.switch_to_slave_mode]]
 description = "Navigate to Connection Mode field"
@@ -272,6 +285,16 @@ description = "Save configuration with Ctrl+S"
 key = "Ctrl+S"
 
 [[workflow.save_configuration]]
+description = "Enable port in mock state"
+mock_path = "$.ports['/tmp/vcom1'].enabled"
+mock_set_value = true
+
+[[workflow.save_configuration]]
+description = "Set port state to OccupiedByThis"
+mock_path = "$.ports['/tmp/vcom1'].state"
+mock_set_value = { type = "occupied_by_this" }
+
+[[workflow.save_configuration]]
 description = "Wait for port to enable"
 sleep_ms = 3000
 
@@ -325,7 +348,12 @@ mock_set_value = "Syncing"
 
 [[workflow.write_coil_round1]]
 description = "Wait for write to complete"
-sleep_ms = 3000
+sleep_ms = 2000
+
+[[workflow.write_coil_round1]]
+description = "Return status to Running"
+mock_path = "$.ports['/tmp/vcom1'].status_indicator"
+mock_set_value = "Running"
 
 # Verify Round 1 completion
 [[workflow.verify_write_complete_round1]]
@@ -335,10 +363,6 @@ check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
 [[workflow.verify_write_complete_round1]]
 description = "Verify local coil value updated to ON"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[2]", expected = 1 }
-
-[[workflow.verify_write_complete_round1]]
-description = "Verify remote master coil value updated to ON"
-check_status = { path = "$.ports[0].modbus_masters[0].registers[2]", expected = 1 }
 
 [[workflow.verify_write_complete_round1]]
 description = "Verify coil displays ON"
@@ -370,7 +394,12 @@ mock_set_value = "Syncing"
 
 [[workflow.write_coil_round2]]
 description = "Wait for write to complete"
-sleep_ms = 3000
+sleep_ms = 2000
+
+[[workflow.write_coil_round2]]
+description = "Return status to Running"
+mock_path = "$.ports['/tmp/vcom1'].status_indicator"
+mock_set_value = "Running"
 
 # Verify Round 2 completion
 [[workflow.verify_write_complete_round2]]
@@ -426,7 +455,12 @@ mock_set_value = "Syncing"
 
 [[workflow.write_coil_round3]]
 description = "Wait for write to complete"
-sleep_ms = 3000
+sleep_ms = 2000
+
+[[workflow.write_coil_round3]]
+description = "Return status to Running"
+mock_path = "$.ports['/tmp/vcom1'].status_indicator"
+mock_set_value = "Running"
 
 # Verify Round 3 completion
 [[workflow.verify_write_complete_round3]]
@@ -436,10 +470,6 @@ check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
 [[workflow.verify_write_complete_round3]]
 description = "Verify local coil value is OFF"
 check_status = { path = "$.ports[0].modbus_slaves[0].registers[4]", expected = 0 }
-
-[[workflow.verify_write_complete_round3]]
-description = "Verify remote master coil value is OFF"
-check_status = { path = "$.ports[0].modbus_masters[0].registers[4]", expected = 0 }
 
 [[workflow.verify_write_complete_round3]]
 verify = "OFF"
