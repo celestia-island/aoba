@@ -42,16 +42,13 @@ jobs:
           uname -a || true
           cat /etc/os-release || true
 
-      - name: Install system packages (host, for pkg-config/libudev)
+      - name: Install system packages (host)
         if: matrix.kind == 'native'
         shell: bash
         run: |
           set -euxo pipefail
           sudo apt-get update
-          # host-side deps for libudev-sys via pkg-config
           sudo apt-get install -y --no-install-recommends \
-            pkg-config \
-            libudev-dev \
             libx11-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -107,32 +104,6 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-
-          # Generate a temporary .cross.toml so this setting only
-          # affects CI cross builds, not real-platform builds.
-          cat > .cross.toml << 'EOF'
-          [target.aarch64-unknown-linux-gnu]
-          image = "aoba-cross:aarch64"
-
-          [target.armv7-unknown-linux-gnueabihf]
-          image = "aoba-cross:armv7"
-          EOF
-
-          # Build custom cross images for ARM targets using scripts/ci-cross.dockerfile
-          if [ "${TARGET}" = "armv7-unknown-linux-gnueabihf" ]; then
-            docker build \
-              --build-arg BASE_IMAGE=ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:latest \
-              --build-arg PC_ARCH=arm-linux-gnueabihf \
-              -f scripts/ci-cross.dockerfile \
-              -t aoba-cross:armv7 .
-          elif [ "${TARGET}" = "aarch64-unknown-linux-gnu" ]; then
-            docker build \
-              --build-arg BASE_IMAGE=ghcr.io/cross-rs/aarch64-unknown-linux-gnu:latest \
-              --build-arg PC_ARCH=aarch64-linux-gnu \
-              -f scripts/ci-cross.dockerfile \
-              -t aoba-cross:aarch64 .
-          fi
-
           cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
 
       - name: Package linux binary
@@ -163,7 +134,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aoba-linux-${{ matrix.target }}-${{ github.ref_name }}
-          path: release/${BINARY_NAME}-*-${{ matrix.target }}
+          path: release/*
 
   build-nonlinux:
     name: Build — macOS & Windows (native)
