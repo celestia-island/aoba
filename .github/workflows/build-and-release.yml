@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-linux:
-    name: Build — Linux targets (cross)
+    name: Build — Linux targets (native)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -52,81 +52,12 @@ jobs:
           TARGET=${{ matrix.target }}
           echo "Installing packages for ${TARGET}"
           sudo apt-get update
-          sudo apt-get install -y pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat nasm || true
 
-          # Add architectures and install arch-specific dev packages only for the current matrix target
-          case "${TARGET}" in
-            x86_64-unknown-linux-gnu)
-              echo "Host target: x86_64 — installing host packages"
-              sudo apt-get install -y libudev-dev || true
-              ;;
-            aarch64-unknown-linux-gnu)
-              echo "Cross target: aarch64 — adding arm64 architecture and installing dev packages"
-              sudo dpkg --add-architecture arm64 || true
-              sudo apt-get update
-              # Diagnostics: print architectures and apt sources, then try to install
-              dpkg --print-foreign-architectures || true
-              echo "--- /etc/apt/sources.list ---"; sudo sed -n '1,120p' /etc/apt/sources.list || true
-              echo "--- /etc/apt/sources.list.d/ ---"; ls -la /etc/apt/sources.list.d/ || true
-              echo "apt-cache policy libudev-dev:arm64"; apt-cache policy libudev-dev:arm64 || true
-              echo "apt-cache policy libc6-dev:arm64"; apt-cache policy libc6-dev:arm64 || true
-              if sudo apt-get install -y libudev-dev:arm64 libc6-dev:arm64; then
-                echo "Installed libudev-dev:arm64 successfully"
-              else
-                echo "Warning: apt failed to install libudev-dev:arm64 or libc6-dev:arm64 (maybe not available for this release/arch); continuing but cross container may still need libudev."
-              fi
-              ;;
-            armv7-unknown-linux-gnueabihf)
-              echo "Cross target: armv7 — adding armhf architecture and installing dev packages"
-              sudo dpkg --add-architecture armhf || true
-              sudo apt-get update
-              # Diagnostics: print architectures and apt sources, then try to install
-              dpkg --print-foreign-architectures || true
-              echo "--- /etc/apt/sources.list ---"; sudo sed -n '1,120p' /etc/apt/sources.list || true
-              echo "--- /etc/apt/sources.list.d/ ---"; ls -la /etc/apt/sources.list.d/ || true
-              echo "apt-cache policy libudev-dev:armhf"; apt-cache policy libudev-dev:armhf || true
-              echo "apt-cache policy libc6-dev:armhf"; apt-cache policy libc6-dev:armhf || true
-              if sudo apt-get install -y libudev-dev:armhf libc6-dev:armhf; then
-                echo "Installed libudev-dev:armhf successfully"
-              else
-                echo "Warning: apt failed to install libudev-dev:armhf or libc6-dev:armhf (maybe not available for this release/arch); continuing but cross container may still need libudev."
-              fi
-              ;;
-            i686-unknown-linux-gnu)
-              echo "Cross target: i686 — adding i386 architecture and installing dev packages"
-              sudo dpkg --add-architecture i386 || true
-              sudo apt-get update
-              dpkg --print-foreign-architectures || true
-              echo "apt-cache policy libudev-dev:i386"; apt-cache policy libudev-dev:i386 || true
-              if sudo apt-get install -y libudev-dev:i386 libc6-dev-i386 gcc-multilib g++-multilib; then
-                echo "Installed libudev-dev:i386 successfully"
-              else
-                echo "Warning: apt failed to install libudev-dev:i386 or gcc-multilib; continuing but i686 native build may fail if dependencies are missing."
-              fi
-              ;;
-            *)
-              echo "Unknown/unsupported target ${TARGET} — installing default libudev-dev"
-              sudo apt-get install -y libudev-dev || true
-              ;;
-          esac
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat nasm || true
 
           # Print installed libudev packages for diagnosis
           dpkg -l | grep libudev || true
           echo "pkg-config paths:"; pkg-config --variable pc_path pkg-config || true
-
-      - name: Cache cross and cargo registry
-        id: cache-cross
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          # include target triple to split parallel cache per target
-          key: ${{ runner.os }}-cross-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cross-bin-${{ matrix.target }}-
 
       - name: Cache linux target and cargo registry (per-target)
         uses: actions/cache@v4
@@ -140,89 +71,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-target-${{ matrix.target }}-
 
-      - name: Install cross (if not cached)
-        if: steps.cache-cross.outputs.cache-hit != 'true'
-        run: |
-          cargo install cross --locked || true
-
-      - name: Verify cross
-        shell: bash
-        run: |
-          cross --version || echo "cross not installed"
-
-      - name: Verify libudev is visible in cross's container
-        shell: bash
-        run: |
-          TARGET=${{ matrix.target }}
-          # Skip this check for i686 which is built natively (host packages are used)
-          if [[ "${TARGET}" == "i686-unknown-linux-gnu" ]]; then
-            echo "Skipping cross/container libudev check for ${TARGET} (built natively)"
-            exit 0
-          fi
-          echo "Checking pkg-config inside cross container for ${TARGET}"
-          # Try to run pkg-config inside the cross container using cross's runner
-          cross run --target ${TARGET} -- echo "running inside cross container" || true
-          if cross run --target ${TARGET} -- pkg-config --libs --cflags libudev >/dev/null 2>&1; then
-            echo "libudev found inside cross image for ${TARGET}."
-            exit 0
-          fi
-          echo "Warning: pkg-config did not find libudev inside cross image for ${TARGET}. Attempting to install it inside the cross container (best-effort)."
-          # Best-effort: try to install pkg-config & libudev-dev inside cross container (if apt is available)
-          cross run --target ${TARGET} -- bash -lc "set -euo pipefail; if command -v apt-get >/dev/null 2>&1; then apt-get update || true; apt-get install -y pkg-config libudev-dev || true; apt-cache policy libudev-dev || true; else echo 'apt not available in cross image'; fi" || true
-          echo "Re-checking pkg-config inside cross container for ${TARGET}"
-          if cross run --target ${TARGET} -- pkg-config --libs --cflags libudev >/dev/null 2>&1; then
-            echo "libudev found inside cross image for ${TARGET} after attempted install."
-            exit 0
-          else
-            echo "Still missing: pkg-config cannot find libudev in cross image for ${TARGET}."
-            echo "Recommendations:"
-            echo "  1) Use a custom cross docker image that has pkg-config and libudev-dev installed;"
-            echo "     See https://github.com/rust-embedded/cross for guidance about custom images."
-            echo "  2) Or remove unsupported target from the matrix if it's not required;"
-            echo "  3) Or run the build using a runner that has the required multilib packages (host native build)."
-          fi
-
       - name: Build for linux target
         shell: bash
         run: |
           set -euo pipefail
           TARGET=${{ matrix.target }}
-          # Allow pkg-config to run for cross targets and prefer standard pkgconfig paths
-          export PKG_CONFIG_ALLOW_CROSS=1
-          export PKG_CONFIG_ALL_STATIC=0
-          export PKG_CONFIG_PATH="/usr/lib/${TARGET}/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
-          echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
-          echo "Building ${TARGET}"
-          # For i686, the GitHub runner supports building a 32-bit binary using multilib
-          # and we've installed the i386 dev packages earlier. Build natively to avoid
-          # missing libudev inside cross containers for i686.
-          if [[ "${TARGET}" == "i686-unknown-linux-gnu" ]]; then
-            echo "i686 host build: ensuring rust target and building natively"
-            # Add i686 target and build natively (uses host's libudev:i386)
-            rustup target add ${TARGET} || true
-            cargo build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
-          else
-            if [[ -n "${CROSS_IMAGE:-}" ]]; then
-              echo "Using custom cross image: ${CROSS_IMAGE}"
-              cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET} --image ${CROSS_IMAGE}
-            else
-              cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
-            fi
-          fi
+          echo "Building for target ${TARGET}"
+          cargo build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
 
-      # macOS specific dependencies not required in this Linux job
-
-      - name: Restore cross cache and cargo registry
+      - name: Restore cargo cache
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-cross-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cross-bin-${{ matrix.target }}-
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
 
       - name: Package linux binary
         shell: bash
@@ -250,7 +116,6 @@ jobs:
             if [[ "${DST}" != *"windows"* ]] && [ -f "${DST}" ]; then
               chmod +x "${DST}" || true
             fi
-          done
 
       - name: Upload linux artifact
         uses: actions/upload-artifact@v4
