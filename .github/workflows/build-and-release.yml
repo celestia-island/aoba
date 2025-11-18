@@ -11,11 +11,20 @@ env:
   BINARY_NAME: aoba
 
 jobs:
-  linux-setup:
-    name: Linux setup (install cross & cache)
+  build-linux:
+    name: Build — Linux targets (cross)
     runs-on: ubuntu-latest
-    outputs:
-      cache-key: ${{ steps.cache-cross.outputs.cache-hit-key }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # metrics: run each linux target in parallel (matrix)
+        target:
+          [
+            x86_64-unknown-linux-gnu,
+            aarch64-unknown-linux-gnu,
+            armv7-unknown-linux-gnueabihf,
+            i686-unknown-linux-gnu,
+          ]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -29,12 +38,7 @@ jobs:
       - name: Install common system packages (Linux)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat || true
-
-      - name: Ensure Python3 present
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat nasm libc6-dev-i386 gcc-multilib g++-multilib || true
 
       - name: Cache cross and cargo registry
         id: cache-cross
@@ -45,9 +49,22 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-cross-bin-${{ hashFiles('**/Cargo.lock') }}
+          # include target triple to split parallel cache per target
+          key: ${{ runner.os }}-cross-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cross-bin-
+            ${{ runner.os }}-cross-bin-${{ matrix.target }}-
+
+      - name: Cache linux target and cargo registry (per-target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/${{ matrix.target }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-${{ matrix.target }}-
 
       - name: Install cross (if not cached)
         if: steps.cache-cross.outputs.cache-hit != 'true'
@@ -59,23 +76,15 @@ jobs:
         run: |
           cross --version || echo "cross not installed"
 
-  build-linux:
-    name: Build — Linux targets (cross)
-    needs: linux-setup
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          [
-            x86_64-unknown-linux-gnu,
-            aarch64-unknown-linux-gnu,
-            armv7-unknown-linux-gnueabihf,
-            i686-unknown-linux-gnu,
-          ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - name: Build for linux target
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET=${{ matrix.target }}
+          echo "Building ${TARGET}"
+          cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
+
+      # macOS specific dependencies not required in this Linux job
 
       - name: Restore cross cache and cargo registry
         uses: actions/cache@v4
@@ -85,38 +94,11 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-cross-bin-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cross-bin-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cross-bin-
+            ${{ runner.os }}-cross-bin-${{ matrix.target }}-
 
-      - name: Cache target build artifacts
-        uses: actions/cache@v4
-        with:
-          path: target/${{ matrix.target }}
-          key: ${{ runner.os }}-cargo-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-target-${{ matrix.target }}-
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
-      - name: Add rustup target
-        shell: bash
-        run: |
-          rustup target add ${{ matrix.target }} || true
-
-      - name: Build using cross
-        shell: bash
-        env:
-          TARGET: ${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
-
-      - name: Package binary
+      - name: Package linux binary
         shell: bash
         run: |
           mkdir -p release
@@ -127,26 +109,28 @@ jobs:
             SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-8)
             REF_NAME="master-${SHORT_SHA}"
           fi
-          TARGET_TRIPLE=${{ matrix.target }}
-          BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}"
-          if [[ "${TARGET_TRIPLE}" == *"windows"* ]]; then
-            BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}.exe"
-            DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}.exe"
-          else
-            DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}"
-          fi
-          if [ -f "${BIN_FILE}" ]; then
-            cp -f "${BIN_FILE}" "${DST}" || true
-            chmod +x "${DST}" || true
-          else
-            echo "Warning: ${BIN_FILE} not found"
-          fi
+          TARGET=${{ matrix.target }}
+          BIN_FILE="target/${TARGET}/release/${BINARY_NAME}"
+          DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET}"
+            if [[ "${TARGET}" == *"windows"* ]]; then
+              BIN_FILE="target/${TARGET}/release/${BINARY_NAME}.exe"
+              DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET}.exe"
+            fi
+            if [ -f "${BIN_FILE}" ]; then
+              cp -f "${BIN_FILE}" "${DST}" || true
+            else
+              echo "Warning: ${BIN_FILE} not found"
+            fi
+            if [[ "${DST}" != *"windows"* ]] && [ -f "${DST}" ]; then
+              chmod +x "${DST}" || true
+            fi
+          done
 
-      - name: Upload artifact
+      - name: Upload linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: aoba-linux-${{ matrix.target }}-${{ github.ref_name }}
-          path: release/*
+          path: release/${BINARY_NAME}-${{ github.ref_name }}-${{ matrix.target }}*
 
   build-nonlinux:
     name: Build — macOS & Windows (native)
@@ -172,6 +156,18 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+
+      - name: Cache cargo registry and target for native build
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/${{ matrix.target }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-${{ matrix.target }}-
 
       - name: Add rustup target
         shell: bash
