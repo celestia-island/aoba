@@ -72,12 +72,14 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Ensure Python3 present
+        if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
 
       - name: Enforce use statement groups
         id: enforce_use_groups
+        if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
         run: |
           python scripts/enforce_use_groups.py
           if ! git diff --quiet; then
