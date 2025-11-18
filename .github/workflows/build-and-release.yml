@@ -38,10 +38,17 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
+      - name: Print runner & OS info (diagnostics)
+        shell: bash
+        run: |
+          uname -a || true
+          lsb_release -a || true
+          cat /etc/os-release || true
+
       - name: Install system packages for current linux target
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           TARGET=${{ matrix.target }}
           echo "Installing packages for ${TARGET}"
           sudo apt-get update
@@ -57,19 +64,45 @@ jobs:
               echo "Cross target: aarch64 — adding arm64 architecture and installing dev packages"
               sudo dpkg --add-architecture arm64 || true
               sudo apt-get update
-              sudo apt-get install -y libudev-dev:arm64 libc6-dev:arm64 || true
+              # Diagnostics: print architectures and apt sources, then try to install
+              dpkg --print-foreign-architectures || true
+              echo "--- /etc/apt/sources.list ---"; sudo sed -n '1,120p' /etc/apt/sources.list || true
+              echo "--- /etc/apt/sources.list.d/ ---"; ls -la /etc/apt/sources.list.d/ || true
+              echo "apt-cache policy libudev-dev:arm64"; apt-cache policy libudev-dev:arm64 || true
+              echo "apt-cache policy libc6-dev:arm64"; apt-cache policy libc6-dev:arm64 || true
+              if sudo apt-get install -y libudev-dev:arm64 libc6-dev:arm64; then
+                echo "Installed libudev-dev:arm64 successfully"
+              else
+                echo "Warning: apt failed to install libudev-dev:arm64 or libc6-dev:arm64 (maybe not available for this release/arch); continuing but cross container may still need libudev."
+              fi
               ;;
             armv7-unknown-linux-gnueabihf)
               echo "Cross target: armv7 — adding armhf architecture and installing dev packages"
               sudo dpkg --add-architecture armhf || true
               sudo apt-get update
-              sudo apt-get install -y libudev-dev:armhf libc6-dev:armhf || true
+              # Diagnostics: print architectures and apt sources, then try to install
+              dpkg --print-foreign-architectures || true
+              echo "--- /etc/apt/sources.list ---"; sudo sed -n '1,120p' /etc/apt/sources.list || true
+              echo "--- /etc/apt/sources.list.d/ ---"; ls -la /etc/apt/sources.list.d/ || true
+              echo "apt-cache policy libudev-dev:armhf"; apt-cache policy libudev-dev:armhf || true
+              echo "apt-cache policy libc6-dev:armhf"; apt-cache policy libc6-dev:armhf || true
+              if sudo apt-get install -y libudev-dev:armhf libc6-dev:armhf; then
+                echo "Installed libudev-dev:armhf successfully"
+              else
+                echo "Warning: apt failed to install libudev-dev:armhf or libc6-dev:armhf (maybe not available for this release/arch); continuing but cross container may still need libudev."
+              fi
               ;;
             i686-unknown-linux-gnu)
               echo "Cross target: i686 — adding i386 architecture and installing dev packages"
               sudo dpkg --add-architecture i386 || true
               sudo apt-get update
-              sudo apt-get install -y libudev-dev:i386 libc6-dev-i386 gcc-multilib g++-multilib || true
+              dpkg --print-foreign-architectures || true
+              echo "apt-cache policy libudev-dev:i386"; apt-cache policy libudev-dev:i386 || true
+              if sudo apt-get install -y libudev-dev:i386 libc6-dev-i386 gcc-multilib g++-multilib; then
+                echo "Installed libudev-dev:i386 successfully"
+              else
+                echo "Warning: apt failed to install libudev-dev:i386 or gcc-multilib; continuing but i686 native build may fail if dependencies are missing."
+              fi
               ;;
             *)
               echo "Unknown/unsupported target ${TARGET} — installing default libudev-dev"
@@ -121,20 +154,32 @@ jobs:
         shell: bash
         run: |
           TARGET=${{ matrix.target }}
+          # Skip this check for i686 which is built natively (host packages are used)
+          if [[ "${TARGET}" == "i686-unknown-linux-gnu" ]]; then
+            echo "Skipping cross/container libudev check for ${TARGET} (built natively)"
+            exit 0
+          fi
           echo "Checking pkg-config inside cross container for ${TARGET}"
           # Try to run pkg-config inside the cross container using cross's runner
-          # This command will print libudev cflags/libs if present, or show an error
           cross run --target ${TARGET} -- echo "running inside cross container" || true
-          # Try pkg-config (best-effort; might fail if not available in image)
-          if ! cross run --target ${TARGET} -- pkg-config --libs --cflags libudev >/dev/null 2>&1; then
-            echo "Warning: pkg-config did not find libudev inside cross image for ${TARGET}."
+          if cross run --target ${TARGET} -- pkg-config --libs --cflags libudev >/dev/null 2>&1; then
+            echo "libudev found inside cross image for ${TARGET}."
+            exit 0
+          fi
+          echo "Warning: pkg-config did not find libudev inside cross image for ${TARGET}. Attempting to install it inside the cross container (best-effort)."
+          # Best-effort: try to install pkg-config & libudev-dev inside cross container (if apt is available)
+          cross run --target ${TARGET} -- bash -lc "set -euo pipefail; if command -v apt-get >/dev/null 2>&1; then apt-get update || true; apt-get install -y pkg-config libudev-dev || true; apt-cache policy libudev-dev || true; else echo 'apt not available in cross image'; fi" || true
+          echo "Re-checking pkg-config inside cross container for ${TARGET}"
+          if cross run --target ${TARGET} -- pkg-config --libs --cflags libudev >/dev/null 2>&1; then
+            echo "libudev found inside cross image for ${TARGET} after attempted install."
+            exit 0
+          else
+            echo "Still missing: pkg-config cannot find libudev in cross image for ${TARGET}."
             echo "Recommendations:"
             echo "  1) Use a custom cross docker image that has pkg-config and libudev-dev installed;"
-            echo "     See https://github.com/rust-embedded/cross for guidance about custom images.";
-            echo "  2) Or remove unsupported target from the matrix (e.g. i686) if not required;"
-            echo "  3) Or build aarch64/arm targets via a build server with native qemu or custom image.";
-          else
-            echo "libudev found inside cross image for ${TARGET}."
+            echo "     See https://github.com/rust-embedded/cross for guidance about custom images."
+            echo "  2) Or remove unsupported target from the matrix if it's not required;"
+            echo "  3) Or run the build using a runner that has the required multilib packages (host native build)."
           fi
 
       - name: Build for linux target
@@ -148,11 +193,21 @@ jobs:
           export PKG_CONFIG_PATH="/usr/lib/${TARGET}/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
           echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
           echo "Building ${TARGET}"
-          if [[ -n "${CROSS_IMAGE:-}" ]]; then
-            echo "Using custom cross image: ${CROSS_IMAGE}"
-            cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET} --image ${CROSS_IMAGE}
+          # For i686, the GitHub runner supports building a 32-bit binary using multilib
+          # and we've installed the i386 dev packages earlier. Build natively to avoid
+          # missing libudev inside cross containers for i686.
+          if [[ "${TARGET}" == "i686-unknown-linux-gnu" ]]; then
+            echo "i686 host build: ensuring rust target and building natively"
+            # Add i686 target and build natively (uses host's libudev:i386)
+            rustup target add ${TARGET} || true
+            cargo build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
           else
-            cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
+            if [[ -n "${CROSS_IMAGE:-}" ]]; then
+              echo "Using custom cross image: ${CROSS_IMAGE}"
+              cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET} --image ${CROSS_IMAGE}
+            else
+              cross build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
+            fi
           fi
 
       # macOS specific dependencies not required in this Linux job
