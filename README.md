@@ -3,9 +3,7 @@
 </p>
 
 <p align="center">
-  <h1 align="center">
-    Aoba
-  </h1>
+  <h1 align="center">Aoba</h1>
 </p>
 
 <p align="center">
@@ -30,105 +28,69 @@
   EN | <a href="./README_zh.md">ZH</a>
 </p>
 
-Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, TCP and more.
-
-> Under active development
+Multi-protocol debugging and simulation tool for Modbus RTU, suitable for both physical serial ports and network-forwarded ports. Provides both CLI and TUI interfaces.
 
 ## Features
 
-- Serial and network protocol debugging
-- Protocol simulation (master/slave, client/server)
-- Automatic TUI/GUI switching
-- Create and manage virtual serial ports
-- **Daemon mode**: non-interactive background operation with auto-configuration loading
+- Modbus RTU (master/slave) debugging and simulation; supports four register types: holding, input, coils, and discrete.
+- Full-featured CLI: port discovery and checks (`--list-ports` / `--check-port`), master/slave operations (`--master-provide` / `--slave-listen`) and persistent modes (`--*-persist`). Outputs can be JSON/JSONL, which is script/CI-friendly.
+- Interactive TUI: configure ports, stations, and registers via terminal UI; supports save/load (`Ctrl+S` saves and auto-enables ports) and IPC integration with CLI for testing and automation.
+- Multiple data sources and protocols: physical/virtual serial ports (managed via `socat`), HTTP, MQTT, IPC (Unix domain sockets / named pipes), files, and FIFOs.
+- Port Forwarding: configure source and target ports within the TUI for data replication, monitoring, or bridging.
+- Daemon mode: run headless using a saved TUI configuration to start all configured ports/stations (suitable for embedded/CI deployments).
+- Virtual port and test tooling: includes `scripts/socat_init.sh` for virtual serial ports and example tests in `examples/cli_e2e` and `examples/tui_e2e` for local/CI testing.
+- Extensible integrations: forward or receive port data via HTTP/MQTT/IPC for (remote) integrations.
+
+> Note: use `--no-config-cache` to disable TUI save/load; `--config-file <FILE>` and `--no-config-cache` are mutually exclusive.
 
 ## Quick start
 
 1. Install the Rust toolchain
-2. Install the tool: `cargo install aoba`
-3. Run the tool: execute the installed `aoba` binary (or use your package manager's path)
+2. Clone the repo and enter the directory
+3. Install: `cargo install --path .` or run via `cargo run`
+4. Run `aoba` to start the TUI by default; use TUI to configure ports and save the configuration as needed.
 
-Notes:
+## Persistent configuration (config file)
 
-- Detailed documentation is still being written.
-  - Examples and some reference material live in the `examples/` and `docs/` directories but are not yet comprehensive.
-  - If you want to run automated tests or CI workflows, check `./scripts/` and the example test folders for guidance.
+`--config-file <FILE>` explicitly selects a TUI config file (daemon mode uses `--daemon-config <FILE>`). This conflicts with `--no-config-cache`, which disables loading/saving of TUI config.
 
-## Daemon Mode
-
-Daemon mode allows `aoba` to run in non-interactive environments, perfect for scenarios requiring TUI configuration features (like transparent port forwarding) without the interactive interface.
-
-### Usage
+Example:
 
 ```bash
-# Use default config file (aoba_tui_config.json in current directory)
-aoba --daemon
-
-# Or use short form
-aoba -d
-
-# Specify custom config file path
-aoba --daemon --daemon-config /path/to/config.json
-
-# Specify log file (outputs to both terminal and file)
-aoba --daemon --log-file /path/to/daemon.log
-```
-
-### How It Works
-
-1. **Configuration Loading**: Loads TUI config from working directory or specified path
-2. **Auto-Start**: Automatically starts all configured ports and stations
-3. **Dual Logging**: Outputs logs to both terminal and file simultaneously
-4. **No UI**: Runs core threads only, no interactive interface
-
-### Preparing Configuration
-
-First use TUI mode to create and configure ports:
-
-```bash
-# Start TUI for configuration
-aoba --tui
-
-# In TUI:
-# 1. Configure ports and Modbus stations
-# 2. Press Ctrl+S to save configuration
-# 3. Exit TUI
-```
-
-Configuration is automatically saved to `./aoba_tui_config.json`.
-
-### Configuration cache and CLI flags
-
-`--config-file <FILE>` is used to explicitly select a TUI configuration file to load and save (daemon mode uses `--daemon-config <FILE>` for the same purpose). This option conflicts with `--no-config-cache`, which disables loading and saving of configuration (i.e., it turns off the config cache). Do not use `--config-file <FILE>` (or `--daemon-config <FILE>`) and `--no-config-cache` together — the CLI will reject the combination.
-
-Examples:
-
-```bash
-# Start TUI and explicitly use a config file (load/save enabled)
+# Start TUI with a specific config file; load/save enabled
 aoba --tui --config-file /path/to/config.json
 
-# Start TUI but disable any loading/saving of config, this is the default option
+# Start TUI with no config caching (default) — no load/save
 aoba --tui --no-config-cache
 ```
 
-### Error Handling
+Run headless with a saved configuration:
 
-If the configuration file doesn't exist, daemon mode will exit with an error:
-
-```
-Error: Configuration file not found: ./aoba_tui_config.json
-
-Daemon mode requires a configuration file. You can:
-1. Run TUI mode first to create and save a configuration
-2. Specify a custom config path with --daemon-config <FILE>
+```bash
+aoba --daemon --config-file /path/to/config.json
 ```
 
-### Typical Use Cases
+Systemd example:
 
-- **Transparent Port Forwarding**: Run forwarding services in the background
-- **Automated Testing**: Auto-start Modbus simulators in CI/CD environments
-- **Remote Deployment**: Run Modbus services on headless servers
+```ini
+[Unit]
+Description=Aoba Modbus RTU Daemon
+Wants=network.target
+After=network.target network-service
+StartLimitIntervalSec=0
 
-## Contribution
+[Service]
+Type=simple
+WorkingDirectory=/home/youruser
+ExecStart=/usr/local/bin/aoba --daemon --config-file /home/youruser/config.json
+Restart=always
+RestartSec=1s
 
-Contributions are welcome — please open issues or pull requests. See the repository for coding guidelines and CI configuration.
+[Install]
+WantedBy=multi-user.target
+```
+
+## Common use cases
+
+- Automated testing: auto-start Modbus simulators in CI/CD
+- Embedded systems: run Aoba as a daemon on embedded devices (e.g., Raspberry Pi) with USB-serial adapters
