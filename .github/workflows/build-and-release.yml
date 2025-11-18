@@ -1,0 +1,249 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (matrix)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ext: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            ext: tar.gz
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            ext: tar.gz
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            ext: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            ext: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: zip
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            ext: zip
+        # single rust toolchain for now
+        rust: [stable]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/${{ matrix.target }}
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+
+      - name: Install system dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install pkg-config socat || true
+
+      - name: Ensure Python3 present
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      - name: Compute build version
+        id: build_version
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ "${GITHUB_REF}" == refs/heads/master ]]; then
+            SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-8)
+            VERSION="master-${SHORT_SHA}"
+          else
+            VERSION=${GITHUB_REF_NAME}
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      - name: Prepare target toolchain and linkers
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET=${{ matrix.target }}
+          rustup target add ${TARGET} || true
+          if [[ "${TARGET}" == "aarch64-unknown-linux-gnu" ]]; then
+            # Install cross-linker for building aarch64 from x86_64 runner
+            sudo apt-get update
+            sudo apt-get install -y gcc-aarch64-linux-gnu || true
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="aarch64-linux-gnu-gcc"
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER}" >> $GITHUB_ENV
+            export STRIP_CMD="aarch64-linux-gnu-strip"
+            echo "STRIP_CMD=${STRIP_CMD}" >> $GITHUB_ENV
+          elif [[ "${TARGET}" == "armv7-unknown-linux-gnueabihf" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y gcc-arm-linux-gnueabihf || true
+            export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="arm-linux-gnueabihf-gcc"
+            echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=${CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER}" >> $GITHUB_ENV
+            export STRIP_CMD="arm-linux-gnueabihf-strip"
+            echo "STRIP_CMD=${STRIP_CMD}" >> $GITHUB_ENV
+          elif [[ "${TARGET}" == "i686-unknown-linux-gnu" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y gcc-multilib g++-multilib || true
+            export CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER="i686-linux-gnu-gcc"
+            echo "CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER=${CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER}" >> $GITHUB_ENV
+            export STRIP_CMD="i686-linux-gnu-strip"
+            echo "STRIP_CMD=${STRIP_CMD}" >> $GITHUB_ENV
+          fi
+
+      - name: Build (release)
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          # Build only the main binary 'aoba' and not examples/workspace
+          cargo build --package aoba --bin aoba --release --target ${TARGET}
+
+      - name: Strip binary (if available)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_TRIPLE=${{ matrix.target }}
+          BIN=target/${TARGET_TRIPLE}/release/aoba
+          if [ -f "${BIN}" ]; then
+            if [[ -n "${STRIP_CMD:-}" ]]; then
+              ${STRIP_CMD} ${BIN} || true
+            else
+              strip ${BIN} || true
+            fi
+          fi
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p release
+          OS_NAME=${{ matrix.os }}
+          REF_NAME=${{ env.VERSION }}
+          TARGET_TRIPLE=${{ matrix.target }}
+          EXT=${{ matrix.ext }}
+          BINARY_NAME=aoba
+          if [[ "${TARGET_TRIPLE}" == *"windows"* ]]; then
+            BIN_FILENAME=${BINARY_NAME}.exe
+          else
+            BIN_FILENAME=${BINARY_NAME}
+          fi
+          PACKAGE_NAME="${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}"
+          # Destination: raw executable file, no archive
+          if [[ "${TARGET_TRIPLE}" == *"windows"* ]]; then
+            DST_FILE="${GITHUB_WORKSPACE}/release/${PACKAGE_NAME}.exe"
+          else
+            DST_FILE="${GITHUB_WORKSPACE}/release/${PACKAGE_NAME}"
+          fi
+          # Copy executable directly
+          cp -f target/${TARGET_TRIPLE}/release/${BIN_FILENAME} "${DST_FILE}" || true
+          # Ensure executable bit on non-windows
+          if [[ "${TARGET_TRIPLE}" != *"windows"* ]]; then
+            chmod +x "${DST_FILE}" || true
+          fi
+
+      - name: Sanity-check builtin binary (native only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_TRIPLE=${{ matrix.target }}
+          PACKAGE_NAME="aoba-${{ env.VERSION }}-${TARGET_TRIPLE}"
+          BIN_PATH="${GITHUB_WORKSPACE}/release/${PACKAGE_NAME}"
+          if [[ "${TARGET_TRIPLE}" == *"windows"* ]]; then
+            BIN_PATH="${BIN_PATH}.exe"
+          fi
+          HOST_TRIPLE=$(rustc -Vv | awk '/host/{print $2}') || true
+          echo "Host triple: ${HOST_TRIPLE}"
+          echo "Target triple: ${TARGET_TRIPLE}"
+          if [[ "${HOST_TRIPLE}" == "${TARGET_TRIPLE}" ]]; then
+            echo "Native target; running --version to sanity-check"
+            if [ -f "${BIN_PATH}" ]; then
+              "${BIN_PATH}" --version || true
+            else
+              echo "Binary not found at ${BIN_PATH}"
+            fi
+          else
+            echo "Cross-built target; skipping run"
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aoba-${{ env.VERSION }}-${{ matrix.target }}
+          path: release/*
+
+  release:
+    name: Create GitHub Release & upload artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    # Only create Release when a tag is pushed. Master only builds, no release.
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Determine release parameters
+        id: params
+        run: |
+          set -euo pipefail
+          # Only tags trigger this job; extract tag name and use as release name
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          RELEASE_NAME=${TAG_NAME}
+          PRERELEASE=false
+          echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          echo "prerelease=${PRERELEASE}" >> $GITHUB_OUTPUT
+
+      - name: List download folder
+        run: ls -la release || true
+
+      - name: Create release and upload assets
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.params.outputs.tag }}
+          name: ${{ steps.params.outputs.name }}
+          draft: false
+          prerelease: ${{ steps.params.outputs.prerelease }}
+          files: |
+            release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
