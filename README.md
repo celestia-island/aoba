@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./packages/tui/res/logo.png" alt="Aoba Logo" width="240" />
+  <img src="./res/logo.png" alt="Aoba Logo" width="240" />
 </p>
 
 <p align="center">
