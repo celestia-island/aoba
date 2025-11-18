@@ -7,6 +7,7 @@ authors.workspace = true
 version.workspace = true
 edition.workspace = true
 build = "build.rs"
+exclude = ["docs/**", "examples/**", "scripts/**", "res/mono-sc-nerd.ttf"]
 
 [workspace]
 members = [".", "examples/*"]
@@ -20,6 +21,7 @@ repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
 version = "0.0.3"
 edition = "2021"
+exclude = ["docs/**", "examples/**", "scripts/**", "res/mono-sc-nerd.ttf"]
 
 [profile.release]
 lto = true
