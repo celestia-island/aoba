@@ -120,21 +120,21 @@ jobs:
           fi
           TARGET=${{ matrix.target }}
           BIN_FILE="target/${TARGET}/release/${BINARY_NAME}"
-          DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET}"
+          ARCHIVE_NAME="${BINARY_NAME}-${REF_NAME}-${TARGET}.tar.gz"
+          
           if [ -f "${BIN_FILE}" ]; then
-            cp -f "${BIN_FILE}" "${DST}" || true
+            chmod +x "${BIN_FILE}"
+            tar -czf "release/${ARCHIVE_NAME}" -C "target/${TARGET}/release" "${BINARY_NAME}"
+            echo "Created archive: release/${ARCHIVE_NAME}"
           else
             echo "Warning: ${BIN_FILE} not found"
-          fi
-          if [ -f "${DST}" ]; then
-            chmod +x "${DST}" || true
           fi
 
       - name: Upload linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: aoba-linux-${{ matrix.target }}-${{ github.ref_name }}
-          path: release/${BINARY_NAME}-*-${{ matrix.target }}
+          path: release/*
 
   build-nonlinux:
     name: Build — macOS & Windows (native)
@@ -198,18 +198,34 @@ jobs:
             REF_NAME="master-${SHORT_SHA}"
           fi
           TARGET_TRIPLE=${{ matrix.target }}
-          BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}"
+          
           if [[ "${TARGET_TRIPLE}" == *"windows"* ]]; then
             BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}.exe"
-            DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}.exe"
+            ARCHIVE_NAME="${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}.zip"
+            if [ -f "${BIN_FILE}" ]; then
+              # Use 7z or zip to create archive on Windows
+              if command -v 7z &> /dev/null; then
+                7z a -tzip "release/${ARCHIVE_NAME}" "${BIN_FILE}"
+              else
+                cd "target/${TARGET_TRIPLE}/release"
+                zip "../../../release/${ARCHIVE_NAME}" "${BINARY_NAME}.exe"
+                cd ../../..
+              fi
+              echo "Created archive: release/${ARCHIVE_NAME}"
+            else
+              echo "Warning: ${BIN_FILE} not found"
+            fi
           else
-            DST="release/${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}"
-          fi
-          if [ -f "${BIN_FILE}" ]; then
-            cp -f "${BIN_FILE}" "${DST}" || true
-            chmod +x "${DST}" || true
-          else
-            echo "Warning: ${BIN_FILE} not found"
+            # macOS
+            BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}"
+            ARCHIVE_NAME="${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}.tar.gz"
+            if [ -f "${BIN_FILE}" ]; then
+              chmod +x "${BIN_FILE}"
+              tar -czf "release/${ARCHIVE_NAME}" -C "target/${TARGET_TRIPLE}/release" "${BINARY_NAME}"
+              echo "Created archive: release/${ARCHIVE_NAME}"
+            else
+              echo "Warning: ${BIN_FILE} not found"
+            fi
           fi
 
       - name: Upload artifact
@@ -231,6 +247,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release
+
+      - name: Flatten artifacts directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-flat
+          find release -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} release-flat/ \;
+          rm -rf release
+          mv release-flat release
+          echo "Flattened release artifacts:"
+          ls -lh release/
 
       - name: Determine release parameters
         id: params
