@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
 use std::{
     io::{BufRead, BufReader, Write},
-    os::unix::net::UnixStream,
     process::Stdio,
     sync::Arc,
 };
+
+use interprocess::local_socket::{prelude::*, Stream as LocalStream};
 
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
@@ -17,6 +18,12 @@ use _main::{
 
 // File-level constants to avoid magic numbers
 const REGISTER_LENGTH: usize = 10;
+
+// Use platform-specific IPC socket path
+#[cfg(windows)]
+const IPC_SOCKET_PATH: &str = "aoba_test_ipc_channel";
+
+#[cfg(not(windows))]
 const IPC_SOCKET_PATH: &str = "/tmp/aoba_test_ipc_channel.sock";
 
 /// Build station payload for data transmission
@@ -57,8 +64,11 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
     let binary = build_debug_bin("aoba")?;
     let register_length_arg = REGISTER_LENGTH.to_string();
 
-    // Remove old socket file if exists
-    let _ = std::fs::remove_file(IPC_SOCKET_PATH);
+    // Remove old socket file if exists (Unix only)
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(IPC_SOCKET_PATH);
+    }
 
     // Start master daemon with IPC socket on vcom1
     let master_output = temp_dir.join("master_ipc_persist_output.log");
@@ -124,7 +134,12 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
         // Wait for IPC socket to be created (with retry)
         let mut retries = 20;
         let stream = loop {
-            match UnixStream::connect(IPC_SOCKET_PATH) {
+            // Use filesystem-based socket path (matching the server implementation)
+            let connect_result = IPC_SOCKET_PATH
+                .to_fs_name::<interprocess::local_socket::GenericFilePath>()
+                .and_then(LocalStream::connect);
+
+            match connect_result {
                 Ok(s) => break s,
                 Err(_e) if retries > 0 => {
                     log::debug!("Waiting for IPC socket... ({} retries left)", retries);
@@ -304,7 +319,13 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
     // Cleanup
     master.kill().ok();
     let _ = master.wait();
-    let _ = std::fs::remove_file(IPC_SOCKET_PATH);
+
+    // Remove socket file (Unix only)
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(IPC_SOCKET_PATH);
+    }
+
     std::fs::remove_file(&master_output).ok();
 
     log::info!("✅ IPC channel data source test completed successfully");
