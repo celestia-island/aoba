@@ -28,6 +28,7 @@ expectrl.workspace = true
 ureq.workspace = true
 rumqttc.workspace = true
 uuid.workspace = true
+interprocess.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 serialport.workspace = true
