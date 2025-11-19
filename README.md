@@ -46,8 +46,19 @@ Multi-protocol debugging and simulation tool for Modbus RTU, suitable for both p
 ## Quick start
 
 1. Install the Rust toolchain
+
 2. Clone the repo and enter the directory
-3. Install: `cargo install --path .` or run via `cargo run`
+
+3. Install:
+
+   - Build from source: `cargo install aoba`
+
+   - Or install a CI-built release (if available) with `cargo-binstall`:
+
+     - Example: `cargo binstall --manifest-path ./Cargo.toml --version <version>`
+
+     - Use `--target <triple>` to pick a platform-specific artifact (e.g. `x86_64-unknown-linux-gnu`).
+
 4. Run `aoba` to start the TUI by default; use TUI to configure ports and save the configuration as needed.
 
 ## Persistent configuration (config file)
