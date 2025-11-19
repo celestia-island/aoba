@@ -94,8 +94,13 @@ rmodbus = { version = "^0.12", features = ["with_serde"] }
 libc = "^0.2"
 serialport = { version = "^4", default-features = false }
 interprocess = "^2"
-ureq = { version = "^3", features = ["json"] }
-rumqttc = "^0.25"
+ureq = { version = "^3", features = [
+  "json",
+  "native-tls",
+], default-features = false }
+rumqttc = { version = "^0.25", default-features = false, features = [
+  "use-native-tls",
+] }
 axum = "^0.8"
 
 expectrl = "^0.8"
@@ -173,3 +178,8 @@ windows = { version = "^0.62", features = [
   "Win32_Security",
   "Win32_System_Threading",
 ] }
+
+# Force all rustls instances to use ring crypto provider
+# This is required because rustls 0.23 defaults to aws-lc-rs which has build issues
+[package.metadata.cargo-all-features]
+denylist = ["aws-lc-rs"]
