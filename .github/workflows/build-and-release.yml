@@ -113,20 +113,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          REF_NAME=${{ github.ref_name }}
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            REF_NAME=${GITHUB_REF#refs/tags/}
-          elif [[ "${GITHUB_REF}" == refs/heads/master ]]; then
-            SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-8)
-            REF_NAME="master-${SHORT_SHA}"
-          fi
-          TARGET=${{ matrix.target }}
-          BIN_FILE="target/${TARGET}/release/${BINARY_NAME}"
-          ARCHIVE_NAME="${BINARY_NAME}-${REF_NAME}-${TARGET}.tar.gz"
 
-          if [ -f "${BIN_FILE}" ]; then
-            chmod +x "${BIN_FILE}"
-            tar -czf "release/${ARCHIVE_NAME}" -C "target/${TARGET}/release" "${BINARY_NAME}"
+          # Read crate name and version from Cargo.toml
+          NAME=$(cargo metadata --no-deps --format-version 1 | python -c "import sys,json; j=json.load(sys.stdin); print(j['packages'][0]['name'])")
+          VERSION=$(cargo metadata --no-deps --format-version 1 | python -c "import sys,json; j=json.load(sys.stdin); print(j['packages'][0]['version'])")
+
+          TARGET=${{ matrix.target }}
+          DIST_DIR="dist/${NAME}-${TARGET}-v${VERSION}"
+          mkdir -p "$DIST_DIR"
+
+          BIN_FILE="target/${TARGET}/release/${BINARY_NAME}"
+          if [ -f "$BIN_FILE" ]; then
+            chmod +x "$BIN_FILE"
+            cp "$BIN_FILE" "$DIST_DIR/"
+            ARCHIVE_NAME="${NAME}-${TARGET}-v${VERSION}.tar.gz"
+            tar -C dist -czf "release/${ARCHIVE_NAME}" "${NAME}-${TARGET}-v${VERSION}"
             echo "Created archive: release/${ARCHIVE_NAME}"
           else
             echo "Warning: ${BIN_FILE} not found"
@@ -192,38 +193,38 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          REF_NAME=${{ github.ref_name }}
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            REF_NAME=${GITHUB_REF#refs/tags/}
-          elif [[ "${GITHUB_REF}" == refs/heads/master ]]; then
-            SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-8)
-            REF_NAME="master-${SHORT_SHA}"
-          fi
+
+          # Read crate name and version from Cargo.toml
+          NAME=$(cargo metadata --no-deps --format-version 1 | python -c "import sys,json; j=json.load(sys.stdin); print(j['packages'][0]['name'])")
+          VERSION=$(cargo metadata --no-deps --format-version 1 | python -c "import sys,json; j=json.load(sys.stdin); print(j['packages'][0]['version'])")
+
           TARGET_TRIPLE=${{ matrix.target }}
+          DIST_DIR="dist/${NAME}-${TARGET_TRIPLE}-v${VERSION}"
+          mkdir -p "$DIST_DIR"
 
           if [[ "${TARGET_TRIPLE}" == *"windows"* ]]; then
             BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}.exe"
-            ARCHIVE_NAME="${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}.zip"
             if [ -f "${BIN_FILE}" ]; then
-              # Use 7z or zip to create archive on Windows
+              cp "${BIN_FILE}" "$DIST_DIR/"
+              ARCHIVE_NAME="${NAME}-${TARGET_TRIPLE}-v${VERSION}.zip"
+              # Use 7z if available, otherwise fall back to zip
               if command -v 7z &> /dev/null; then
-                7z a -tzip "release/${ARCHIVE_NAME}" "${BIN_FILE}"
+                7z a -tzip "release/${ARCHIVE_NAME}" "${DIST_DIR}/*"
               else
-                cd "target/${TARGET_TRIPLE}/release"
-                zip "../../../release/${ARCHIVE_NAME}" "${BINARY_NAME}.exe"
-                cd ../../..
+                (cd dist && zip -r "../release/${ARCHIVE_NAME}" "${NAME}-${TARGET_TRIPLE}-v${VERSION}")
               fi
               echo "Created archive: release/${ARCHIVE_NAME}"
             else
               echo "Warning: ${BIN_FILE} not found"
             fi
           else
-            # macOS
+            # macOS / other
             BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}"
-            ARCHIVE_NAME="${BINARY_NAME}-${REF_NAME}-${TARGET_TRIPLE}.tar.gz"
             if [ -f "${BIN_FILE}" ]; then
               chmod +x "${BIN_FILE}"
-              tar -czf "release/${ARCHIVE_NAME}" -C "target/${TARGET_TRIPLE}/release" "${BINARY_NAME}"
+              cp "${BIN_FILE}" "$DIST_DIR/"
+              ARCHIVE_NAME="${NAME}-${TARGET_TRIPLE}-v${VERSION}.tar.gz"
+              tar -C dist -czf "release/${ARCHIVE_NAME}" "${NAME}-${TARGET_TRIPLE}-v${VERSION}"
               echo "Created archive: release/${ARCHIVE_NAME}"
             else
               echo "Warning: ${BIN_FILE} not found"
