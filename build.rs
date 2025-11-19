@@ -3,6 +3,7 @@ use serde_json::Value as JsonValue;
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
+    path::Path,
     process::Command,
 };
 use toml::value::{Table, Value as TomlValue};
@@ -189,8 +190,46 @@ fn main() -> Result<()> {
     // write to res/about_cache.toml
     let toml_val = TomlValue::Table(out_tbl);
     if let Ok(content) = toml::to_string_pretty(&toml_val) {
-        fs::create_dir_all("res")?;
-        fs::write("res/about_cache.toml", content)?;
+        // Prefer writing into the project `res/` directory when possible. However,
+        // on docs.rs and other read-only build environments the source tree is
+        // mounted read-only which causes an error. Handle that by falling back
+        // to the writable `OUT_DIR`.
+
+        // If DOCS_RS is set, proactively write into OUT_DIR to avoid write errors.
+        let use_out_dir = env::var("DOCS_RS").is_ok();
+
+        if use_out_dir {
+            if let Ok(out_dir) = env::var("OUT_DIR") {
+                let fallback_dir = Path::new(&out_dir).join("res");
+                fs::create_dir_all(&fallback_dir)?;
+                fs::write(fallback_dir.join("about_cache.toml"), content)?;
+                println!("cargo:warning=Running in DOCS_RS/read-only mode: wrote about_cache.toml to OUT_DIR");
+            } else {
+                // As a last resort try writing into project; if it fails return the error
+                fs::create_dir_all("res")?;
+                fs::write("res/about_cache.toml", content)?;
+            }
+        } else {
+            // Try to write into project directory first; if that fails, fall back to OUT_DIR.
+            match (|| -> Result<(), std::io::Error> {
+                fs::create_dir_all("res")?;
+                fs::write("res/about_cache.toml", &content)?;
+                Ok(())
+            })() {
+                Ok(()) => {}
+                Err(e) => {
+                    // Attempt fallback to OUT_DIR
+                    if let Ok(out_dir) = env::var("OUT_DIR") {
+                        let fallback_dir = Path::new(&out_dir).join("res");
+                        fs::create_dir_all(&fallback_dir)?;
+                        fs::write(fallback_dir.join("about_cache.toml"), content)?;
+                        println!("cargo:warning=Could not write to project res/: {}. Wrote about_cache.toml to OUT_DIR instead.", e);
+                    } else {
+                        return Err(anyhow::Error::new(e));
+                    }
+                }
+            }
+        }
     }
 
     Ok(())
