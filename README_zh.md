@@ -49,7 +49,14 @@
 
 1. 安装 Rust 工具链
 2. 克隆本仓库并进入目录
-3. 运行 `cargo install --path .` 安装 Aoba
+3. 安装：
+
+   - 从源码构建并安装：`cargo install aoba`
+   - 或使用 CI 预构建的 release（如果已发布）通过 `cargo-binstall` 安装：
+
+     - 示例：`cargo binstall --manifest-path ./Cargo.toml --version <version>`
+
+     - 可使用 `--target <triple>` 指定目标平台（例如 `x86_64-unknown-linux-gnu`）。
 4. 运行 `aoba`，默认启动 TUI 界面进行配置与操作；如需在 TUI 模式下保存配置并留到后续使用，请参考下文“持久配置文件”章节
 
 ## 持久配置文件
