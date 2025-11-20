@@ -77,22 +77,33 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
             if !new_map.contains_key(old_port_name) {
                 // Port was not in the new enumeration
                 // Preserve it if:
-                // 1. It's occupied (being used)
-                // 2. It has modbus configuration
-                // 3. It has logs
+                // 1. It's a virtual/IPC port (not enumerated by serialport)
+                // 2. It's occupied (being used)
+                // 3. It has modbus configuration
+                // 4. It has logs
                 use crate::tui::status::port::PortConfig;
                 let has_config = match &old_port_data.config {
                     PortConfig::Modbus { stations, .. } => !stations.is_empty(),
                 };
 
-                let should_preserve = !matches!(old_port_data.state, PortState::Free)
+                // Check if port name is a valid UUID (IPC ports use UUID format)
+                let is_uuid_port = uuid::Uuid::parse_str(old_port_name).is_ok();
+
+                let is_virtual_port = old_port_data.port_type == "IPC"
+                    || old_port_data.port_type == "Virtual"
+                    || old_port_name.contains("vcom")
+                    || is_uuid_port;
+
+                let should_preserve = is_virtual_port  // Always preserve IPC/virtual ports
+                    || !matches!(old_port_data.state, PortState::Free)
                     || has_config
                     || !old_port_data.logs.is_empty();
 
                 if should_preserve {
                     log::debug!(
-                        "scan_ports: preserving non-enumerated port {} (state={:?}, has_config={})",
+                        "scan_ports: preserving non-enumerated port {} (type={}, state={:?}, has_config={})",
                         old_port_name,
+                        old_port_data.port_type,
                         old_port_data.state,
                         has_config
                     );

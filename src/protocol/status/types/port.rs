@@ -47,6 +47,13 @@ pub struct PortLogEntry {
     pub metadata: Option<PortLogMetadata>,
 }
 
+/// CLI subprocess stderr log entry (for crash diagnostics)
+#[derive(Debug, Clone)]
+pub struct CliStderrLog {
+    pub when: DateTime<Local>,
+    pub line: String,
+}
+
 #[derive(Debug, Clone)]
 pub enum PortLogMetadata {
     Lifecycle(PortLifecycleLog),
@@ -222,6 +229,9 @@ pub struct PortData {
     pub status_indicator: PortStatusIndicator,
     /// Whether the config has been modified since last save
     pub config_modified: bool,
+
+    /// CLI subprocess stderr logs (captures crash/error output)
+    pub cli_stderr_logs: Vec<CliStderrLog>,
 }
 
 impl Default for PortData {
@@ -239,6 +249,7 @@ impl Default for PortData {
             log_clear_pending: false,
             status_indicator: PortStatusIndicator::NotStarted,
             config_modified: false,
+            cli_stderr_logs: Vec::new(),
         }
     }
 }
