@@ -36,14 +36,15 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
         let mut new_map = std::collections::HashMap::new();
 
         // First, process enumerated ports
-        for (port_name, port_type) in &port_names_and_types {
+        for (port_name, _port_type) in &port_names_and_types {
             new_order.push(port_name.clone());
 
             // Check if port already exists in status
             if let Some(existing_port) = status.ports.map.get(port_name) {
                 // Port already exists, preserve its data but reset state for re-checking
                 let mut preserved = existing_port.clone();
-                preserved.port_type = port_type.clone();
+                preserved.port_type =
+                    crate::protocol::status::types::port::PortType::detect(port_name);
 
                 // CRITICAL: Only preserve state if port is occupied by THIS program
                 // For other states (Free, OccupiedByOther), reset to Free and re-check
@@ -62,7 +63,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 // New port discovered, create PortData with default values
                 let port_data = PortData {
                     port_name: port_name.clone(),
-                    port_type: port_type.clone(),
+                    port_type: crate::protocol::status::types::port::PortType::detect(port_name),
                     state: PortState::Free,
                     ..Default::default()
                 };
@@ -86,13 +87,9 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                     PortConfig::Modbus { stations, .. } => !stations.is_empty(),
                 };
 
-                // Check if port name is a valid UUID (IPC ports use UUID format)
-                let is_uuid_port = uuid::Uuid::parse_str(old_port_name).is_ok();
-
-                let is_virtual_port = old_port_data.port_type == "IPC"
-                    || old_port_data.port_type == "Virtual"
-                    || old_port_name.contains("vcom")
-                    || is_uuid_port;
+                // Check if this is a virtual port using PortType enum
+                let is_virtual_port =
+                    old_port_data.port_type.is_virtual() || old_port_name.contains("vcom");
 
                 let should_preserve = is_virtual_port  // Always preserve IPC/virtual ports
                     || !matches!(old_port_data.state, PortState::Free)
@@ -181,13 +178,13 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
 
     for (name, opt_type) in merged {
         new_order.push(name.clone());
-        if let Some(ptype) = opt_type {
+        if let Some(_ptype) = opt_type {
             // If enumerated, either preserve existing data or create new PortData
             if let Some(existing) =
                 crate::tui::status::read_status(|status| Ok(status.ports.map.get(&name).cloned()))?
             {
                 let mut preserved = existing.clone();
-                preserved.port_type = ptype.clone();
+                preserved.port_type = crate::protocol::status::types::port::PortType::detect(&name);
                 if !preserved.state.is_occupied_by_this() {
                     preserved.state = PortState::Free;
                 }
@@ -195,7 +192,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
             } else {
                 let port_data = PortData {
                     port_name: name.clone(),
-                    port_type: ptype.clone(),
+                    port_type: crate::protocol::status::types::port::PortType::detect(&name),
                     state: PortState::Free,
                     ..Default::default()
                 };

@@ -116,11 +116,12 @@ pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
             }
 
             if !status.ports.map.contains_key(port_name) {
-                let mut port_data = PortData {
+                use crate::protocol::status::types::port::PortType;
+                let port_data = PortData {
                     port_name: port_name.clone(),
+                    port_type: PortType::detect(port_name),
                     ..PortData::default()
                 };
-                port_data.port_type = "Daemon".to_string();
                 status.ports.map.insert(port_name.clone(), port_data);
             }
 
