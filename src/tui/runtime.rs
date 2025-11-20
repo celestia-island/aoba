@@ -432,6 +432,42 @@ pub async fn run_core_thread(
             }
         }
 
+        // Poll stderr logs from CLI subprocesses
+        let stderr_logs = subprocess_manager.poll_stderr_logs();
+        for (port_name, logs) in &stderr_logs {
+            if !logs.is_empty() {
+                log::info!(
+                    "📝 Received {} stderr log(s) from CLI[{}]",
+                    logs.len(),
+                    port_name
+                );
+
+                // Add stderr logs to port data
+                let port_name_owned = port_name.clone();
+                let logs_owned = logs.clone();
+                if let Err(err) = crate::tui::status::write_status(move |status| {
+                    if let Some(port) = status.ports.map.get_mut(&port_name_owned) {
+                        use crate::tui::status::port::CliStderrLog;
+                        for log_line in &logs_owned {
+                            port.cli_stderr_logs.push(CliStderrLog {
+                                when: Local::now(),
+                                line: log_line.clone(),
+                            });
+                        }
+
+                        // Keep only the most recent 100 stderr logs per port
+                        if port.cli_stderr_logs.len() > 100 {
+                            let start = port.cli_stderr_logs.len() - 100;
+                            port.cli_stderr_logs.drain(0..start);
+                        }
+                    }
+                    Ok(())
+                }) {
+                    log::warn!("Failed to store stderr logs for {}: {}", port_name, err);
+                }
+            }
+        }
+
         let ipc_messages = subprocess_manager.poll_ipc_messages();
         let mut needs_refresh = false;
         for (port_name, message) in ipc_messages {

@@ -136,7 +136,7 @@ pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
     // On Windows, check if the test ports are available
     #[cfg(windows)]
     {
-        log::info!("Checking for ports: {port1} and {port2}");
+        log::info!("🔍 Windows: Checking for ports: {port1} and {port2}");
 
         let port1_exists = port_exists(port1);
         let port2_exists = port_exists(port2);
@@ -146,10 +146,14 @@ pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
         );
 
         if !port1_exists || !port2_exists {
-            log::info!("Virtual serial port tests disabled on Windows: missing ports");
+            log::warn!("⚠️  Virtual serial port tests disabled on Windows: missing ports");
+            log::warn!("📖 To enable tests, create virtual COM port pairs using:");
+            log::warn!("   1. Install com0com from https://sourceforge.net/projects/com0com/");
+            log::warn!("   2. Run: .\\scripts\\setup_windows_vcom.ps1 (as Administrator)");
+            log::warn!("   3. Or see docs\\zh-chs\\WINDOWS_VIRTUAL_PORTS.md for details");
             return false;
         }
-        log::info!("Both ports available, tests will run");
+        log::info!("✅ Both ports available, tests will run");
         true
     }
 

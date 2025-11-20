@@ -198,6 +198,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         log_clear_pending: false,
                         status_indicator: PortStatusIndicator::NotStarted,
                         config_modified: false,
+                        cli_stderr_logs: Vec::new(),
                     };
 
                     status.ports.order.push(new_port_name.clone());
