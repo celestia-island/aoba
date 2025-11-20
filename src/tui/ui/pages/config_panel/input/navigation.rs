@@ -17,15 +17,19 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
             ..
         } = &mut status.page
         {
-            let (occupied, is_virtual) = if let Some(port_name) = status.ports.order.get(*selected_port) {
-                if let Some(port) = status.ports.map.get(port_name) {
-                    (port.state.is_occupied_by_this(), port.port_type.is_virtual())
+            let (occupied, is_virtual) =
+                if let Some(port_name) = status.ports.order.get(*selected_port) {
+                    if let Some(port) = status.ports.map.get(port_name) {
+                        (
+                            port.state.is_occupied_by_this(),
+                            port.port_type.is_virtual(),
+                        )
+                    } else {
+                        (false, false)
+                    }
                 } else {
                     (false, false)
-                }
-            } else {
-                (false, false)
-            };
+                };
 
             if !occupied {
                 // Port not occupied: allow movement within the first group of

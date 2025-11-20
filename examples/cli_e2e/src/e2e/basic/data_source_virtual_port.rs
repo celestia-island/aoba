@@ -1,8 +1,5 @@
 use anyhow::Result;
-use std::{
-    io::Write,
-    process::Stdio,
-};
+use std::{io::Write, process::Stdio};
 
 use crate::utils::{build_debug_bin, wait_for_process_ready};
 use _main::{
@@ -17,7 +14,9 @@ const REGISTER_LENGTH: usize = 10;
 /// Tests that CLI correctly detects virtual ports and provides appropriate error message
 /// Virtual ports are designed for IPC/HTTP communication, not traditional serial modbus
 pub async fn test_virtual_port() -> Result<()> {
-    log::info!("🧪 Testing virtual port with UUID (verify recognition, no baud rate dependency)...");
+    log::info!(
+        "🧪 Testing virtual port with UUID (verify recognition, no baud rate dependency)..."
+    );
     let temp_dir = std::env::temp_dir();
 
     // Generate UUID v7 for virtual port name
@@ -66,25 +65,28 @@ pub async fn test_virtual_port() -> Result<()> {
     // Wait for process to exit (it should exit quickly with error)
     sleep_3s().await;
     let status = slave_child.wait()?;
-    
+
     // Verify it exited with error (expected behavior for virtual ports)
-    assert!(!status.success(), "Slave should exit with error for virtual port");
-    
+    assert!(
+        !status.success(),
+        "Slave should exit with error for virtual port"
+    );
+
     // Read stderr to verify proper virtual port detection
     let stderr_content = std::fs::read_to_string(&slave_stderr)?;
     log::info!("📖 Slave stderr content:\n{}", stderr_content);
-    
+
     // Verify the error message mentions virtual port
     assert!(
-        stderr_content.to_lowercase().contains("virtual port") 
+        stderr_content.to_lowercase().contains("virtual port")
             || stderr_content.to_lowercase().contains("ipc"),
         "Error message should mention virtual port or IPC: {}",
         stderr_content
     );
-    
+
     log::info!("✅ CLI correctly detected UUID as virtual port (IPC type)");
     log::info!("✅ No baud rate configuration was attempted (as expected)");
-    
+
     // Test 2: Try master with virtual port
     let master_output = temp_dir.join("master_virtual_port_output.log");
     let master_output_file = std::fs::File::create(&master_output)?;
@@ -121,15 +123,15 @@ pub async fn test_virtual_port() -> Result<()> {
 
     // Wait for process (should handle virtual port appropriately)
     sleep_3s().await;
-    
+
     // Kill the master process
     let _ = master_child.kill();
     let _ = master_child.wait();
-    
+
     // Read master stderr
     let master_stderr_content = std::fs::read_to_string(&master_stderr)?;
     log::info!("📖 Master stderr content:\n{}", master_stderr_content);
-    
+
     // Master mode with virtual port should either:
     // 1. Skip serial port opening (success case)
     // 2. Provide clear virtual port message
@@ -141,6 +143,6 @@ pub async fn test_virtual_port() -> Result<()> {
     log::info!("✅ Verified: UUID format recognized as virtual port (IPC type)");
     log::info!("✅ Verified: No baud rate dependency for virtual ports");
     log::info!("✅ Verified: Appropriate error messages for unsupported operations");
-    
+
     Ok(())
 }
