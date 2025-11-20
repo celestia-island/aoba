@@ -305,7 +305,7 @@ fn render_node(
     // Get port data
     let (port_state, port_type, master_source) = if let Some(port_data) = ports_map.get(port_name) {
         let state = port_data.state.clone();
-        let ptype = port_data.port_type.clone();
+        let ptype = port_data.port_type;
         let master_source = if state.is_occupied_by_this() {
             let crate::tui::status::port::PortConfig::Modbus { master_source, .. } =
                 &port_data.config;
@@ -315,7 +315,8 @@ fn render_node(
         };
         (state, ptype, master_source)
     } else {
-        (PortState::Free, String::new(), None)
+        use crate::protocol::status::types::port::PortType;
+        (PortState::Free, PortType::Unknown, None)
     };
 
     // Determine status indicator
@@ -379,22 +380,27 @@ fn render_node(
     // Build node content - two lines (node height is 4: top border + 2 content lines + bottom border)
     // No angle brackets in the text - selection is shown via the indicator above
     if inner.height >= 2 && inner.width >= 3 {
-        // Determine port type display label
-        let port_type_label = if port_type.contains("http") || port_type.contains("HTTP") {
-            if lang().index.title.contains("中") {
-                "HTTP 服务器"
-            } else {
-                "HTTP Server"
+        // Determine port type display label using PortType enum
+        use crate::protocol::status::types::port::PortType;
+        let port_type_label = match port_type {
+            PortType::HTTP => {
+                if lang().index.title.contains("中") {
+                    "HTTP 服务器"
+                } else {
+                    "HTTP Server"
+                }
             }
-        } else if port_type.contains("ipc") || port_type.contains("IPC") {
-            if lang().index.title.contains("中") {
-                "IPC 管道"
-            } else {
-                "IPC Pipe"
+            PortType::IPC => {
+                if lang().index.title.contains("中") {
+                    "IPC 管道"
+                } else {
+                    "IPC Pipe"
+                }
             }
-        } else {
-            // Default to serial port
-            lang().index.port_suffix.as_str()
+            PortType::Physical | PortType::Unknown => {
+                // Default to serial port
+                lang().index.port_suffix.as_str()
+            }
         };
 
         let text_style = if is_selected {

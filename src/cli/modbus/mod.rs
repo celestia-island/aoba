@@ -64,6 +64,19 @@ pub(crate) fn open_serial_port(
     baud_rate: u32,
     timeout: Duration,
 ) -> Result<Box<dyn serialport::SerialPort>> {
+    use crate::protocol::status::types::port::PortType;
+
+    // Check if this is a virtual port (IPC/HTTP)
+    let port_type = PortType::detect(port);
+    if port_type.is_virtual() {
+        return Err(anyhow!(
+            "Port {} is a virtual port (type: {}). Virtual ports cannot be opened as physical serial ports. \
+            Use IPC or HTTP communication methods instead.",
+            port,
+            port_type
+        ));
+    }
+
     let builder = serialport::new(port, baud_rate).timeout(timeout);
 
     #[cfg(unix)]

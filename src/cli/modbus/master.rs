@@ -390,7 +390,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
     // Open serial port and wait for one request, then respond and exit
     let port_handle = open_serial_port_with_retry(port, baud_rate, Duration::from_secs(5)).await?;
 
-    let port_arc = Arc::new(Mutex::new(port_handle));
+    let port_arc = Arc::new(Mutex::new(Some(port_handle)));
 
     // Wait for request and respond once
     let mut buffer = [0u8; 256];
@@ -411,27 +411,31 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         }
 
         let action = {
-            let mut port = port_arc.lock().unwrap();
-            match port.read(&mut buffer) {
-                Ok(n) if n > 0 => {
-                    assembling.extend_from_slice(&buffer[..n]);
-                    ReadAction::Data
-                }
-                Ok(_) => {
-                    if !assembling.is_empty() {
-                        ReadAction::FrameReady
-                    } else {
-                        ReadAction::NoData
+            let mut port_lock = port_arc.lock().unwrap();
+            if let Some(port) = port_lock.as_mut() {
+                match port.read(&mut buffer) {
+                    Ok(n) if n > 0 => {
+                        assembling.extend_from_slice(&buffer[..n]);
+                        ReadAction::Data
                     }
-                }
-                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                    if !assembling.is_empty() {
-                        ReadAction::FrameReady
-                    } else {
-                        ReadAction::Timeout
+                    Ok(_) => {
+                        if !assembling.is_empty() {
+                            ReadAction::FrameReady
+                        } else {
+                            ReadAction::NoData
+                        }
                     }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                        if !assembling.is_empty() {
+                            ReadAction::FrameReady
+                        } else {
+                            ReadAction::Timeout
+                        }
+                    }
+                    Err(err) => ReadAction::Error(err.to_string()),
                 }
-                Err(err) => ReadAction::Error(err.to_string()),
+            } else {
+                ReadAction::Error("Port is None".to_string())
             }
         };
 
@@ -532,36 +536,58 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         None
     };
 
-    // Open serial port with longer timeout for reading requests
-    let port_handle =
-        match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50)).await {
-            Ok(handle) => handle,
-            Err(err) => {
-                if let Some(ref mut ipc_conns) = ipc_connections {
-                    let _ = ipc_conns
-                        .status
-                        .send(&crate::protocol::ipc::IpcMessage::PortError {
-                            port_name: port.to_string(),
-                            error: format!("Failed to open port: {err}"),
-                            timestamp: None,
-                        });
+    // Check if this is a virtual port (IPC/HTTP) that doesn't need a physical serial port
+    let is_virtual = crate::protocol::modbus::is_virtual_port(port);
+
+    // Open serial port with longer timeout for reading requests (only for physical ports)
+    let port_arc = if is_virtual {
+        log::info!("Port {port} is a virtual port (IPC/HTTP) - skipping physical serial port open");
+
+        // Notify IPC that virtual port is ready
+        if let Some(ref mut ipc_conns) = ipc_connections {
+            let _ = ipc_conns
+                .status
+                .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+                    port_name: port.to_string(),
+                    timestamp: None,
+                });
+            log::info!("IPC: Sent PortOpened message for virtual port {port}");
+        }
+
+        // Return None wrapped in Arc<Mutex<>> for virtual ports
+        Arc::new(Mutex::new(None))
+    } else {
+        let port_handle =
+            match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50)).await {
+                Ok(handle) => handle,
+                Err(err) => {
+                    if let Some(ref mut ipc_conns) = ipc_connections {
+                        let _ =
+                            ipc_conns
+                                .status
+                                .send(&crate::protocol::ipc::IpcMessage::PortError {
+                                    port_name: port.to_string(),
+                                    error: format!("Failed to open port: {err}"),
+                                    timestamp: None,
+                                });
+                    }
+                    return Err(err);
                 }
-                return Err(err);
-            }
-        };
+            };
 
-    let port_arc = Arc::new(Mutex::new(port_handle));
+        // Notify IPC that port was opened successfully
+        if let Some(ref mut ipc_conns) = ipc_connections {
+            let _ = ipc_conns
+                .status
+                .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+                    port_name: port.to_string(),
+                    timestamp: None,
+                });
+            log::info!("IPC: Sent PortOpened message for physical port {port}");
+        }
 
-    // Notify IPC that port was opened successfully
-    if let Some(ref mut ipc_conns) = ipc_connections {
-        let _ = ipc_conns
-            .status
-            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
-                port_name: port.to_string(),
-                timestamp: None,
-            });
-        log::info!("IPC: Sent PortOpened message for {port}");
-    }
+        Arc::new(Mutex::new(Some(port_handle)))
+    };
 
     // Register cleanup to ensure port is released on program exit
     {
@@ -1023,154 +1049,164 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
         let action2 = {
             let mut port = port_arc.lock().unwrap();
-            match port.read(&mut buffer) {
-                Ok(n) if n > 0 => {
-                    log::info!(
-                        "CLI Master: Read {n} bytes from port: {:02X?}",
-                        &buffer[..n]
-                    );
-                    assembling.extend_from_slice(&buffer[..n]);
-                    last_byte_time = Some(std::time::Instant::now());
-                    ReadAction2::Data
-                }
-                Ok(_) => {
-                    if !assembling.is_empty() {
-                        if let Some(last_time) = last_byte_time {
-                            if last_time.elapsed() >= frame_gap {
-                                // Determine parsed_range without holding lock
-                                let request_preview = assembling.clone();
-                                let parsed_range = if request_preview.len() >= 8 {
-                                    let func = request_preview[1];
-                                    match func {
-                                        0x01 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+
+            // For virtual ports, skip serial port reading entirely
+            if port.is_none() {
+                // Virtual port: just sleep a bit to avoid busy loop
+                drop(port);
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                ReadAction2::NoData
+            } else {
+                let result = match port.as_mut().unwrap().read(&mut buffer) {
+                    Ok(n) if n > 0 => {
+                        log::info!(
+                            "CLI Master: Read {n} bytes from port: {:02X?}",
+                            &buffer[..n]
+                        );
+                        assembling.extend_from_slice(&buffer[..n]);
+                        last_byte_time = Some(std::time::Instant::now());
+                        ReadAction2::Data
+                    }
+                    Ok(_) => {
+                        if !assembling.is_empty() {
+                            if let Some(last_time) = last_byte_time {
+                                if last_time.elapsed() >= frame_gap {
+                                    // Determine parsed_range without holding lock
+                                    let request_preview = assembling.clone();
+                                    let parsed_range = if request_preview.len() >= 8 {
+                                        let func = request_preview[1];
+                                        match func {
+                                            0x01 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                            }
+                                            0x02 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                            }
+                                            0x03 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                            }
+                                            0x04 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                            }
+                                            _ => None,
                                         }
-                                        0x02 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                        }
-                                        0x03 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                        }
-                                        0x04 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                        }
-                                        _ => None,
-                                    }
+                                    } else {
+                                        None
+                                    };
+                                    ReadAction2::FrameReady(parsed_range)
                                 } else {
-                                    None
-                                };
-                                ReadAction2::FrameReady(parsed_range)
+                                    ReadAction2::NoData
+                                }
                             } else {
                                 ReadAction2::NoData
                             }
                         } else {
                             ReadAction2::NoData
                         }
-                    } else {
-                        ReadAction2::NoData
                     }
-                }
-                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                    if !assembling.is_empty() {
-                        if let Some(last_time) = last_byte_time {
-                            if last_time.elapsed() >= frame_gap {
-                                let request_preview = assembling.clone();
-                                let parsed_range = if request_preview.len() >= 8 {
-                                    let func = request_preview[1];
-                                    match func {
-                                        0x01 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                        if !assembling.is_empty() {
+                            if let Some(last_time) = last_byte_time {
+                                if last_time.elapsed() >= frame_gap {
+                                    let request_preview = assembling.clone();
+                                    let parsed_range = if request_preview.len() >= 8 {
+                                        let func = request_preview[1];
+                                        match func {
+                                            0x01 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                            }
+                                            0x02 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                            }
+                                            0x03 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                            }
+                                            0x04 => {
+                                                let start = u16::from_be_bytes([
+                                                    request_preview[2],
+                                                    request_preview[3],
+                                                ]);
+                                                let qty = u16::from_be_bytes([
+                                                    request_preview[4],
+                                                    request_preview[5],
+                                                ]);
+                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                            }
+                                            _ => None,
                                         }
-                                        0x02 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                        }
-                                        0x03 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                        }
-                                        0x04 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                        }
-                                        _ => None,
-                                    }
+                                    } else {
+                                        None
+                                    };
+                                    ReadAction2::FrameReady(parsed_range)
                                 } else {
-                                    None
-                                };
-                                ReadAction2::FrameReady(parsed_range)
+                                    ReadAction2::Timeout
+                                }
                             } else {
                                 ReadAction2::Timeout
                             }
                         } else {
                             ReadAction2::Timeout
                         }
-                    } else {
-                        ReadAction2::Timeout
                     }
-                }
-                Err(err) => ReadAction2::Error(err.to_string()),
+                    Err(err) => ReadAction2::Error(err.to_string()),
+                };
+                result
             }
         };
 
@@ -1275,7 +1311,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
 /// Respond to a Modbus request (acting as Slave/Server)
 fn respond_to_request(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    port_arc: Arc<Mutex<Option<Box<dyn serialport::SerialPort>>>>,
     request: &[u8],
     station_id: u8,
     storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
@@ -1639,12 +1675,20 @@ fn respond_to_request(
 
     drop(context);
 
-    // Send response
-    let mut port = port_arc.lock().unwrap();
+    // Send response (only for physical ports, virtual ports don't need serial write)
     let response_frame = response.clone();
-    port.write_all(&response)?;
-    port.flush()?;
-    drop(port);
+    {
+        let mut port_guard = port_arc.lock().unwrap();
+        if let Some(ref mut port) = *port_guard {
+            port.write_all(&response)?;
+            port.flush()?;
+            log::info!("respond_to_request: Sent response via physical serial port");
+        } else {
+            log::info!(
+                "respond_to_request: Virtual port - response ready but no physical write needed"
+            );
+        }
+    }
 
     log::info!("respond_to_request: Sent response to slave: {response:02X?}");
 

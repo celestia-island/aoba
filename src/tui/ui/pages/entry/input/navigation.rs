@@ -180,9 +180,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
                 // Add to ports
                 write_status(|status| {
+                    use crate::protocol::status::types::port::PortType;
                     let new_port = PortData {
                         port_name: new_port_name.clone(),
-                        port_type: port_type_name.to_string(),
+                        port_type: PortType::IPC,
                         extra: Default::default(),
                         state: PortState::Free,
                         subprocess_info: None,
