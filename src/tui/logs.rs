@@ -487,7 +487,7 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
     let translations = lang();
     let summary = translations.tabs.log.subprocess_exited_summary.clone();
 
-    let (success, detail) = match exit_status {
+    let (success, mut detail) = match exit_status {
         Some(status) => {
             let success = status.success();
             let detail = if success {
@@ -502,6 +502,35 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
         }
         None => (None, translations.tabs.log.reason_none.clone()),
     };
+
+    // If process exited abnormally, append recent stderr logs to the detail
+    if success != Some(true) {
+        if let Ok(stderr_summary) = crate::tui::status::read_status(|status| {
+            if let Some(port) = status.ports.map.get(port_name) {
+                if !port.cli_stderr_logs.is_empty() {
+                    // Get the last 3 stderr lines
+                    let recent_logs: Vec<String> = port
+                        .cli_stderr_logs
+                        .iter()
+                        .rev()
+                        .take(3)
+                        .map(|log| log.line.clone())
+                        .collect();
+                    if !recent_logs.is_empty() {
+                        return Ok(Some(format!(
+                            "\n[Recent stderr] {}",
+                            recent_logs.join(" | ")
+                        )));
+                    }
+                }
+            }
+            Ok(None)
+        }) {
+            if let Some(stderr_text) = stderr_summary {
+                detail.push_str(&stderr_text);
+            }
+        }
+    }
 
     append_management_log(
         port_name,
