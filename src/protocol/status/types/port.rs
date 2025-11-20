@@ -4,6 +4,77 @@ use serde::{Deserialize, Serialize};
 use super::modbus::{ModbusConnectionMode, ModbusMasterDataSource, ModbusRegisterItem};
 use crate::protocol::tty::PortExtra;
 
+/// Port type classification based on the port name format.
+/// This provides type-safe port identification without string parsing at usage sites.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum PortType {
+    /// Physical serial port (e.g., COM1, /dev/ttyUSB0)
+    Physical,
+    /// IPC virtual port using UUID format
+    IPC,
+    /// HTTP/HTTPS virtual port
+    HTTP,
+    /// Unknown port type (fallback for unrecognized formats)
+    Unknown,
+}
+
+impl Default for PortType {
+    fn default() -> Self {
+        PortType::Unknown
+    }
+}
+
+impl PortType {
+    /// Check if this port type is virtual (IPC or HTTP)
+    pub fn is_virtual(&self) -> bool {
+        matches!(self, PortType::IPC | PortType::HTTP)
+    }
+
+    /// Check if this port type is physical
+    pub fn is_physical(&self) -> bool {
+        matches!(self, PortType::Physical)
+    }
+
+    /// Detect port type from port name
+    pub fn detect(port_name: &str) -> Self {
+        // Check if it's a UUID (IPC ports use UUID v7 format)
+        if uuid::Uuid::parse_str(port_name).is_ok() {
+            return PortType::IPC;
+        }
+
+        // Check if it's an HTTP/HTTPS URL
+        if port_name.starts_with("http://") || port_name.starts_with("https://") {
+            return PortType::HTTP;
+        }
+
+        // Check if it looks like a physical port name
+        #[cfg(windows)]
+        if port_name.starts_with("COM") {
+            return PortType::Physical;
+        }
+
+        #[cfg(unix)]
+        if port_name.starts_with("/dev/") {
+            return PortType::Physical;
+        }
+
+        // Fallback to Unknown for unrecognized formats
+        PortType::Unknown
+    }
+}
+
+impl std::fmt::Display for PortType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PortType::Physical => write!(f, "Physical"),
+            PortType::IPC => write!(f, "IPC"),
+            PortType::HTTP => write!(f, "HTTP"),
+            PortType::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
 /// Serial port configuration (baud rate, data bits, stop bits, parity)
 /// This replaces the runtime SerialConfig that was in the disabled runtime module
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,7 +280,7 @@ impl PortState {
 #[derive(Debug, Clone)]
 pub struct PortData {
     pub port_name: String,
-    pub port_type: String,
+    pub port_type: PortType,
     pub extra: PortExtra,
     pub state: PortState,
 
@@ -238,7 +309,7 @@ impl Default for PortData {
     fn default() -> Self {
         PortData {
             port_name: String::new(),
-            port_type: String::new(),
+            port_type: PortType::Unknown,
             extra: Default::default(),
             state: PortState::Free,
             subprocess_info: None,

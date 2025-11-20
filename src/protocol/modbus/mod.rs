@@ -290,6 +290,13 @@ pub fn boot_modbus_slave_service(
     Ok(())
 }
 
+/// Check if a port name represents a virtual port (IPC/HTTP) rather than a physical serial port.
+/// This is a convenience wrapper around PortType::detect().is_virtual().
+pub fn is_virtual_port(port_name: &str) -> bool {
+    use crate::protocol::status::types::port::PortType;
+    PortType::detect(port_name).is_virtual()
+}
+
 /// Validate and parse a Modbus RTU pull set response.
 pub fn parse_pull_set_response(request: &mut ModbusRequest, response: Vec<u8>) -> Result<()> {
     request.parse_ok(&response)?;
