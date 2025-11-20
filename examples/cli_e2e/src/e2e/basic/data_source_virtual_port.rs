@@ -1,27 +1,39 @@
 use anyhow::Result;
-use std::{io::Write, process::Stdio};
+use std::process::Stdio;
 
-use crate::utils::{build_debug_bin, wait_for_process_ready};
-use _main::{
-    cli::modbus::ModbusResponse,
-    utils::{sleep::sleep_1s, sleep_3s},
-};
+use crate::utils::build_debug_bin;
+use _main::utils::sleep::sleep_3s;
 
 // File-level constants
 const REGISTER_LENGTH: usize = 10;
+const DEFAULT_VIRTUAL_PORT_UUID: &str = "00000000-0000-0000-0000-000000000001";
 
 /// Test virtual port with UUID - CLI recognizes UUID as virtual port
 /// Tests that CLI correctly detects virtual ports and provides appropriate error message
 /// Virtual ports are designed for IPC/HTTP communication, not traditional serial modbus
-pub async fn test_virtual_port() -> Result<()> {
+pub async fn test_virtual_port(fixed_uuid: Option<String>) -> Result<()> {
     log::info!(
         "🧪 Testing virtual port with UUID (verify recognition, no baud rate dependency)..."
     );
     let temp_dir = std::env::temp_dir();
 
-    // Generate UUID v7 for virtual port name
-    let virtual_port_uuid = uuid::Uuid::now_v7().to_string();
-    log::info!("📍 Using virtual port UUID: {}", virtual_port_uuid);
+    // Generate or reuse UUID for virtual port name
+    let virtual_port_uuid = if let Some(override_uuid) = fixed_uuid {
+        log::info!(
+            "📌 Using provided virtual port UUID override: {}",
+            override_uuid
+        );
+        override_uuid
+    } else if let Ok(env_uuid) = std::env::var("AOBA_VIRTUAL_PORT_UUID") {
+        log::info!("📌 Using AOBA_VIRTUAL_PORT_UUID from env: {}", env_uuid);
+        env_uuid
+    } else {
+        log::info!(
+            "📍 Using default deterministic virtual port UUID: {}",
+            DEFAULT_VIRTUAL_PORT_UUID
+        );
+        DEFAULT_VIRTUAL_PORT_UUID.to_string()
+    };
 
     let binary = build_debug_bin("aoba")?;
     let register_length_arg = REGISTER_LENGTH.to_string();
@@ -42,6 +54,7 @@ pub async fn test_virtual_port() -> Result<()> {
     // Launch slave with virtual port (UUID name)
     // This should detect the UUID format and provide appropriate error
     let mut slave_child = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .arg("--slave-listen-persist")
         .arg(&virtual_port_uuid)
         .arg("--station-id")
@@ -100,6 +113,7 @@ pub async fn test_virtual_port() -> Result<()> {
     );
 
     let mut master_child = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .arg("--master-provide-temp")
         .arg(&virtual_port_uuid)
         .arg("--station-id")

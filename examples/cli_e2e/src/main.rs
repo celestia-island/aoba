@@ -55,6 +55,10 @@ struct Args {
     #[arg(long, default_value = "/tmp/vcom2")]
     port2: String,
 
+    /// Optional override for the UUID used in virtual port tests (for deterministic CI)
+    #[arg(long)]
+    virtual_port_uuid: Option<String>,
+
     /// Enable debug mode (show debug breakpoints and additional logging)
     #[arg(long)]
     debug: bool,
@@ -135,6 +139,10 @@ async fn main() -> Result<()> {
         args.port2
     );
 
+    if let Some(uuid_override) = &args.virtual_port_uuid {
+        log::info!("📌 Virtual port UUID override: {}", uuid_override);
+    }
+
     // If no module specified, show available modules and exit
     let module = match &args.module {
         Some(m) => m.as_str(),
@@ -209,7 +217,7 @@ async fn main() -> Result<()> {
         "data_source_ipc_channel" => test_ipc_channel_data_source().await?,
         "data_source_http" => test_http_data_source().await?,
         "data_source_mqtt" => test_mqtt_data_source().await?,
-        "data_source_virtual_port" => test_virtual_port().await?,
+        "data_source_virtual_port" => test_virtual_port(args.virtual_port_uuid.clone()).await?,
 
         // Write tests (slave-to-master)
         "slave_write_coils" => test_slave_write_coils().await?,
