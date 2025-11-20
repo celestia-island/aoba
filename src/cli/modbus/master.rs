@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Result};
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::{
     cell::RefCell,
     collections::{hash_map::DefaultHasher, HashMap},
@@ -10,6 +12,9 @@ use std::{
 
 use axum::{extract::State, http::StatusCode, Json, Router};
 use clap::ArgMatches;
+#[cfg(unix)]
+use interprocess::local_socket::GenericFilePath;
+use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Name};
 use rmodbus::{
     server::{context::ModbusContext, storage::ModbusStorageSmall},
     ModbusProto,
@@ -2333,22 +2338,22 @@ fn run_ipc_socket_server_sync(
     register_length: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
 ) -> Result<()> {
-    use interprocess::local_socket::{prelude::*, ListenerOptions};
+    log::info!("Creating IPC socket listener at {socket_path}");
 
-    log::info!("Creating IPC Unix socket listener at {socket_path}");
-
-    // Remove existing socket file if it exists (Unix only)
-    #[cfg(unix)]
-    {
-        if std::path::Path::new(socket_path).exists() {
-            log::warn!("Removing existing socket file: {socket_path}");
-            let _ = std::fs::remove_file(socket_path);
+    let listener_target = resolve_ipc_socket_target(socket_path)?;
+    let listener = match &listener_target {
+        #[cfg(unix)]
+        IpcSocketTarget::File { name, path } => {
+            if path.exists() {
+                log::warn!("Removing existing socket file: {path:?}");
+                let _ = std::fs::remove_file(path);
+            }
+            ListenerOptions::new().name(name.clone()).create_sync()
         }
-    }
-
-    // Use filesystem-based socket (not abstract namespace) for compatibility with test code
-    let path = socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
-    let listener = ListenerOptions::new().name(path).create_sync()?;
+        IpcSocketTarget::Namespaced(name) => {
+            ListenerOptions::new().name(name.clone()).create_sync()
+        }
+    }?;
 
     log::info!("IPC socket listener created, waiting for connections...");
 
@@ -2389,6 +2394,36 @@ fn run_ipc_socket_server_sync(
             }
             log::info!("Connection #{conn_id} closed");
         });
+    }
+}
+
+enum IpcSocketTarget {
+    Namespaced(Name<'static>),
+    #[cfg(unix)]
+    File {
+        name: Name<'static>,
+        path: PathBuf,
+    },
+}
+
+fn resolve_ipc_socket_target(socket_path: &str) -> Result<IpcSocketTarget> {
+    #[cfg(unix)]
+    {
+        if let Ok(ns) = socket_path.to_ns_name::<GenericNamespaced>() {
+            return Ok(IpcSocketTarget::Namespaced(ns.into_owned()));
+        }
+        let name = socket_path.to_fs_name::<GenericFilePath>()?;
+        let path = PathBuf::from(socket_path);
+        Ok(IpcSocketTarget::File {
+            name: name.into_owned(),
+            path,
+        })
+    }
+
+    #[cfg(not(unix))]
+    {
+        let ns = socket_path.to_ns_name::<GenericNamespaced>()?;
+        Ok(IpcSocketTarget::Namespaced(ns.into_owned()))
     }
 }
 
