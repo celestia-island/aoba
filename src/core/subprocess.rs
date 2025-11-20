@@ -52,6 +52,8 @@ pub struct ManagedSubprocess {
     ipc_accept_result: Option<Receiver<IpcConnection>>,
     command_connect_result: Option<Receiver<IpcCommandClient>>,
     // Log tasks are managed by task_manager and don't need explicit handles
+    /// Channel to receive stderr logs from the subprocess
+    pub stderr_receiver: Option<flume::Receiver<String>>,
 }
 
 /// Lightweight snapshot of a managed subprocess for reporting to Status
@@ -174,8 +176,12 @@ impl ManagedSubprocess {
             });
         }
 
+        // Create channel for stderr logs
+        let (stderr_tx, stderr_rx) = flume::unbounded();
+
         if let Some(stderr) = child.stderr.take() {
             let port_label = config.port_name.clone();
+            let stderr_tx_clone = stderr_tx.clone();
             spawn_task(async move {
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
@@ -190,6 +196,8 @@ impl ManagedSubprocess {
                             let trimmed = line.trim_end_matches(['\r', '\n']);
                             if !trimmed.is_empty() {
                                 log::warn!("CLI[{}] stderr: {}", port_label, trimmed);
+                                // Send to channel for TUI to capture
+                                let _ = stderr_tx_clone.send(trimmed.to_string());
                             }
                         }
                         Err(err) => {
@@ -201,6 +209,9 @@ impl ManagedSubprocess {
                 Ok(())
             });
         }
+
+        // Drop the sender so receiver can detect when stderr is closed
+        drop(stderr_tx);
 
         // Use channels for IPC connection results
         let (ipc_tx, ipc_rx) = flume::bounded(1);
@@ -258,6 +269,7 @@ impl ManagedSubprocess {
             command_client: None,
             ipc_accept_result: Some(ipc_rx),
             command_connect_result: Some(cmd_rx),
+            stderr_receiver: Some(stderr_rx),
         })
     }
 
@@ -355,6 +367,17 @@ impl ManagedSubprocess {
         } else {
             Ok(None)
         }
+    }
+
+    /// Try to receive stderr logs from the subprocess
+    pub fn try_recv_stderr_logs(&mut self) -> Vec<String> {
+        let mut logs = Vec::new();
+        if let Some(ref rx) = self.stderr_receiver {
+            while let Ok(line) = rx.try_recv() {
+                logs.push(line);
+            }
+        }
+        logs
     }
 
     /// Send a full stations configuration update to the subprocess via command channel
@@ -527,6 +550,20 @@ impl SubprocessManager {
         }
 
         messages
+    }
+
+    /// Poll stderr logs from all subprocesses
+    pub fn poll_stderr_logs(&mut self) -> Vec<(String, Vec<String>)> {
+        let mut all_logs = Vec::new();
+
+        for (port_name, subprocess) in self.processes.iter_mut() {
+            let logs = subprocess.try_recv_stderr_logs();
+            if !logs.is_empty() {
+                all_logs.push((port_name.clone(), logs));
+            }
+        }
+
+        all_logs
     }
 
     /// Get snapshot for a running subprocess
