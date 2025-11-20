@@ -505,7 +505,7 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
 
     // If process exited abnormally, append recent stderr logs to the detail
     if success != Some(true) {
-        if let Ok(stderr_summary) = crate::tui::status::read_status(|status| {
+        if let Ok(Some(stderr_text)) = crate::tui::status::read_status(|status| {
             if let Some(port) = status.ports.map.get(port_name) {
                 if !port.cli_stderr_logs.is_empty() {
                     // Get the last 3 stderr lines
@@ -526,9 +526,7 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
             }
             Ok(None)
         }) {
-            if let Some(stderr_text) = stderr_summary {
-                detail.push_str(&stderr_text);
-            }
+            detail.push_str(&stderr_text);
         }
     }
 

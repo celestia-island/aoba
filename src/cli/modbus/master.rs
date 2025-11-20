@@ -1048,15 +1048,19 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         }
 
         let action2 = {
-            let mut port = port_arc.lock().unwrap();
+            // First check if the port is virtual without holding the lock across an await.
+            let is_virtual = {
+                let port = port_arc.lock().unwrap();
+                port.is_none()
+            };
 
             // For virtual ports, skip serial port reading entirely
-            if port.is_none() {
+            if is_virtual {
                 // Virtual port: just sleep a bit to avoid busy loop
-                drop(port);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 ReadAction2::NoData
             } else {
+                let mut port = port_arc.lock().unwrap();
                 let result = match port.as_mut().unwrap().read(&mut buffer) {
                     Ok(n) if n > 0 => {
                         log::info!(
