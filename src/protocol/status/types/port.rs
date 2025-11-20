@@ -8,6 +8,7 @@ use crate::protocol::tty::PortExtra;
 /// This provides type-safe port identification without string parsing at usage sites.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+#[derive(Default)]
 pub enum PortType {
     /// Physical serial port (e.g., COM1, /dev/ttyUSB0)
     Physical,
@@ -16,13 +17,8 @@ pub enum PortType {
     /// HTTP/HTTPS virtual port
     HTTP,
     /// Unknown port type (fallback for unrecognized formats)
+    #[default]
     Unknown,
-}
-
-impl Default for PortType {
-    fn default() -> Self {
-        PortType::Unknown
-    }
 }
 
 impl PortType {
