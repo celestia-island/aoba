@@ -57,14 +57,16 @@ jobs:
             socat \
             nasm
 
-          # extra 32-bit libc headers for i686-unknown-linux-gnu builds (aws-lc-sys)
+          # extra 32-bit libraries for i686-unknown-linux-gnu builds
           if [ "${{ matrix.target }}" = "i686-unknown-linux-gnu" ]; then
             sudo dpkg --add-architecture i386
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends \
               gcc-multilib \
               libc6-dev-i386 \
-              linux-libc-dev:i386
+              linux-libc-dev:i386 \
+              libssl-dev:i386 \
+              pkg-config
           fi
 
       - name: Cache cargo target and registry (per-target)
@@ -89,6 +91,9 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
+          # Set PKG_CONFIG_PATH for i686 cross-compilation
+          PKG_CONFIG_PATH: ${{ matrix.target == 'i686-unknown-linux-gnu' && '/usr/lib/i386-linux-gnu/pkgconfig' || '' }}
+          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.target == 'i686-unknown-linux-gnu' && '1' || '' }}
         run: |
           set -euo pipefail
           cargo build --release --package $BINARY_NAME --bin $BINARY_NAME --target ${TARGET}
