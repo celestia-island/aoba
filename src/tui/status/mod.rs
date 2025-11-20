@@ -62,6 +62,8 @@ pub mod serializable {
         pub name: String,
         pub enabled: bool,
         pub state: PortState,
+        #[serde(default, rename = "type")]
+        pub port_type: crate::protocol::status::types::port::PortType,
         pub modbus_masters: Vec<TuiModbusStation>,
         pub modbus_slaves: Vec<TuiModbusStation>,
         pub log_count: usize,
@@ -71,10 +73,12 @@ pub mod serializable {
 
     impl Default for TuiPort {
         fn default() -> Self {
+            use crate::protocol::status::types::port::PortType;
             Self {
                 name: String::new(),
                 enabled: false,
                 state: PortState::Free,
+                port_type: PortType::Unknown,
                 modbus_masters: Vec::new(),
                 modbus_slaves: Vec::new(),
                 log_count: 0,
@@ -197,6 +201,7 @@ pub mod serializable {
                         name: port.port_name.clone(),
                         enabled,
                         state,
+                        port_type: port.port_type,
                         modbus_masters,
                         modbus_slaves,
                         log_count: port.logs.len(),
@@ -322,6 +327,7 @@ pub mod serializable {
 
             let data = PortData {
                 port_name: port.name.clone(),
+                port_type: port.port_type,
                 state,
                 status_indicator,
                 config,
@@ -345,6 +351,7 @@ pub mod serializable {
 
             let data = PortData {
                 port_name: port.name.clone(),
+                port_type: port.port_type,
                 state,
                 status_indicator,
                 config,
