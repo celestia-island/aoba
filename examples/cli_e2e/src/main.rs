@@ -18,6 +18,7 @@ use e2e::{
     basic::{
         test_basic_master_slave_communication, test_http_data_source, test_ipc_channel_data_source,
         test_ipc_pipe_data_source, test_manual_data_source, test_mqtt_data_source,
+        test_virtual_port,
     },
     multi_masters::{test_multi_masters, test_multi_masters_same_station},
     multi_slaves::{
@@ -165,6 +166,7 @@ async fn main() -> Result<()> {
             log::info!("    - data_source_ipc_channel");
             log::info!("    - data_source_http");
             log::info!("    - data_source_mqtt");
+            log::info!("    - data_source_virtual_port");
             log::info!("  Write Tests (Slave-to-Master):");
             log::info!("    - slave_write_coils");
             log::info!("    - slave_write_holding");
@@ -207,6 +209,7 @@ async fn main() -> Result<()> {
         "data_source_ipc_channel" => test_ipc_channel_data_source().await?,
         "data_source_http" => test_http_data_source().await?,
         "data_source_mqtt" => test_mqtt_data_source().await?,
+        "data_source_virtual_port" => test_virtual_port().await?,
 
         // Write tests (slave-to-master)
         "slave_write_coils" => test_slave_write_coils().await?,
