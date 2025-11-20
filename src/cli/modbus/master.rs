@@ -2457,9 +2457,23 @@ enum IpcSocketTarget {
 fn resolve_ipc_socket_target(socket_path: &str) -> Result<IpcSocketTarget> {
     #[cfg(unix)]
     {
+        // Prefer filesystem sockets for paths containing '/' (absolute or relative paths)
+        // This ensures paths like "/tmp/socket.sock" are treated as filesystem sockets
+        if socket_path.contains('/') {
+            let name = socket_path.to_fs_name::<GenericFilePath>()?;
+            let path = PathBuf::from(socket_path);
+            return Ok(IpcSocketTarget::File {
+                name: name.into_owned(),
+                path,
+            });
+        }
+        
+        // For paths without '/', try namespaced socket first
         if let Ok(ns) = socket_path.to_ns_name::<GenericNamespaced>() {
             return Ok(IpcSocketTarget::Namespaced(ns.into_owned()));
         }
+        
+        // Fallback to filesystem socket
         let name = socket_path.to_fs_name::<GenericFilePath>()?;
         let path = PathBuf::from(socket_path);
         Ok(IpcSocketTarget::File {
