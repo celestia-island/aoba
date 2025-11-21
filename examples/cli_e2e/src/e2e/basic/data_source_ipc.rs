@@ -25,10 +25,10 @@ fn write_station_snapshot(file: &mut File, values: &[u16]) -> Result<()> {
     Ok(())
 }
 
-/// Test master mode with manual data source
+/// Test master mode with IPC manual data source
 /// This tests that the manual data source mode allows the master to start without external data
-pub async fn test_manual_data_source() -> Result<()> {
-    log::info!("🧪 Testing manual data source mode...");
+pub async fn test_ipc_manual_data_source() -> Result<()> {
+    log::info!("🧪 Testing IPC manual data source mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
 
     // Start server (Modbus master-provide) with manual data source on port1 in persistent mode
