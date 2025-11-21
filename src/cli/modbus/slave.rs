@@ -8,11 +8,12 @@ use std::{
 use clap::ArgMatches;
 
 use super::{
-    emit_modbus_ipc_log, extract_values_from_storage, open_serial_port, parse_register_mode,
-    ModbusIpcLogPayload, ModbusResponse, OutputSink,
+    emit_modbus_ipc_log, extract_values_from_storage, parse_register_mode, ModbusIpcLogPayload,
 };
 use crate::{
+    api::{modbus::ModbusResponse, utils::open_serial_port},
     cli::{actions, cleanup},
+    protocol::status::types::cli::OutputSink,
     utils::sleep::{sleep_1s, sleep_3s},
 };
 
