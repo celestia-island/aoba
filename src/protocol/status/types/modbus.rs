@@ -777,5 +777,11 @@ impl BaudRateOption {
     }
 }
 
-// Custom conversion helpers removed. Use direct casts and `FromRepr::from_repr` as needed.
-impl StopBitsOption {}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModbusResponse {
+    pub station_id: u8,
+    pub register_address: u16,
+    pub register_mode: String,
+    pub values: Vec<u16>,
+    pub timestamp: String,
+}

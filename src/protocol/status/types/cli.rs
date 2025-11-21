@@ -30,6 +30,64 @@ pub enum CliMode {
     MasterProvide,
 }
 
+/// Output sink for CLI operations
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OutputSink {
+    Stdout,
+    File { path: String },
+    Pipe { path: String },
+}
+
+impl std::str::FromStr for OutputSink {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(path) = s.strip_prefix("file:") {
+            Ok(OutputSink::File {
+                path: path.to_string(),
+            })
+        } else if let Some(name) = s.strip_prefix("pipe:") {
+            Ok(OutputSink::Pipe {
+                path: name.to_string(),
+            })
+        } else {
+            // Default to stdout if not specified or invalid?
+            // The original code returned error for invalid format, but handled "stdout" implicitly or via Option.
+            // Here we implement FromStr for the explicit formats.
+            Err(anyhow!(
+                "Invalid output format. Use file:<path> or pipe:<name>"
+            ))
+        }
+    }
+}
+
+impl OutputSink {
+    /// Write output to the sink
+    pub fn write(&self, data: &str) -> Result<()> {
+        use std::io::Write;
+        match self {
+            OutputSink::Stdout => {
+                println!("{data}");
+                Ok(())
+            }
+            OutputSink::File { path } => {
+                let mut file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)?;
+                writeln!(file, "{data}")?;
+                Ok(())
+            }
+            OutputSink::Pipe { path } => {
+                let mut file = std::fs::OpenOptions::new().write(true).open(path)?;
+                writeln!(file, "{data}")?;
+                Ok(())
+            }
+        }
+    }
+}
+
 impl CliStatus {
     /// Create a new CLI status for slave listen mode
     pub fn new_slave_listen(
