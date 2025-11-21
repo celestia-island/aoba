@@ -2467,12 +2467,12 @@ fn resolve_ipc_socket_target(socket_path: &str) -> Result<IpcSocketTarget> {
                 path,
             });
         }
-        
+
         // For paths without '/', try namespaced socket first
         if let Ok(ns) = socket_path.to_ns_name::<GenericNamespaced>() {
             return Ok(IpcSocketTarget::Namespaced(ns.into_owned()));
         }
-        
+
         // Fallback to filesystem socket
         let name = socket_path.to_fs_name::<GenericFilePath>()?;
         let path = PathBuf::from(socket_path);

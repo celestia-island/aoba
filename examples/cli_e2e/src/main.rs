@@ -16,9 +16,8 @@ use clap::Parser;
 // use config_mode::test_config_mode;
 use e2e::{
     basic::{
-        test_basic_master_slave_communication, test_http_data_source,
-        test_ipc_manual_data_source, test_ipc_pipe_data_source, test_mqtt_data_source,
-        test_virtual_port,
+        test_basic_master_slave_communication, test_http_data_source, test_ipc_manual_data_source,
+        test_ipc_pipe_data_source, test_mqtt_data_source, test_virtual_port,
     },
     multi_masters::{test_multi_masters, test_multi_masters_same_station},
     multi_slaves::{
