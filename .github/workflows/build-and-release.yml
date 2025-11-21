@@ -124,15 +124,12 @@ jobs:
           VERSION=$(cargo metadata --no-deps --format-version 1 | python -c "import sys,json; j=json.load(sys.stdin); print(j['packages'][0]['version'])")
 
           TARGET=${{ matrix.target }}
-          DIST_DIR="dist/${NAME}-${TARGET}-v${VERSION}"
-          mkdir -p "$DIST_DIR"
-
           BIN_FILE="target/${TARGET}/release/${BINARY_NAME}"
           if [ -f "$BIN_FILE" ]; then
             chmod +x "$BIN_FILE"
-            cp "$BIN_FILE" "$DIST_DIR/"
             ARCHIVE_NAME="${NAME}-${TARGET}-v${VERSION}.tar.gz"
-            tar -C dist -czf "release/${ARCHIVE_NAME}" "${NAME}-${TARGET}-v${VERSION}"
+            # Pack the binary at the root of the archive (no nested directories)
+            tar -C "target/${TARGET}/release" -czf "release/${ARCHIVE_NAME}" "${BINARY_NAME}"
             echo "Created archive: release/${ARCHIVE_NAME}"
           else
             echo "Warning: ${BIN_FILE} not found"
@@ -204,19 +201,15 @@ jobs:
           VERSION=$(cargo metadata --no-deps --format-version 1 | python -c "import sys,json; j=json.load(sys.stdin); print(j['packages'][0]['version'])")
 
           TARGET_TRIPLE=${{ matrix.target }}
-          DIST_DIR="dist/${NAME}-${TARGET_TRIPLE}-v${VERSION}"
-          mkdir -p "$DIST_DIR"
-
           if [[ "${TARGET_TRIPLE}" == *"windows"* ]]; then
             BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}.exe"
             if [ -f "${BIN_FILE}" ]; then
-              cp "${BIN_FILE}" "$DIST_DIR/"
               ARCHIVE_NAME="${NAME}-${TARGET_TRIPLE}-v${VERSION}.zip"
-              # Use 7z if available, otherwise fall back to zip
+              # Pack the executable so it's at the root of the zip
               if command -v 7z &> /dev/null; then
-                7z a -tzip "release/${ARCHIVE_NAME}" "${DIST_DIR}/*"
+                (cd "target/${TARGET_TRIPLE}/release" && 7z a -tzip "../../release/${ARCHIVE_NAME}" "${BINARY_NAME}.exe")
               else
-                (cd dist && zip -r "../release/${ARCHIVE_NAME}" "${NAME}-${TARGET_TRIPLE}-v${VERSION}")
+                (cd "target/${TARGET_TRIPLE}/release" && zip -r "../../release/${ARCHIVE_NAME}" "${BINARY_NAME}.exe")
               fi
               echo "Created archive: release/${ARCHIVE_NAME}"
             else
@@ -227,9 +220,9 @@ jobs:
             BIN_FILE="target/${TARGET_TRIPLE}/release/${BINARY_NAME}"
             if [ -f "${BIN_FILE}" ]; then
               chmod +x "${BIN_FILE}"
-              cp "${BIN_FILE}" "$DIST_DIR/"
               ARCHIVE_NAME="${NAME}-${TARGET_TRIPLE}-v${VERSION}.tar.gz"
-              tar -C dist -czf "release/${ARCHIVE_NAME}" "${NAME}-${TARGET_TRIPLE}-v${VERSION}"
+              # Pack binary at root of archive (no nested directories)
+              tar -C "target/${TARGET_TRIPLE}/release" -czf "release/${ARCHIVE_NAME}" "${BINARY_NAME}"
               echo "Created archive: release/${ARCHIVE_NAME}"
             else
               echo "Warning: ${BIN_FILE} not found"
@@ -297,6 +290,26 @@ jobs:
             fi
           done
           echo "Post-check release files:"
+          ls -la release || true
+
+      - name: Create SHA256 checksums for release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Generating sha256 checksums for release artifacts..."
+          for f in release/*; do
+            [ -f "$f" ] || continue
+            # skip already created checksum files
+            if [[ "$f" == *.sha256 ]]; then
+              echo "Skipping checksum for $f (already a checksum)"
+              continue
+            fi
+            # Use sha256sum on the ubuntu runner to compute checksums
+            sha=$(sha256sum "$f" | cut -d' ' -f1 || true)
+            echo "${sha}  $(basename "$f")" > "${f}.sha256"
+            echo "Created checksum: ${f}.sha256"
+          done
+          echo "Final release contents:"
           ls -la release || true
 
       - name: Determine release parameters
