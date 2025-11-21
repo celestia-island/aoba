@@ -1,15 +1,16 @@
-/// Aoba — Multi-protocol debugging and simulation tool for Modbus RTU
-///
-/// This crate provides the core library for Aoba. It exposes a programmatic
-/// API used by the CLI and TUI frontends as well as the daemon runner. For
-/// end-user usage see the CLI/TUI examples under `examples/` and the top-level
-/// README which documents common usage patterns, daemon configuration, and
-/// testing tools.
-///
-/// The public modules re-export the main APIs for each domain (protocols,
-/// TUI, core helpers, etc.). The internal runtime/boot helpers are placed in
-/// a separate, hidden module to keep implementation details out of the generated
-/// documentation.
+//! Aoba — Multi-protocol debugging and simulation tool for Modbus RTU
+//!
+//! This crate provides the core library for Aoba. It exposes a programmatic
+//! API used by the CLI and TUI frontends as well as the daemon runner. For
+//! end-user usage see the CLI/TUI examples under `examples/` and the top-level
+//! README which documents common usage patterns, daemon configuration, and
+//! testing tools.
+//!
+//! The public modules re-export the main APIs for each domain (protocols,
+//! TUI, core helpers, etc.). The internal runtime/boot helpers are placed in
+//! a separate, hidden module to keep implementation details out of the generated
+//! documentation.
+
 pub mod api;
 #[doc(hidden)]
 pub mod boot;
@@ -24,9 +25,4 @@ pub mod tui;
 #[doc(hidden)]
 pub mod utils;
 
-// crate-level types are imported by consumers, no need to import them here.
-
-// Re-export the public boot helpers at the crate root. The `boot` module is
-// hidden from generated documentation, but these helpers are intended to be
-// used by runtime entry points (CLI/TUI/daemon).
-pub use crate::boot::{init_common, init_daemon_logger, start_daemon, start_tui};
+pub use api::*;
