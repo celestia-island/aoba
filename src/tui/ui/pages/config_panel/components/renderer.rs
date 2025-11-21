@@ -83,6 +83,22 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
                     }
                 }
 
+                // Skip serial configuration fields for virtual ports (IPC/HTTP)
+                if let Some(port) = port_data.as_ref() {
+                    if port.port_type.is_virtual() {
+                        match cursor {
+                            types::cursor::ConfigPanelCursor::BaudRate
+                            | types::cursor::ConfigPanelCursor::DataBits { .. }
+                            | types::cursor::ConfigPanelCursor::Parity
+                            | types::cursor::ConfigPanelCursor::StopBits => {
+                                // Skip serial config fields for virtual ports
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
                 let line = create_line(
                     get_cursor_label(cursor, is_port_occupied_by_this(port_data.as_ref())),
                     is_selected,
