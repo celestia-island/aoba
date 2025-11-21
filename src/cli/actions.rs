@@ -346,13 +346,31 @@ pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen persist
     if let Some(port) = matches.get_one::<String>("slave-listen-persist") {
-        // Check if IPC socket path is provided
-        if let Some(ipc_socket_path) = matches.get_one::<String>("ipc-socket-path") {
-            // Use IPC channel mode (half-duplex JSON request-response)
+        let port_str = port.as_str();
+        // If this is a virtual port and no explicit ipc-socket-path is provided,
+        // automatically use IPC channel mode by generating a default namespaced socket name.
+        let ipc_socket_path_opt = matches.get_one::<String>("ipc-socket-path");
+        if ipc_socket_path_opt.is_some() {
+            if let Some(ipc_socket_path) = ipc_socket_path_opt {
+                if let Err(err) = super::modbus::slave::handle_slave_listen_ipc_channel(
+                    matches,
+                    port,
+                    ipc_socket_path,
+                )
+                .await
+                {
+                    eprintln!("Error in slave-listen-persist (IPC channel mode): {err}");
+                    std::process::exit(1);
+                }
+            }
+        } else if crate::protocol::modbus::is_virtual_port(port_str) {
+            // Create a default namespaced IPC socket name for this virtual port.
+            // Using the port string verbatim is acceptable: namespaced names may include hyphens.
+            let default_socket = format!("aoba-ipc-{}", port_str);
             if let Err(err) = super::modbus::slave::handle_slave_listen_ipc_channel(
                 matches,
                 port,
-                ipc_socket_path,
+                &default_socket,
             )
             .await
             {

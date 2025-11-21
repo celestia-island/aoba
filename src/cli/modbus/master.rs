@@ -1048,15 +1048,19 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         }
 
         let action2 = {
-            let mut port = port_arc.lock().unwrap();
+            // First check if the port is virtual without holding the lock across an await.
+            let is_virtual = {
+                let port = port_arc.lock().unwrap();
+                port.is_none()
+            };
 
             // For virtual ports, skip serial port reading entirely
-            if port.is_none() {
+            if is_virtual {
                 // Virtual port: just sleep a bit to avoid busy loop
-                drop(port);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 ReadAction2::NoData
             } else {
+                let mut port = port_arc.lock().unwrap();
                 let result = match port.as_mut().unwrap().read(&mut buffer) {
                     Ok(n) if n > 0 => {
                         log::info!(
@@ -2453,9 +2457,23 @@ enum IpcSocketTarget {
 fn resolve_ipc_socket_target(socket_path: &str) -> Result<IpcSocketTarget> {
     #[cfg(unix)]
     {
+        // Prefer filesystem sockets for paths containing '/' (absolute or relative paths)
+        // This ensures paths like "/tmp/socket.sock" are treated as filesystem sockets
+        if socket_path.contains('/') {
+            let name = socket_path.to_fs_name::<GenericFilePath>()?;
+            let path = PathBuf::from(socket_path);
+            return Ok(IpcSocketTarget::File {
+                name: name.into_owned(),
+                path,
+            });
+        }
+
+        // For paths without '/', try namespaced socket first
         if let Ok(ns) = socket_path.to_ns_name::<GenericNamespaced>() {
             return Ok(IpcSocketTarget::Namespaced(ns.into_owned()));
         }
+
+        // Fallback to filesystem socket
         let name = socket_path.to_fs_name::<GenericFilePath>()?;
         let path = PathBuf::from(socket_path);
         Ok(IpcSocketTarget::File {
