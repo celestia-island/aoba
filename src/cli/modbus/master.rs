@@ -21,9 +21,48 @@ use rmodbus::{
 };
 
 use super::{
-    emit_modbus_ipc_log, extract_values_from_station_configs, open_serial_port, parse_data_line,
-    parse_register_mode, DataSource, ModbusIpcLogPayload, ModbusResponse,
+    emit_modbus_ipc_log, extract_values_from_station_configs, parse_data_line, parse_register_mode,
+    ModbusIpcLogPayload,
 };
+use crate::api::{modbus::ModbusResponse, utils::open_serial_port};
+
+#[derive(Clone)]
+pub enum DataSource {
+    Manual,
+    File(String),
+    Pipe(String),
+    MqttServer(String), // URL
+    HttpServer(u16),    // Port
+    IpcPipe(String),    // pipe path
+}
+
+impl std::str::FromStr for DataSource {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "manual" {
+            Ok(DataSource::Manual)
+        } else if let Some(path) = s.strip_prefix("file:") {
+            Ok(DataSource::File(path.to_string()))
+        } else if let Some(name) = s.strip_prefix("pipe:") {
+            Ok(DataSource::Pipe(name.to_string()))
+        } else if let Some(url) = s.strip_prefix("mqtt://") {
+            Ok(DataSource::MqttServer(format!("mqtt://{}", url)))
+        } else if let Some(url) = s.strip_prefix("mqtts://") {
+            Ok(DataSource::MqttServer(format!("mqtts://{}", url)))
+        } else if let Some(port_str) = s.strip_prefix("http://") {
+            let port: u16 = port_str
+                .parse()
+                .map_err(|_| anyhow!("Invalid HTTP port number"))?;
+            Ok(DataSource::HttpServer(port))
+        } else if let Some(path) = s.strip_prefix("ipc:") {
+            Ok(DataSource::IpcPipe(path.to_string()))
+        } else {
+            Err(anyhow!("Invalid data source format"))
+        }
+    }
+}
+
 use crate::{
     cli::{actions, cleanup, http_daemon_registry as http_registry},
     core::task_manager::spawn_task,

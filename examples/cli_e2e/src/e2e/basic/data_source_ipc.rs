@@ -233,7 +233,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         .rev()
         .find(|line| !line.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("Round 1: Client produced empty stdout"))?;
-    let response: _main::cli::modbus::ModbusResponse = serde_json::from_str(response_line)?;
+    let response: _main::api::modbus::ModbusResponse = serde_json::from_str(response_line)?;
     log::info!("✅ Round 1: Received values: {:?}", response.values);
 
     if response.values != round1_values {
@@ -300,7 +300,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         .rev()
         .find(|line| !line.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("Round 2: Client produced empty stdout"))?;
-    let response: _main::cli::modbus::ModbusResponse = serde_json::from_str(response_line)?;
+    let response: _main::api::modbus::ModbusResponse = serde_json::from_str(response_line)?;
     log::info!("✅ Round 2: Received values: {:?}", response.values);
 
     if response.values != round2_values {
@@ -367,7 +367,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         .rev()
         .find(|line| !line.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("Round 3: Client produced empty stdout"))?;
-    let response: _main::cli::modbus::ModbusResponse = serde_json::from_str(response_line)?;
+    let response: _main::api::modbus::ModbusResponse = serde_json::from_str(response_line)?;
     log::info!("✅ Round 3: Received values: {:?}", response.values);
 
     if response.values != round3_values {
