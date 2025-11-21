@@ -2,9 +2,7 @@ use anyhow::Result;
 
 use aoba::{
     cli::{self, actions, cleanup},
-    init_common,
     protocol::tty::enable_virtual_port_hint,
-    start_tui,
 };
 
 #[tokio::main]
@@ -19,7 +17,7 @@ async fn main() -> Result<()> {
     // For all other modes, use normal initialization
     if !matches.get_flag("daemon") {
         // Console launcher: keep it simple and let the OS / terminal manage stdio.
-        init_common();
+        aoba::boot::init_common();
     }
 
     if matches.get_flag("enable-virtual-ports") {
@@ -77,23 +75,23 @@ async fn main() -> Result<()> {
             file
         };
 
-        if let Err(err) = aoba::init_daemon_logger(&log_file) {
+        if let Err(err) = aoba::boot::init_daemon_logger(&log_file) {
             eprintln!("⚠️ Failed to initialize daemon logger: {err}");
             eprintln!("⚠️ Continuing without logging...");
         }
 
-        aoba::start_daemon(&matches).await?;
+        aoba::boot::start_daemon(&matches).await?;
         return Ok(());
     }
 
     // If TUI requested, run in this process so it inherits the terminal.
     if matches.get_flag("tui") {
-        start_tui(&matches).await?;
+        aoba::boot::start_tui(&matches).await?;
         return Ok(());
     }
 
     // Default: always start TUI mode
-    start_tui(&matches).await?;
+    aoba::boot::start_tui(&matches).await?;
 
     Ok(())
 }
