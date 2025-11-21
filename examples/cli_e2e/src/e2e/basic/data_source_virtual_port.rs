@@ -114,7 +114,7 @@ pub async fn test_virtual_port(fixed_uuid: Option<String>) -> Result<()> {
 
     let mut master_child = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
-        .arg("--master-provide-temp")
+        .arg("--master-provide")
         .arg(&virtual_port_uuid)
         .arg("--station-id")
         .arg("1")

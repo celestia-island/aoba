@@ -113,12 +113,13 @@ pub async fn test_ipc_channel_data_source() -> Result<()> {
         .spawn()?;
 
     // Write initial empty data to stdin to initialize master
-    if let Some(mut stdin) = master.stdin.take() {
+    // Note: stdin must be kept open for persist mode, so we don't drop it
+    let mut _master_stdin = master.stdin.take();
+    if let Some(ref mut stdin) = _master_stdin {
         let empty_payload = build_station_payload(&[0u16; REGISTER_LENGTH]);
         let json = serde_json::to_string(&*empty_payload)?;
         writeln!(stdin, "{}", json)?;
         stdin.flush()?;
-        // Keep stdin open for persist mode
     }
 
     // Wait for master to be ready and create IPC socket
