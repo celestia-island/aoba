@@ -1,0 +1,500 @@
+# Data Source - Virtual Port Slave Mode
+# Test ID: data_source_virtual_port_slave
+# Station: ID=1, Type=Holding, Address=0x0000, Length=10
+# Virtual Port: UUID-based, created via 'n' key in entry page
+#
+# Test Focus:
+# - Create virtual port by pressing 'n' in entry page
+# - Configure as slave station (no baud rate fields shown)
+# - Connect to external CLI master on /tmp/vcom1
+# - Verify data exchange with CLI master (3 rounds)
+#
+# Test Data (3 Rounds):
+# Round 1 - Sequential: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+# Round 2 - Reverse: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+# Round 3 - Custom: [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+
+[manifest]
+id = "data_source_virtual_port_slave"
+description = "Virtual port slave mode with UUID (no baud rate)"
+station_id = 1
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+mode = "slave"
+
+init_order = [
+  "create_virtual_port",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "configure_slave_mode",
+  "create_station",
+  "configure_station_fields",
+  "save_configuration",
+  "verify_port_enabled",
+  "simulate_cli_master_round1",
+]
+
+recycle_order = ["simulate_cli_master_round2", "simulate_cli_master_round3"]
+
+# Step 1: Create virtual port by pressing 'n' in entry page
+[[workflow.create_virtual_port]]
+description = "Initialize mock state for entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.create_virtual_port]]
+description = "Ensure entry page has initial ports"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.create_virtual_port]]
+description = "Press 'n' to trigger virtual port creation mode"
+key = "Char(n)"
+
+[[workflow.create_virtual_port]]
+description = "Activate new port creation in mock state"
+mock_path = "$.temporarily.new_port_creation.active"
+mock_set_value = true
+
+[[workflow.create_virtual_port]]
+description = "Set port type index to IPC (0)"
+mock_path = "$.temporarily.new_port_creation.port_type_index"
+mock_set_value = 0
+
+[[workflow.create_virtual_port]]
+description = "Verify creation UI is shown (hint to create new port)"
+verify = "Press n to create new port"
+
+[[workflow.create_virtual_port]]
+description = "Press Enter to confirm virtual port creation"
+key = "Enter"
+
+[[workflow.create_virtual_port]]
+description = "Generate UUID for virtual port and add to ports"
+mock_path = "$.port_order"
+mock_set_value = [
+  "/tmp/vcom1",
+  "/tmp/vcom2",
+  "00000000-0000-0000-0000-000000000001",
+]
+
+[[workflow.create_virtual_port]]
+description = "Initialize the virtual port in mock state"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001']"
+mock_set_value = { port_name = "00000000-0000-0000-0000-000000000001", port_type = "IPC", state = { type = "free" }, enabled = false, modbus_slaves = [
+], modbus_masters = [
+] }
+
+[[workflow.create_virtual_port]]
+description = "Clear new port creation mode"
+mock_path = "$.temporarily.new_port_creation.active"
+mock_set_value = false
+
+[[workflow.create_virtual_port]]
+description = "Navigate cursor to newly created port"
+mock_path = "$.page"
+mock_set_value = { type = "entry", cursor = { Com = { index = 2 } }, view_offset = 0 }
+
+[[workflow.create_virtual_port]]
+description = "Verify virtual port is shown (with 7-char prefix)"
+verify_regex = "(?i)virtual"
+
+# Step 2: Enter configuration panel
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected virtual port to enter config panel"
+key = "Enter"
+
+[[workflow.enter_config_panel]]
+description = "Switch mock state to config panel"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.enter_config_panel]]
+description = "Select newly created port inside config panel"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 2
+
+[[workflow.enter_config_panel]]
+description = "Position config panel cursor on Enable Port"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "EnablePort"
+
+[[workflow.enter_config_panel]]
+description = "Reset config panel scroll"
+mock_path = "$.page_state.config_panel.view_offset"
+mock_set_value = 0
+
+[[workflow.enter_config_panel]]
+description = "Verify Enable Port field is shown (no baud rate)"
+verify = "Enable Port"
+
+[[workflow.enter_config_panel]]
+description = "Verify baud rate is NOT shown for virtual port"
+verify_absent = "Baud"
+
+# Step 3: Navigate to business configuration
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration menu item"
+key = "Down"
+times = 2
+
+[[workflow.navigate_to_business_config]]
+description = "Highlight Business Configuration entry"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "ProtocolConfig"
+
+[[workflow.navigate_to_business_config]]
+description = "Verify Business Configuration entry"
+verify = "Enter Business Configuration"
+
+# Step 4: Enter Modbus panel
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "Enter"
+
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.enter_modbus_panel]]
+description = "Select virtual port inside modbus dashboard"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 2
+
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus dashboard cursor"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus dashboard scroll"
+mock_path = "$.page_state.modbus_dashboard.view_offset"
+mock_set_value = 0
+
+[[workflow.enter_modbus_panel]]
+description = "Verify Modbus dashboard is shown"
+verify = "ModBus Master/Slave Settings"
+
+# Step 5: Configure Slave Mode
+[[workflow.configure_slave_mode]]
+description = "Navigate down to ModbusMode"
+key = "Down"
+
+[[workflow.configure_slave_mode]]
+description = "Update cursor to ModbusMode"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "ModbusMode" }
+
+[[workflow.configure_slave_mode]]
+description = "Verify Connection Mode field is shown"
+verify = "Connection Mode"
+
+[[workflow.configure_slave_mode]]
+description = "Enter edit mode for Connection Mode"
+key = "Enter"
+
+[[workflow.configure_slave_mode]]
+description = "Switch to Slave mode (default is Master, press Left to change)"
+key = "Left"
+
+[[workflow.configure_slave_mode]]
+description = "Update mode to Slave in mock state"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].config.mode"
+mock_set_value = { type = "slave" }
+
+[[workflow.configure_slave_mode]]
+description = "Confirm Connection Mode"
+key = "Enter"
+
+[[workflow.configure_slave_mode]]
+description = "Verify Slave mode is selected"
+verify = "Slave"
+
+# Step 6: Create station
+[[workflow.create_station]]
+description = "Navigate down to AddLine (station creation)"
+key = "Down"
+
+[[workflow.create_station]]
+description = "Update cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.create_station]]
+description = "Press Enter on 'Create Station' to create new station"
+key = "Enter"
+
+[[workflow.create_station]]
+description = "Initialize slave station structure"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves"
+mock_set_value = [
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+]
+
+[[workflow.create_station]]
+description = "Focus cursor on station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.create_station]]
+description = "Verify station is created"
+verify = "#1 - ID: 1"
+
+# Step 7: Configure Station Fields
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type station ID value 1"
+input = "decimal"
+value = 1
+
+[[workflow.configure_station_fields]]
+description = "Confirm Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Station ID in mock state"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].station_id"
+mock_set_value = 1
+
+# Navigate to Register Type
+[[workflow.configure_station_fields]]
+description = "Navigate to Register Type field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Register Type"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Keep Holding register type (default)"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Verify Register Type is correctly set"
+verify = "Register Type         Holding Registers(03)"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Type in mock state"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].register_type"
+mock_set_value = "Holding"
+
+# Navigate to Start Address
+[[workflow.configure_station_fields]]
+description = "Navigate to Start Address field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Start Address"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type start address 0x0000"
+input = "hex"
+value = 0x0000
+
+[[workflow.configure_station_fields]]
+description = "Confirm Start Address"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Verify Start Address is correctly set to 0x0000"
+verify = "Start Address         0x0000 (0)"
+
+[[workflow.configure_station_fields]]
+description = "Update Start Address in mock state"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].start_address"
+mock_set_value = 0
+
+# Navigate to Register Count
+[[workflow.configure_station_fields]]
+description = "Navigate to Register Count field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Register Count"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type register count 10"
+input = "decimal"
+value = 10
+
+[[workflow.configure_station_fields]]
+description = "Confirm Register Count"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Verify Register Length is correctly set to 10"
+verify = "Register Length       0x000A (10)"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Count in mock state"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].register_count"
+mock_set_value = 10
+
+[[workflow.configure_station_fields]]
+description = "Ensure registers array matches length"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].registers"
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+# Step 8: Save configuration
+[[workflow.save_configuration]]
+description = "Save configuration with Ctrl+S"
+key = "Ctrl+S"
+
+[[workflow.save_configuration]]
+description = "Enable port in mock state"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].enabled"
+mock_set_value = true
+
+[[workflow.save_configuration]]
+description = "Set port state to OccupiedByThis"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].state"
+mock_set_value = { type = "occupied_by_this" }
+
+[[workflow.save_configuration]]
+description = "Wait for port to enable and stabilize"
+sleep_ms = 5000
+
+[[workflow.save_configuration]]
+description = "Verify Running status indicator"
+verify = "Running ●"
+
+# Step 9: Verify port enabled
+[[workflow.verify_port_enabled]]
+description = "Check port is enabled in status"
+mock_verify_path = "$.ports['00000000-0000-0000-0000-000000000001'].enabled"
+mock_verify_value = true
+
+[[workflow.verify_port_enabled]]
+description = "Check port state is Running"
+mock_verify_path = "$.ports['00000000-0000-0000-0000-000000000001'].state"
+mock_verify_value = { type = "occupied_by_this" }
+
+[[workflow.verify_port_enabled]]
+description = "Verify UI shows Modbus configuration page"
+verify_regex = "ModBus Master/Slave"
+
+[[workflow.verify_port_enabled]]
+description = "Verify virtual port UUID is shown"
+verify_regex = "00000000-0000-0000-0000-000000000001"
+
+# Step 10: Simulate CLI master query - Round 1 (Sequential: 0-9)
+[[workflow.simulate_cli_master_round1]]
+description = "Simulate CLI master querying data - Round 1 (Sequential)"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].registers"
+mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+[[workflow.simulate_cli_master_round1]]
+description = "Verify data appears on screen (partial)"
+verify = "    0x0000              0x0000 0x0001 0x0002 0x0003 0x0004 0x0005 0x0006 0x0007"
+
+[[workflow.simulate_cli_master_round1]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0008 0x0009"
+
+[[workflow.simulate_cli_master_round1]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].registers"
+mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+# Step 11: Simulate CLI master query - Round 2 (Reverse: 9-0)
+[[workflow.simulate_cli_master_round2]]
+description = "Simulate CLI master querying data - Round 2 (Reverse)"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].registers"
+mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+
+[[workflow.simulate_cli_master_round2]]
+description = "Verify data appears on screen (partial)"
+verify = "    0x0000              0x0009 0x0008 0x0007 0x0006 0x0005 0x0004 0x0003 0x0002"
+
+[[workflow.simulate_cli_master_round2]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0001 0x0000"
+
+[[workflow.simulate_cli_master_round2]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].registers"
+mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+
+# Step 12: Simulate CLI master query - Round 3 (Custom pattern)
+[[workflow.simulate_cli_master_round3]]
+description = "Simulate CLI master querying data - Round 3 (Custom)"
+mock_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].registers"
+mock_set_value = [
+  0x1111,
+  0x2222,
+  0x3333,
+  0x4444,
+  0x5555,
+  0x6666,
+  0x7777,
+  0x8888,
+  0x9999,
+  0xAAAA,
+]
+
+[[workflow.simulate_cli_master_round3]]
+description = "Verify data appears on screen (partial)"
+verify = "    0x0000              0x1111 0x2222 0x3333 0x4444 0x5555 0x6666 0x7777 0x8888"
+
+[[workflow.simulate_cli_master_round3]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x9999 0xAAAA"
+
+[[workflow.simulate_cli_master_round3]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['00000000-0000-0000-0000-000000000001'].modbus_slaves[0].registers"
+mock_verify_value = [
+  0x1111,
+  0x2222,
+  0x3333,
+  0x4444,
+  0x5555,
+  0x6666,
+  0x7777,
+  0x8888,
+  0x9999,
+  0xAAAA,
+]

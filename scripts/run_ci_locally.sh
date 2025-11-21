@@ -35,6 +35,8 @@ MODULE=""
 OUTPUT_DIR="./ci-results"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DEFAULT_VIRTUAL_PORT_UUID="00000000-0000-0000-0000-000000000001"
+export AOBA_VIRTUAL_PORT_UUID="${AOBA_VIRTUAL_PORT_UUID:-$DEFAULT_VIRTUAL_PORT_UUID}"
 
 # Force English locale so UI text matches workflow expectations
 export LANGUAGE="en_US"
@@ -140,6 +142,7 @@ echo -e "  Workflow:      ${GREEN}${WORKFLOW}${NC}"
 echo -e "  Module:        ${GREEN}${MODULE:-all}${NC}"
 echo -e "  Output Dir:    ${GREEN}${OUTPUT_DIR}${NC}"
 echo -e "  Repo Root:     ${GREEN}${REPO_ROOT}${NC}"
+echo -e "  Virtual UUID:  ${GREEN}${AOBA_VIRTUAL_PORT_UUID}${NC}"
 if [[ $USE_TIMEOUT -eq 1 ]]; then
     echo -e "  Module Timeout:${GREEN}${MODULE_TIMEOUT_SECS}s${NC}"
 else
@@ -177,6 +180,9 @@ declare -a TUI_RENDERING_MODULES=(
     "data_source_http_server"
     "data_source_ipc_pipe"
     "data_source_mqtt_client"
+    "data_source_virtual_port_slave"
+    "data_source_virtual_port_ipc_master"
+    "data_source_virtual_port_http_master"
     "write_single_station_slave_coils"
     "write_single_station_slave_holding"
 )
@@ -190,8 +196,9 @@ declare -a CLI_MODULES=(
     "list_ports_status"
     "modbus_basic_master_slave"
     "data_source_http"
-    "data_source_manual"
-    "data_source_ipc_channel"
+    "data_source_ipc"
+    "data_source_ipc_pipe"
+    "data_source_virtual_port"
     "data_source_mqtt"
     "slave_write_coils"
     "slave_write_holding"
@@ -302,7 +309,7 @@ run_workflow_tests() {
 
         # Run module
         if [[ "$workflow_type" == "cli" ]]; then
-            run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/cli_e2e --module \"$module\""
+            run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/cli_e2e --module \"$module\" --virtual-port-uuid \"${AOBA_VIRTUAL_PORT_UUID}\""
         else
             run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" ${TUI_E2E_EXTRA_ARGS:-} --screen-capture-only"
         fi
