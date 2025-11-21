@@ -1,0 +1,386 @@
+# Data Source - Virtual Port HTTP Master Mode
+# Test ID: data_source_virtual_port_http_master
+# Station: ID=1, Type=Holding, Address=0x0000, Length=10
+# Virtual Port: HTTP-based, created via 'n' then Right then Enter in entry page
+#
+# Test Focus:
+# - Create HTTP virtual port by pressing 'n', Right arrow, then Enter in entry page
+# - Configure as master station with manual register editing
+# - Verify HTTP communication channel is established
+# - Test register data editing (3 rounds)
+#
+# Test Data (3 Rounds):
+# Round 1 - Sequential: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+# Round 2 - Reverse: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+# Round 3 - Custom: [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+
+[manifest]
+id = "data_source_virtual_port_http_master"
+description = "Virtual HTTP port master mode with manual register editing"
+station_id = 1
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+mode = "master"
+
+init_order = [
+  "create_virtual_port_http",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "create_station",
+  "configure_station_fields",
+  "edit_register_values_round1",
+  "save_configuration",
+  "verify_port_enabled",
+]
+
+recycle_order = ["edit_register_values_round2", "edit_register_values_round3"]
+
+# Step 1: Create HTTP virtual port by pressing 'n', Right, then Enter in entry page
+[[workflow.create_virtual_port_http]]
+description = "Initialize mock state for entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.create_virtual_port_http]]
+description = "Ensure entry page has initial ports"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.create_virtual_port_http]]
+description = "Press 'n' to trigger virtual port creation mode"
+key = "Char(n)"
+
+[[workflow.create_virtual_port_http]]
+description = "Activate new port creation in mock state"
+mock_path = "$.temporarily.new_port_creation.active"
+mock_set_value = true
+
+[[workflow.create_virtual_port_http]]
+description = "Set port type index to IPC (0) initially"
+mock_path = "$.temporarily.new_port_creation.port_type_index"
+mock_set_value = 0
+
+[[workflow.create_virtual_port_http]]
+description = "Verify creation UI is active (hint shown)"
+verify = "Press n to create new port"
+
+[[workflow.create_virtual_port_http]]
+description = "Press Right to switch to HTTP Server option"
+key = "Right"
+
+[[workflow.create_virtual_port_http]]
+description = "Update port type index to HTTP (1)"
+mock_path = "$.temporarily.new_port_creation.port_type_index"
+mock_set_value = 1
+
+[[workflow.create_virtual_port_http]]
+description = "UI updates after Right key press"
+sleep_ms = 200
+
+[[workflow.create_virtual_port_http]]
+description = "Press Enter to confirm HTTP virtual port creation"
+key = "Enter"
+
+[[workflow.create_virtual_port_http]]
+description = "Add HTTP URL to ports (http://0.0.0.0:8080)"
+mock_path = "$.port_order"
+mock_set_value = [
+  "/tmp/vcom1",
+  "/tmp/vcom2",
+  "http://0.0.0.0:8080",
+]
+
+[[workflow.create_virtual_port_http]]
+description = "Initialize the HTTP virtual port in mock state"
+mock_path = "$.ports['http://0.0.0.0:8080']"
+mock_set_value = { port_name = "http://0.0.0.0:8080", port_type = "HTTP", state = { type = "free" }, enabled = false, modbus_slaves = [], modbus_masters = [] }
+
+[[workflow.create_virtual_port_http]]
+description = "Clear new port creation mode"
+mock_path = "$.temporarily.new_port_creation.active"
+mock_set_value = false
+
+[[workflow.create_virtual_port_http]]
+description = "Navigate cursor to newly created HTTP port"
+mock_path = "$.page"
+mock_set_value = { type = "entry", cursor = { Com = { index = 2 } }, view_offset = 0 }
+
+# Step 2: Enter configuration panel
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected HTTP virtual port"
+key = "Enter"
+
+[[workflow.enter_config_panel]]
+description = "Switch mock state to config panel"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.enter_config_panel]]
+description = "Select newly created HTTP port"
+mock_path = "$.page_state.config_panel.selected_port"
+mock_set_value = 2
+
+[[workflow.enter_config_panel]]
+description = "Position cursor on Enable Port"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "EnablePort"
+
+[[workflow.enter_config_panel]]
+description = "Reset scroll"
+mock_path = "$.page_state.config_panel.view_offset"
+mock_set_value = 0
+
+[[workflow.enter_config_panel]]
+description = "Verify Enable Port field (no baud rate for virtual)"
+verify = "Enable Port"
+
+[[workflow.enter_config_panel]]
+description = "Verify baud rate is NOT shown for HTTP virtual port"
+verify_absent = "Baud"
+
+# Step 3: Navigate to business configuration
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration"
+key = "Down"
+times = 2
+
+[[workflow.navigate_to_business_config]]
+description = "Update cursor to Business Configuration"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "ProtocolConfig"
+
+[[workflow.navigate_to_business_config]]
+description = "Verify Business Configuration entry"
+verify = "Enter Business Configuration"
+
+# Step 4: Enter Modbus panel
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "Enter"
+
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.enter_modbus_panel]]
+description = "Select HTTP virtual port"
+mock_path = "$.page_state.modbus_dashboard.selected_port"
+mock_set_value = 2
+
+[[workflow.enter_modbus_panel]]
+description = "Reset cursor"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.enter_modbus_panel]]
+description = "Reset scroll"
+mock_path = "$.page_state.modbus_dashboard.view_offset"
+mock_set_value = 0
+
+[[workflow.enter_modbus_panel]]
+description = "Verify Modbus dashboard"
+verify = "ModBus Master/Slave Settings"
+
+# Step 5: Create master station (default is Master, no need to change)
+[[workflow.create_station]]
+description = "Press Enter on 'Create Station'"
+key = "Enter"
+
+[[workflow.create_station]]
+description = "Initialize master station structure"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters"
+mock_set_value = [
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+]
+
+[[workflow.create_station]]
+description = "Focus cursor on station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.create_station]]
+description = "Verify station created"
+verify = "#1 - ID: 1"
+
+# Step 6: Configure Station Fields
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type station ID value 1"
+input = "decimal"
+value = 1
+
+[[workflow.configure_station_fields]]
+description = "Confirm Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Station ID in mock"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].station_id"
+mock_set_value = 1
+
+# Register Type
+[[workflow.configure_station_fields]]
+description = "Navigate to Register Type"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Keep Holding (default)"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Type"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].register_type"
+mock_set_value = "Holding"
+
+# Start Address
+[[workflow.configure_station_fields]]
+description = "Navigate to Start Address"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear value"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+description = "Delete"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type start address 0x0000"
+input = "hex"
+value = 0x0000
+
+[[workflow.configure_station_fields]]
+description = "Confirm"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Start Address"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].start_address"
+mock_set_value = 0
+
+# Register Count
+[[workflow.configure_station_fields]]
+description = "Navigate to Register Count"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear value"
+key = "Ctrl+A"
+
+[[workflow.configure_station_fields]]
+description = "Delete"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type register count 10"
+input = "decimal"
+value = 10
+
+[[workflow.configure_station_fields]]
+description = "Confirm"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Count"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].register_count"
+mock_set_value = 10
+
+[[workflow.configure_station_fields]]
+description = "Ensure registers array matches length"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].registers"
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+# Step 7: Set register values - Round 1 (Sequential: 0-9)
+[[workflow.edit_register_values_round1]]
+description = "Set register values directly in mock state"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].registers"
+mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+[[workflow.edit_register_values_round1]]
+description = "Verify register values appear on screen"
+verify = "0x0000              0x0000 0x0001 0x0002 0x0003 0x0004 0x0005 0x0006 0x0007"
+
+# Step 8: Save configuration
+[[workflow.save_configuration]]
+description = "Save configuration with Ctrl+S"
+key = "Ctrl+S"
+
+[[workflow.save_configuration]]
+description = "Enable port in mock"
+mock_path = "$.ports['http://0.0.0.0:8080'].enabled"
+mock_set_value = true
+
+[[workflow.save_configuration]]
+description = "Set port state to Running"
+mock_path = "$.ports['http://0.0.0.0:8080'].state"
+mock_set_value = { type = "occupied_by_this" }
+
+[[workflow.save_configuration]]
+description = "Wait for HTTP port to enable"
+sleep_ms = 5000
+
+[[workflow.save_configuration]]
+description = "Verify Running indicator"
+verify = "Running ●"
+
+# Step 9: Verify port enabled
+[[workflow.verify_port_enabled]]
+description = "Check HTTP port enabled"
+mock_verify_path = "$.ports['http://0.0.0.0:8080'].enabled"
+mock_verify_value = true
+
+[[workflow.verify_port_enabled]]
+description = "Check port state Running"
+mock_verify_path = "$.ports['http://0.0.0.0:8080'].state"
+mock_verify_value = { type = "occupied_by_this" }
+
+[[workflow.verify_port_enabled]]
+description = "Verify HTTP URL shown"
+verify_regex = "http://0\\.0\\.0\\.0:8080"
+
+# Round 2: Edit register values (Reverse: 9-0)
+[[workflow.edit_register_values_round2]]
+description = "Update registers to reverse sequence"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].registers"
+mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+
+[[workflow.edit_register_values_round2]]
+description = "Verify reverse values on screen"
+verify = "0x0000              0x0009 0x0008 0x0007 0x0006 0x0005 0x0004 0x0003 0x0002"
+
+# Round 3: Edit register values (Custom pattern)
+[[workflow.edit_register_values_round3]]
+description = "Update registers to custom pattern"
+mock_path = "$.ports['http://0.0.0.0:8080'].modbus_masters[0].registers"
+mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+
+[[workflow.edit_register_values_round3]]
+description = "Verify custom values on screen"
+verify = "0x0000              0x1111 0x2222 0x3333 0x4444 0x5555 0x6666 0x7777 0x8888"

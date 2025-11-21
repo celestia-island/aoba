@@ -176,6 +176,8 @@ async fn main() -> Result<()> {
             log::info!("    - data_source_mqtt_client");
             log::info!("    - data_source_port_forwarding");
             log::info!("    - data_source_virtual_port_slave");
+            log::info!("    - data_source_virtual_port_ipc_master");
+            log::info!("    - data_source_virtual_port_http_master");
             log::info!("");
             log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
             log::info!("       cargo run --package tui_e2e -- --list");
@@ -345,6 +347,18 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
         "data_source_virtual_port_slave".to_string(),
         parse_workflow(include_str!(
             "../workflow/data_source/virtual_port_slave.toml"
+        ))?,
+    );
+    workflows.insert(
+        "data_source_virtual_port_ipc_master".to_string(),
+        parse_workflow(include_str!(
+            "../workflow/data_source/virtual_port_ipc_master.toml"
+        ))?,
+    );
+    workflows.insert(
+        "data_source_virtual_port_http_master".to_string(),
+        parse_workflow(include_str!(
+            "../workflow/data_source/virtual_port_http_master.toml"
         ))?,
     );
 
