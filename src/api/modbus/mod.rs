@@ -1,8 +1,10 @@
+pub mod core;
 pub mod master;
 pub mod slave;
+pub mod traits;
 
 use anyhow::{anyhow, Result};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 // Re-export types from protocol
 #[doc(hidden)]
@@ -10,6 +12,23 @@ pub use crate::protocol::status::types::cli::OutputSink;
 #[doc(hidden)]
 pub use crate::protocol::status::types::modbus::ModbusMasterDataSource;
 pub use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode, StationMode};
+
+// Re-export core traits (API layer - abstract interfaces)
+pub use traits::{
+    LoggingHandler, ModbusDataSource, ModbusMasterHandler, ModbusSlaveHandler, NoOpHandler,
+};
+
+// Re-export concrete implementations (kept for backward compatibility)
+pub use master::ModbusMaster;
+pub use slave::ModbusSlave;
+
+// Re-export core functions for custom implementations
+pub use core::{master_poll_once, slave_process_one_request};
+
+// Re-export CLI default handlers (flume-based implementations)
+pub use crate::cli::modbus::handlers::{
+    FlumeHandlerControl, FlumeMasterHandler, FlumeSlaveHandler,
+};
 
 // Define the configuration struct
 #[derive(Debug, Clone)]
@@ -120,7 +139,29 @@ impl ModbusBuilder {
         })
     }
 
-    /// Run the Modbus loop with the configured settings.
+    /// Start a Modbus slave and return a handle with iterator-like interface
+    pub fn start_slave(self, hooks: Option<Arc<dyn ModbusHook>>) -> Result<slave::ModbusSlave> {
+        if self.role != StationMode::Slave {
+            return Err(anyhow!("Builder is configured for Master, not Slave"));
+        }
+        let config = self.build()?;
+        slave::ModbusSlave::start(config, hooks)
+    }
+
+    /// Start a Modbus master and return a handle with iterator-like interface
+    pub fn start_master(
+        self,
+        hooks: Option<Arc<dyn ModbusHook>>,
+        data_source: Option<Arc<Mutex<dyn traits::ModbusDataSource>>>,
+    ) -> Result<master::ModbusMaster> {
+        if self.role != StationMode::Master {
+            return Err(anyhow!("Builder is configured for Slave, not Master"));
+        }
+        let config = self.build()?;
+        master::ModbusMaster::start(config, hooks, data_source)
+    }
+
+    /// Run the Modbus loop with the configured settings (legacy API, kept for compatibility).
     pub async fn run(self, hooks: Option<Arc<dyn ModbusHook>>) -> Result<()> {
         let role = self.role;
         let config = self.build()?;
@@ -141,7 +182,7 @@ pub trait ModbusHook: Send + Sync {
     fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
 }
 
-/// Run the Modbus loop with the given configurations.
+/// Run the Modbus loop with the given configurations (legacy API).
 pub async fn run_modbus_loop(
     configs: Vec<ModbusPortConfig>,
     role: StationMode,
@@ -159,8 +200,14 @@ pub async fn run_modbus_loop(
 
         let handle = tokio::spawn(async move {
             match role {
-                StationMode::Slave => slave::run_slave_loop(config, hooks).await,
-                StationMode::Master => master::run_master_loop(config, hooks).await,
+                StationMode::Slave => {
+                    let (sender, _receiver) = flume::unbounded();
+                    slave::run_slave_loop(config, hooks, sender).await
+                }
+                StationMode::Master => {
+                    let (sender, _receiver) = flume::unbounded();
+                    master::run_master_loop(config, hooks, None, sender).await
+                }
             }
         });
         handles.push(handle);
@@ -171,41 +218,4 @@ pub async fn run_modbus_loop(
     }
 
     Ok(())
-}
-
-pub(crate) fn extract_values_from_storage(
-    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    start_addr: u16,
-    length: u16,
-    reg_mode: RegisterMode,
-) -> Result<Vec<u16>> {
-    use rmodbus::server::context::ModbusContext;
-
-    let storage = storage.lock().unwrap();
-    let mut values = Vec::new();
-
-    for i in 0..length {
-        let addr = start_addr + i;
-        let value = match reg_mode {
-            RegisterMode::Holding => storage.get_holding(addr)?,
-            RegisterMode::Input => storage.get_input(addr)?,
-            RegisterMode::Coils => {
-                if storage.get_coil(addr)? {
-                    1
-                } else {
-                    0
-                }
-            }
-            RegisterMode::DiscreteInputs => {
-                if storage.get_discrete(addr)? {
-                    1
-                } else {
-                    0
-                }
-            }
-        };
-        values.push(value);
-    }
-
-    Ok(values)
 }
