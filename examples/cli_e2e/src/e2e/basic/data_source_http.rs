@@ -185,6 +185,7 @@ pub async fn test_http_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 1: Slave poll command failed: {} (stderr: {})",
             client_output.status,
@@ -198,6 +199,7 @@ pub async fn test_http_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 1: Received values {:?} do not match expected {:?}",
             response.values,
@@ -244,6 +246,7 @@ pub async fn test_http_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 2: Slave poll command failed: {} (stderr: {})",
             client_output.status,
@@ -257,6 +260,7 @@ pub async fn test_http_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 2: Received values {:?} do not match expected {:?}",
             response.values,
@@ -303,6 +307,7 @@ pub async fn test_http_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 3: Slave poll command failed: {} (stderr: {})",
             client_output.status,
@@ -316,6 +321,7 @@ pub async fn test_http_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 3: Received values {:?} do not match expected {:?}",
             response.values,
@@ -327,6 +333,7 @@ pub async fn test_http_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Master exited after handling poll with status {status}"
         ));
@@ -335,6 +342,7 @@ pub async fn test_http_data_source() -> Result<()> {
     master.kill().ok();
     let _ = master.wait();
     std::fs::remove_file(&server_output).ok();
+    std::fs::remove_file(&server_stderr).ok();
 
     log::info!("✅ HTTP data source test passed (all 3 rounds verified)");
     Ok(())
