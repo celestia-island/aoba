@@ -219,6 +219,39 @@ jobs:
           if [ ! -f "$SRC" ]; then echo "Built binary not found: $SRC"; ls -l target/${TARGET}/release || true; exit 1; fi
           echo "Built (cross): $SRC"
 
+      - name: Verify binary exists before upload (non-Windows)
+        if: matrix.platform.os != 'windows-latest'
+        shell: bash
+        run: |
+          TARGET=${{ matrix.platform.target }}
+          BINARY="target/${TARGET}/release/aoba"
+          if [ -f "$BINARY" ]; then
+            echo "✓ Binary found: $BINARY"
+            ls -lh "$BINARY"
+            file "$BINARY" || true
+          else
+            echo "✗ Binary NOT found: $BINARY"
+            echo "Contents of release directory:"
+            ls -la "target/${TARGET}/release/" || true
+            exit 1
+          fi
+
+      - name: Verify binary exists before upload (Windows)
+        if: matrix.platform.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $TARGET = "${{ matrix.platform.target }}"
+          $BINARY = "target\${TARGET}\release\aoba.exe"
+          if (Test-Path $BINARY) {
+            Write-Host "✓ Binary found: $BINARY"
+            Get-Item $BINARY | Select-Object Name, Length, LastWriteTime
+          } else {
+            Write-Host "✗ Binary NOT found: $BINARY"
+            Write-Host "Contents of release directory:"
+            Get-ChildItem "target\${TARGET}\release\" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
       - name: Upload build artifact (non-Windows binary)
         if: matrix.platform.os != 'windows-latest'
         uses: actions/upload-artifact@v4
@@ -248,7 +281,11 @@ jobs:
         shell: bash
         run: |
           echo "Downloaded artifacts (before packaging):"
-          find ./artifacts -type f | sort
+          echo "================================"
+          find ./artifacts -type f -ls | sort
+          echo ""
+          echo "Directory structure:"
+          tree ./artifacts || find ./artifacts -print | sed -e 's;[^/]*/;|____;g;s;____|; |;g'
 
       - name: Package artifacts for cargo-binstall
         shell: bash
@@ -263,11 +300,11 @@ jobs:
           # Process each artifact directory
           for artifact_dir in ./artifacts/aoba-*; do
             if [ ! -d "$artifact_dir" ]; then continue; fi
-            
+
             # Extract target from directory name (e.g., aoba-x86_64-unknown-linux-gnu)
             TARGET=$(basename "$artifact_dir" | sed 's/^aoba-//')
             echo "Processing target: $TARGET"
-            
+
             # Check if this is a Windows target
             if [[ "$TARGET" == *"windows"* ]]; then
               # Windows: create zip
@@ -302,7 +339,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          files: ./packages/*
+          artifacts: "./packages/*"
           generateReleaseNotes: true
           draft: false
           prerelease: false
