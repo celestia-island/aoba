@@ -225,4 +225,4 @@ authors = ["langyo <langyo.china@gmail.com>"]
 license = "Apache-2.0"
 name = "aoba"
 repository = "https://github.com/celestia-island/aoba"
-version = "0.0.8"
+version = "0.0.9"
