@@ -1,3 +1,4 @@
+pub mod handlers;
 pub mod master;
 pub mod slave;
 

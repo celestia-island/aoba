@@ -1,16 +1,53 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::{
-    io::{Read, Write},
     sync::{Arc, Mutex},
     time::Duration,
 };
 
-use super::{extract_values_from_storage, ModbusHook, ModbusPortConfig, ModbusResponse};
-use crate::api::utils::open_serial_port;
+use super::{
+    core::slave_process_one_request, traits::ModbusSlaveHandler, ModbusHook, ModbusPortConfig,
+};
+use crate::{api::utils::open_serial_port, protocol::status::types::modbus::ModbusResponse};
 
-pub async fn run_slave_loop(
+/// Handle to a running Modbus slave that provides an iterator-like interface
+pub struct ModbusSlave {
+    receiver: flume::Receiver<ModbusResponse>,
+    _handle: tokio::task::JoinHandle<Result<()>>,
+}
+
+impl ModbusSlave {
+    /// Create and start a new Modbus slave listener
+    pub fn start(config: ModbusPortConfig, hooks: Option<Arc<dyn ModbusHook>>) -> Result<Self> {
+        let (sender, receiver) = flume::unbounded();
+
+        let handle = tokio::spawn(async move { run_slave_loop(config, hooks, sender).await });
+
+        Ok(Self {
+            receiver,
+            _handle: handle,
+        })
+    }
+
+    /// Try to receive a response without blocking (Iterator-like interface)
+    pub fn try_recv(&self) -> Option<ModbusResponse> {
+        self.receiver.try_recv().ok()
+    }
+
+    /// Receive a response with timeout
+    pub fn recv_timeout(&self, timeout: Duration) -> Option<ModbusResponse> {
+        self.receiver.recv_timeout(timeout).ok()
+    }
+
+    /// Get the underlying receiver for advanced usage
+    pub fn receiver(&self) -> &flume::Receiver<ModbusResponse> {
+        &self.receiver
+    }
+}
+
+pub(crate) async fn run_slave_loop(
     config: ModbusPortConfig,
     hooks: Option<Arc<dyn ModbusHook>>,
+    sender: flume::Sender<ModbusResponse>,
 ) -> Result<()> {
     log::info!("Starting slave loop for {}", config.port_name);
 
@@ -33,7 +70,7 @@ pub async fn run_slave_loop(
             }
         }
 
-        match listen_for_one_request(
+        match slave_process_one_request(
             port_arc.clone(),
             config.station_id,
             config.register_address,
@@ -47,6 +84,12 @@ pub async fn run_slave_loop(
                         log::warn!("Hook on_after_response failed: {}", e);
                     }
                 }
+
+                // Send response to channel
+                if sender.send(response).is_err() {
+                    log::warn!("Receiver dropped, stopping slave loop");
+                    break;
+                }
             }
             Err(err) => {
                 log::warn!("Error processing request on {}: {}", config.port_name, err);
@@ -57,82 +100,81 @@ pub async fn run_slave_loop(
             }
         }
     }
+
+    Ok(())
 }
 
-/// Listen for one Modbus request and respond (Slave/Server logic)
-pub fn listen_for_one_request(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
-    station_id: u8,
-    register_address: u16,
-    register_length: u16,
-    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
-    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-) -> Result<ModbusResponse> {
-    use rmodbus::{server::ModbusFrame, ModbusProto};
+/// Generic slave loop that uses a handler trait
+///
+/// This function is independent of communication channels.
+/// It calls the handler's methods to process responses.
+pub async fn run_slave_loop_with_handler(
+    config: ModbusPortConfig,
+    hooks: Option<Arc<dyn ModbusHook>>,
+    handler: Arc<dyn ModbusSlaveHandler>,
+) -> Result<()> {
+    log::info!(
+        "Starting slave loop with custom handler for {}",
+        config.port_name
+    );
 
-    // Read request from port
-    let mut buffer = vec![0u8; 256];
-    let mut port = port_arc.lock().unwrap();
-    let bytes_read = port.read(&mut buffer)?;
-    drop(port);
+    let port_handle = open_serial_port(
+        &config.port_name,
+        config.baud_rate,
+        Duration::from_millis(config.timeout_ms),
+    )?;
+    let port_arc = Arc::new(Mutex::new(port_handle));
 
-    if bytes_read == 0 {
-        return Err(anyhow!("No data received"));
+    // Initialize modbus storage
+    let storage = Arc::new(Mutex::new(
+        rmodbus::server::storage::ModbusStorageSmall::new(),
+    ));
+
+    loop {
+        // Check if handler wants to continue
+        if !handler.should_continue() {
+            log::info!("Handler requested stop, exiting slave loop");
+            break;
+        }
+
+        if let Some(h) = &hooks {
+            if let Err(e) = h.on_before_request(&config.port_name) {
+                log::warn!("Hook on_before_request failed: {}", e);
+            }
+        }
+
+        match slave_process_one_request(
+            port_arc.clone(),
+            config.station_id,
+            config.register_address,
+            config.register_length,
+            config.register_mode,
+            storage.clone(),
+        ) {
+            Ok(response) => {
+                if let Some(h) = &hooks {
+                    if let Err(e) = h.on_after_response(&config.port_name, &response) {
+                        log::warn!("Hook on_after_response failed: {}", e);
+                    }
+                }
+
+                // Use handler to process response
+                if let Err(e) = handler.handle_response(response) {
+                    log::error!("Handler failed to process response: {}", e);
+                    if let Some(h) = &hooks {
+                        h.on_error(&config.port_name, &e);
+                    }
+                }
+            }
+            Err(err) => {
+                log::warn!("Error processing request on {}: {}", config.port_name, err);
+                if let Some(h) = &hooks {
+                    h.on_error(&config.port_name, &err);
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        }
     }
 
-    let request = &buffer[..bytes_read];
-    log::debug!("Received request: {request:02X?}");
-
-    // Parse and respond to request
-    let mut response = Vec::new();
-    let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response);
-    frame.parse()?;
-
-    // Generate response based on register mode
-    let response_bytes = match reg_mode {
-        crate::protocol::status::types::modbus::RegisterMode::Holding => {
-            crate::protocol::modbus::build_slave_holdings_response(
-                &mut frame,
-                &mut storage.lock().unwrap(),
-            )?
-        }
-        crate::protocol::status::types::modbus::RegisterMode::Input => {
-            crate::protocol::modbus::build_slave_inputs_response(
-                &mut frame,
-                &mut storage.lock().unwrap(),
-            )?
-        }
-        crate::protocol::status::types::modbus::RegisterMode::Coils => {
-            crate::protocol::modbus::build_slave_coils_response(
-                &mut frame,
-                &mut storage.lock().unwrap(),
-            )?
-        }
-        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-            crate::protocol::modbus::build_slave_discrete_inputs_response(
-                &mut frame,
-                &mut storage.lock().unwrap(),
-            )?
-        }
-    };
-
-    if let Some(resp) = response_bytes {
-        // Send response
-        let mut port = port_arc.lock().unwrap();
-        port.write_all(&resp)?;
-        port.flush()?;
-        log::debug!("Sent response: {resp:02X?}");
-    }
-
-    // Extract values from storage for response
-    let values =
-        extract_values_from_storage(&storage, register_address, register_length, reg_mode)?;
-
-    Ok(ModbusResponse {
-        station_id,
-        register_address,
-        register_mode: format!("{reg_mode:?}"),
-        values,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    })
+    Ok(())
 }

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use futures::Future;
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
@@ -86,6 +87,40 @@ pub fn is_handle_finished(port: u16) -> Option<bool> {
     if let Some(entry) = reg.map.get(&port) {
         let guard = entry.handle.lock().unwrap();
         return Some(guard.as_ref().map(|h| h.is_finished()).unwrap_or(true));
+    }
+    None
+}
+
+/// Get the error result from a finished handle (non-blocking)
+/// Returns Some(Err) if the handle has finished with an error, None if still running or not found
+pub fn get_handle_error(port: u16) -> Option<Result<()>> {
+    use std::task::Poll;
+
+    let reg = HTTP_REGISTRY.lock().unwrap();
+    if let Some(entry) = reg.map.get(&port) {
+        let mut guard = entry.handle.lock().unwrap();
+        if let Some(handle) = guard.as_mut() {
+            // Create a no-op waker to poll the handle
+            let waker = futures::task::noop_waker();
+            let mut cx = std::task::Context::from_waker(&waker);
+
+            // Try to poll the handle without awaiting
+            match std::pin::Pin::new(handle).poll(&mut cx) {
+                Poll::Ready(Ok(Ok(()))) => return Some(Ok(())),
+                Poll::Ready(Ok(Err(e))) => {
+                    log::error!("HTTP server thread error detected: {}", e);
+                    return Some(Err(e));
+                }
+                Poll::Ready(Err(join_err)) => {
+                    log::error!("HTTP server thread panicked: {}", join_err);
+                    return Some(Err(anyhow::anyhow!(
+                        "HTTP server thread panicked: {}",
+                        join_err
+                    )));
+                }
+                Poll::Pending => return None,
+            }
+        }
     }
     None
 }
