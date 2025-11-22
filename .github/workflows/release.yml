@@ -198,18 +198,9 @@ jobs:
           cargo build --release --target "$TARGET"
           BIN=aoba
           if [[ "$TARGET" == *"windows-msvc"* ]]; then BIN=${BIN}.exe; fi
-          OUTDIR="dist"
-          mkdir -p "$OUTDIR"
           SRC=target/$TARGET/release/$BIN
           if [ ! -f "$SRC" ]; then echo "Built binary not found: $SRC"; ls -l target/$TARGET/release || true; exit 1; fi
           echo "Built: $SRC"
-
-      - name: Clean `dist` directory before packaging
-        shell: pwsh
-        run: |
-          $OutDir = "dist"
-          if (Test-Path $OutDir) { Remove-Item $OutDir -Recurse -Force }
-          New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
       - name: Build release binary (cross)
         if: matrix.platform.os == 'ubuntu-24.04-arm'
@@ -224,14 +215,9 @@ jobs:
           cross build --release --target ${TARGET}
           BIN=aoba
           if [[ "${TARGET}" == *"windows-msvc"* ]]; then BIN=${BIN}.exe; fi
-          OUTDIR="dist"
-          mkdir -p "$OUTDIR"
           SRC=target/${TARGET}/release/${BIN}
           if [ ! -f "$SRC" ]; then echo "Built binary not found: $SRC"; ls -l target/${TARGET}/release || true; exit 1; fi
           echo "Built (cross): $SRC"
-
-      # Manual packaging (tar/zip) removed. Upload binaries directly so `binstall`
-      # and other tools can detect the raw executable without nested archives.
 
       - name: Upload build artifact (non-Windows binary)
         if: matrix.platform.os != 'windows-latest'
