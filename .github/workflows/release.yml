@@ -13,26 +13,36 @@ env:
   BINARY_NAME: aoba
 
 jobs:
-  release:
-    name: Release
-    permissions:
-      contents: write
-    runs-on: ${{ matrix.platform.os }}
+  build:
+    name: Build
+    runs-on: ${{ startsWith(matrix.platform.os, 'windows') && matrix.platform.os || startsWith(matrix.platform.os, 'macos') && matrix.platform.os || 'ubuntu-latest' }}
     strategy:
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            kind: native
           - target: aarch64-pc-windows-msvc
             os: windows-latest
+            kind: native
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
+            kind: native
           - target: aarch64-apple-darwin
             os: macos-latest
+            kind: native
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-24.04
+            kind: native
+          - target: i686-unknown-linux-gnu
+            os: ubuntu-24.04
+            kind: native
+          - target: armv7-unknown-linux-gnueabihf
+            os: ubuntu-24.04-arm
+            kind: cross
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
+            kind: cross
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -56,12 +66,90 @@ jobs:
           docker-images: false
           swap-storage: false
 
-      - name: Cache apt packages (Linux only)
+      - name: System Packages — Cache (Linux only)
         if: matrix.platform.os == 'ubuntu-24.04' || matrix.platform.os == 'ubuntu-24.04-arm'
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev libglib2.0-dev musl-tools
+          packages: |
+            build-essential
+            pkg-config
+            libssl-dev
+            nasm
+            libwebkit2gtk-4.1-dev
+            libgtk-3-dev
+            libayatana-appindicator3-dev
+            libxdo-dev
+            libglib2.0-dev
+            musl-tools
           version: 1.0
+
+      - name: System Packages — Enable i386 (i686 target)
+        if: matrix.platform.target == 'i686-unknown-linux-gnu'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo dpkg --add-architecture i386 || true
+          sudo apt-get update || true
+
+      - name: System Packages — Cache (i686 — 32-bit libs)
+        if: matrix.platform.target == 'i686-unknown-linux-gnu'
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: |
+            gcc-multilib
+            libc6-dev-i386
+            linux-libc-dev:i386
+            libssl-dev:i386
+            pkg-config
+          version: 1.0
+
+      - name: System Packages — Install (i686 — 32-bit libs)
+        if: matrix.platform.target == 'i686-unknown-linux-gnu'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          # Ensure multiarch and i386 packages are installed (explicit install to
+          # guarantee headers/libs available to the build). Cache action may have
+          # populated apt cache, but installing ensures files are present.
+          sudo dpkg --add-architecture i386 || true
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-multilib \
+            libc6-dev-i386 \
+            linux-libc-dev:i386 \
+            libssl-dev:i386 \
+            pkg-config
+
+      - name: System Packages — Install (host)
+        id: install-deps
+        if: matrix.platform.os == 'ubuntu-24.04' || matrix.platform.os == 'ubuntu-24.04-arm'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          # Common packages required for native builds and pkg-config
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libx11-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            socat \
+            nasm
+
+          # Special-case: set pkg-config values for i686 target (actual 32-bit
+          # packages are installed by the dedicated cache step above)
+          PKG_CONFIG_PATH=""
+          PKG_CONFIG_ALLOW_CROSS=""
+          if [ "${{ matrix.platform.target }}" = "i686-unknown-linux-gnu" ]; then
+            PKG_CONFIG_PATH="/usr/lib/i386-linux-gnu/pkgconfig"
+            PKG_CONFIG_ALLOW_CROSS=1
+          fi
+
+          # Export outputs for downstream steps to consume
+          echo "pkg_config_path=${PKG_CONFIG_PATH}" >> $GITHUB_OUTPUT
+          echo "pkg_config_allow_cross=${PKG_CONFIG_ALLOW_CROSS}" >> $GITHUB_OUTPUT
 
       - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -69,22 +157,108 @@ jobs:
           toolchain: "stable"
           targets: ${{ matrix.platform.target }}
 
+      - name: Install cross (for ARM cross-builds)
+        if: matrix.platform.os == 'ubuntu-24.04-arm'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
       - name: Cache Rust crates
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and upload CLI binaries
-        uses: taiki-e/upload-rust-binary-action@v1
-        with:
-          bin: dx
-          token: ${{ secrets.GITHUB_TOKEN }}
-          target: ${{ matrix.platform.target }}
-          archive: dx-${{ matrix.platform.target }}
-          checksum: sha256
-          manifest_path: packages/cli/Cargo.toml
-          ref: ${{ github.ref }}
-          zip: all
+      - name: Build release binary (native)
+        if: matrix.platform.os != 'ubuntu-24.04-arm'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET=${{ matrix.platform.target }}
+          PKG_CFG_PATH="${{ steps.install-deps.outputs.pkg_config_path }}"
+          if [ -n "$PKG_CFG_PATH" ] && [ -d "$PKG_CFG_PATH" ]; then
+            export PKG_CONFIG_PATH="$PKG_CFG_PATH"
+            echo "Using PKG_CONFIG_PATH=$PKG_CFG_PATH"
+          else
+            echo "PKG_CONFIG_PATH not set or directory does not exist: $PKG_CFG_PATH"
+          fi
+          if [ "${{ steps.install-deps.outputs.pkg_config_allow_cross }}" = "1" ]; then
+            export PKG_CONFIG_ALLOW_CROSS=1
+            echo "PKG_CONFIG_ALLOW_CROSS=1"
+          fi
+          # For i686 builds, ensure pkg-config searches the i386 pkgconfig dir
+          # first, and point openssl env vars at the i386 include/lib locations
+          if [ "${{ matrix.platform.target }}" = "i686-unknown-linux-gnu" ]; then
+            export PKG_CONFIG_LIBDIR="/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/pkgconfig"
+            export OPENSSL_INCLUDE_DIR="/usr/include/i386-linux-gnu"
+            export OPENSSL_LIB_DIR="/usr/lib/i386-linux-gnu"
+            export OPENSSL_DIR="/usr"
+            echo "Configured i386 openssl paths: OPENSSL_INCLUDE_DIR=$OPENSSL_INCLUDE_DIR OPENSSL_LIB_DIR=$OPENSSL_LIB_DIR"
+          fi
+          cargo build --release --target "$TARGET"
+          BIN=aoba
+          if [[ "$TARGET" == *"windows-msvc"* ]]; then BIN=${BIN}.exe; fi
+          OUTDIR="dist"
+          mkdir -p "$OUTDIR"
+          SRC=target/$TARGET/release/$BIN
+          if [ ! -f "$SRC" ]; then echo "Built binary not found: $SRC"; ls -l target/$TARGET/release || true; exit 1; fi
+          echo "Built: $SRC"
+
+      - name: Clean `dist` directory before packaging
+        shell: pwsh
+        run: |
+          $OutDir = "dist"
+          if (Test-Path $OutDir) { Remove-Item $OutDir -Recurse -Force }
+          New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+
+      - name: Build release binary (cross)
+        if: matrix.platform.os == 'ubuntu-24.04-arm'
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ matrix.platform.target }}
+        run: |
+          set -euo pipefail
+          echo "Using cross to build target=${TARGET}"
+          # cross will use a container image with proper sysroot; prefer that for
+          # armhf/armv7/other cross-targets instead of local pkg-config fiddling.
+          cross build --release --target ${TARGET}
+          BIN=aoba
+          if [[ "${TARGET}" == *"windows-msvc"* ]]; then BIN=${BIN}.exe; fi
+          OUTDIR="dist"
+          mkdir -p "$OUTDIR"
+          SRC=target/${TARGET}/release/${BIN}
+          if [ ! -f "$SRC" ]; then echo "Built binary not found: $SRC"; ls -l target/${TARGET}/release || true; exit 1; fi
+          echo "Built (cross): $SRC"
+
+      # Manual packaging (tar/zip) removed. Upload binaries directly so `binstall`
+      # and other tools can detect the raw executable without nested archives.
+
+      - name: Upload build artifact (non-Windows binary)
+        if: matrix.platform.os != 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aoba-${{ matrix.platform.target }}
+          path: target/${{ matrix.platform.target }}/release/aoba
+
+      - name: Upload build artifact (Windows binary)
+        if: matrix.platform.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aoba-${{ matrix.platform.target }}
+          path: target/${{ matrix.platform.target }}/release/aoba.exe
+  publish:
+    name: Publish Release (tags only)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create GitHub release and upload assets
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          files: "artifacts/**"
