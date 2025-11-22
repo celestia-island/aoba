@@ -202,7 +202,7 @@ pub async fn run_modbus_loop(
             match role {
                 StationMode::Slave => {
                     let (sender, _receiver) = flume::unbounded();
-                    slave::run_slave_loop(config, hooks, sender).await
+                    slave::run_slave_loop(config, hooks, sender, None).await
                 }
                 StationMode::Master => {
                     let (sender, _receiver) = flume::unbounded();

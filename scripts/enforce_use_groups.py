@@ -6,11 +6,21 @@ The policy is described in `.github/copilot-instructions.md` and can be summariz
 1. Group imports into three sections: shared utility crates (`std`, `anyhow`, `serde`, ...),
    domain-specific external crates (e.g. `serialport`, `rmodbus`, `ratatui`), and
    workspace/internal crates (`crate::`, `super::`, or other workspace packages).
+
+   IMPORTANT: All crates with underscore-prefixed names (e.g., `_client_functions_*`,
+   `_main`, `_utils`) are automatically classified as internal/workspace crates (group 3).
+
 2. Place a single blank line between groups and after the final group before code.
 3. In `mod.rs`, `lib.rs`, and `main.rs`, emit all `mod` declarations before the first
    `use` block.
 4. Merge consecutive simple paths that share a prefix (`use std::sync::Arc;` and
    `use std::collections::HashMap;` -> `use std::{collections::HashMap, sync::Arc};`).
+
+IMPROVEMENTS:
+- Unified base crate name extraction via `extract_base_crate()` function
+- More robust regex-based identifier parsing that correctly handles underscore prefixes
+- Consistent underscore prefix detection across all classification functions
+- Better support for complex paths like `_client_functions_3_1::module::item`
 
 This script rewrites files in-place and prints a summary of modified files.
 """
@@ -129,25 +139,60 @@ def extract_use_path(lines: Sequence[str]) -> Optional[str]:
     return match.group(1).strip() if match else None
 
 
-def classify_use(path: Optional[str], workspace_crates: set[str]) -> int:
-    if not path:
-        return 2
+def extract_base_crate(path: str) -> str:
+    """
+    Extract the top-level crate name from a use path.
+
+    Examples:
+    - "_client_functions_3_1::something" -> "_client_functions_3_1"
+    - "std::collections::HashMap" -> "std"
+    - "crate::module" -> "crate"
+    - "self::item" -> "self"
+    """
     token = path.strip()
+    # Remove 'pub ' and 'use ' prefixes
     if token.startswith("pub "):
         token = token[4:].strip()
     if token.startswith("use "):
         token = token[4:].strip()
-    if token.startswith(("crate::", "self::", "super::", "_main::")):
+    # Remove leading colons
+    token = token.lstrip(":").strip()
+
+    # Extract the first segment before :: or any special character
+    # Use a regex to match valid identifier characters (including underscore)
+    match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)', token)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def classify_use(path: Optional[str], workspace_crates: set[str]) -> int:
+    if not path:
+        return 2
+
+    base = extract_base_crate(path)
+    if not base:
+        return 2
+
+    # Fast-path for explicit prefixes (which are always group 3)
+    if base in ("crate", "self", "super"):
         return 3
-    if token.startswith("::"):
-        token = token.lstrip(":")
-    base = re.split(r"::|,|\s|{", token, maxsplit=1)[0]
-    if base in ("crate", "self", "super", "_main"):
+
+    # All underscore-prefixed crates are internal/workspace (group 3)
+    # This ensures libraries like _client_functions_3_1, _main, _utils, etc.
+    # are consistently classified as internal
+    if base.startswith("_"):
         return 3
+
+    # Check against workspace crates
     if base in workspace_crates:
         return 3
+
+    # Check against known shared utility crates
     if base in GROUP1_CRATES:
         return 1
+
+    # Default to domain-specific external crates
     return 2
 
 
@@ -182,23 +227,31 @@ def compute_merge_components(path: Optional[str], has_attrs: bool) -> Tuple[Opti
     """
     if has_attrs or not path:
         return None, None
+
+    base = extract_base_crate(path)
+    if not base:
+        return None, None
+
+    # Find where the base ends and extract the remainder
     token = path.strip()
-    # strip leading 'pub ' or 'use ' if present (defensive)
     if token.startswith("pub "):
         token = token[4:].strip()
     if token.startswith("use "):
         token = token[4:].strip()
-    token = token.lstrip(":")
-    parts = token.split("::", 1)
-    if not parts:
-        return None, None
-    base = parts[0]
-    if len(parts) == 1:
-        # path like `use foo;` - no remainder
-        remainder = ""
-    else:
-        remainder = parts[1]
-    return base, remainder
+    token = token.lstrip(":").strip()
+
+    # Find the position after the base crate name
+    # e.g., for "_client_functions_3_1::something", we want "something"
+    if token.startswith(base):
+        # Check if there's a :: after the base
+        if len(token) > len(base) and token[len(base):len(base)+2] == "::":
+            remainder = token[len(base)+2:]
+            return base, remainder
+        elif len(token) == len(base):
+            # Just the base, no remainder
+            return base, ""
+
+    return None, None
 
 
 def append_blank_line(buf: List[str]) -> None:
@@ -657,6 +710,77 @@ def main() -> int:
     return 0
 
 
+def test_underscore_classification() -> bool:
+    """Test that underscore-prefixed crates are classified as internal (group 3)."""
+    test_cases = [
+        # (input, expected_group, description)
+        ("_client_functions_3_1::something", 3, "underscore with module path"),
+        ("_client_bootstrap_3_1", 3, "underscore simple import"),
+        ("_main::run", 3, "underscore _main prefix"),
+        ("_utils::helper", 3, "underscore _utils prefix"),
+        ("use _client_functions_3_1::init", 3, "with use keyword"),
+        ("pub use _utils::setup", 3, "with pub use keywords"),
+        # Standard group 1 crates
+        ("std::collections", 1, "std library"),
+        ("anyhow::Result", 1, "anyhow utility"),
+        ("tokio::spawn", 1, "tokio runtime"),
+        # Explicit workspace prefixes (group 3)
+        ("crate::module", 3, "crate prefix"),
+        ("self::item", 3, "self prefix"),
+        ("super::parent", 3, "super prefix"),
+        # External domain-specific (group 2)
+        ("serialport::SerialPort", 2, "serialport external"),
+        ("rmodbus::ModbusContext", 2, "rmodbus external"),
+    ]
+
+    workspace_crates: set[str] = set()
+    all_passed = True
+
+    print("\n" + "="*80)
+    print("UNDERSCORE-PREFIXED CRATE CLASSIFICATION TEST")
+    print("="*80)
+    print(f"\n{'Test Case':<50} | {'Expected':<10} | {'Actual':<10} | Status")
+    print("-"*80)
+
+    group_names = {1: "std/util", 2: "external", 3: "internal"}
+
+    for test_input, expected_group, description in test_cases:
+        actual_group = classify_use(test_input, workspace_crates)
+        passed = actual_group == expected_group
+        status = "PASS" if passed else "FAIL"
+
+        expected_name = group_names[expected_group]
+        actual_name = group_names[actual_group]
+
+        print(f"{description:<50} | {expected_name:<10} | {actual_name:<10} | {status}")
+
+        if not passed:
+            all_passed = False
+            base = extract_base_crate(test_input)
+            print(f"  -> Input: '{test_input}'")
+            print(f"  -> Base crate: '{base}'")
+
+    print("-"*80)
+    if all_passed:
+        print("\nAll classification tests PASSED!")
+        print("\nKey improvements verified:")
+        print("  + All underscore-prefixed crates classified as internal (group 3)")
+        print("  + Standard library crates correctly in group 1")
+        print("  + External domain-specific crates in group 2")
+        print("  + Explicit workspace prefixes (crate::, self::, super::) in group 3")
+    else:
+        print("\nSome tests FAILED!")
+
+    print("="*80 + "\n")
+    return all_passed
+
+
 if __name__ == "__main__":
+    # Check for test mode
+    if "--test" in sys.argv:
+        WORKSPACE_CRATES = load_workspace_crates(Path.cwd())
+        passed = test_underscore_classification()
+        sys.exit(0 if passed else 1)
+
     WORKSPACE_CRATES = load_workspace_crates(Path.cwd())
     sys.exit(main())
