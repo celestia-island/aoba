@@ -10,6 +10,19 @@ edition.workspace = true
 build = "build.rs"
 exclude.workspace = true
 
+# Configuration for cargo-binstall
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+# Windows targets use zip format
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [workspace]
 members = [".", "examples/*"]
 default-members = ["."]
@@ -20,7 +33,7 @@ authors = ["langyo <langyo.china@gmail.com>"]
 description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus RTU."
 repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
-version = "0.0.9"
+version = "0.0.10"
 edition = "2021"
 exclude = [
   "docs/**",
