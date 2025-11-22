@@ -13,19 +13,39 @@ use crate::{api::utils::open_serial_port, protocol::status::types::modbus::Modbu
 pub struct ModbusSlave {
     receiver: flume::Receiver<ModbusResponse>,
     _handle: tokio::task::JoinHandle<Result<()>>,
+    // Optional one-shot sender used to request the slave loop to stop.
+    // Keeping the sender alive allows callers to trigger a graceful shutdown
+    // by sending a unit value. It's optional because other call sites may
+    // not require manual stop control.
+    stop_sender: Option<flume::Sender<()>>,
 }
 
 impl ModbusSlave {
     /// Create and start a new Modbus slave listener
     pub fn start(config: ModbusPortConfig, hooks: Option<Arc<dyn ModbusHook>>) -> Result<Self> {
         let (sender, receiver) = flume::unbounded();
+        // Create a one-shot control channel so callers can request stop.
+        let (stop_tx, stop_rx) = flume::bounded::<()>(1);
 
-        let handle = tokio::spawn(async move { run_slave_loop(config, hooks, sender).await });
+        // Spawn the slave loop using the project's task manager helper so tasks
+        // are scheduled and tracked consistently across the application.
+        let handle = crate::core::task_manager::spawn_task(async move {
+            run_slave_loop(config, hooks, sender, Some(stop_rx)).await
+        });
 
         Ok(Self {
             receiver,
             _handle: handle,
+            stop_sender: Some(stop_tx),
         })
+    }
+
+    /// Request the running slave loop to stop. This sends a one-time message
+    /// to the control channel; subsequent calls are no-ops.
+    pub fn stop(&mut self) {
+        if let Some(tx) = self.stop_sender.take() {
+            let _ = tx.send(());
+        }
     }
 
     /// Try to receive a response without blocking (Iterator-like interface)
@@ -48,6 +68,7 @@ pub(crate) async fn run_slave_loop(
     config: ModbusPortConfig,
     hooks: Option<Arc<dyn ModbusHook>>,
     sender: flume::Sender<ModbusResponse>,
+    control: Option<flume::Receiver<()>>,
 ) -> Result<()> {
     log::info!("Starting slave loop for {}", config.port_name);
 
@@ -64,6 +85,13 @@ pub(crate) async fn run_slave_loop(
     ));
 
     loop {
+        // Check for external stop request (non-blocking)
+        if let Some(ctrl) = &control {
+            if ctrl.try_recv().is_ok() {
+                log::info!("Stop requested for {}", config.port_name);
+                break;
+            }
+        }
         if let Some(h) = &hooks {
             if let Err(e) = h.on_before_request(&config.port_name) {
                 log::warn!("Hook on_before_request failed: {}", e);
