@@ -103,12 +103,55 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         .unwrap_or(false);
 
     if !broker_available {
-        log::warn!("⚠️ Mosquitto MQTT broker not found. Installing or starting it...");
-        // Try to start mosquitto in the background
+        log::warn!("⚠️ Mosquitto MQTT broker not found. Attempting to install and start it...");
+
+        // Try to install mosquitto if not available
+        let install_result = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("command -v mosquitto || (sudo apt-get update && sudo apt-get install -y mosquitto)")
+            .output();
+
+        if let Ok(output) = install_result {
+            if !output.status.success() {
+                log::warn!(
+                    "Failed to install mosquitto: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+
+        // Kill any existing mosquitto instances on port 1883
         let _ = std::process::Command::new("sh")
             .arg("-c")
-            .arg("mosquitto -d -p 1883 2>/dev/null || true")
+            .arg("pkill -9 -f 'mosquitto.*1883' || true")
+            .output();
+
+        sleep_1s().await;
+
+        // Try to start mosquitto in the background with explicit config
+        let start_result = std::process::Command::new("mosquitto")
+            .args(&["-p", "1883", "-v"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn();
+
+        match start_result {
+            Ok(child) => {
+                // Detach the child process so it keeps running
+                let _ = child.id();
+                log::info!("Started mosquitto broker on port 1883");
+            }
+            Err(e) => {
+                log::error!("Failed to start mosquitto: {}", e);
+                return Err(anyhow!(
+                    "Mosquitto broker is required but could not be started: {}",
+                    e
+                ));
+            }
+        }
+
+        // Wait longer for broker to be ready
         sleep_3s().await;
     }
 

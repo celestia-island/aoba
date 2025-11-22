@@ -699,8 +699,16 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let (shutdown_tx, shutdown_rx) = flume::bounded::<()>(1);
         let storage_for_thread = storage_clone.clone();
         let handle = spawn_task(async move {
-            run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread)).await?;
-            Ok(())
+            match run_http_server_daemon(port, tx, shutdown_rx, Some(storage_for_thread)).await {
+                Ok(()) => {
+                    log::info!("HTTP server daemon exited normally");
+                    Ok(())
+                }
+                Err(e) => {
+                    log::error!("HTTP server daemon failed: {}", e);
+                    Err(e)
+                }
+            }
         });
 
         // Register handle+shutdown sender into global registry
@@ -860,12 +868,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
     loop {
-        // Check if HTTP server thread has panicked
+        // Check if HTTP server thread has panicked or errored
         if let Some(port) = http_server_thread {
-            if let Some(is_finished) = http_registry::is_handle_finished(port) {
-                if is_finished {
-                    return Err(anyhow!("HTTP server thread terminated unexpectedly"));
-                }
+            if let Some(result) = http_registry::get_handle_error(port) {
+                return result.map_err(|e| anyhow!("HTTP server thread failed: {}", e));
             }
         }
 

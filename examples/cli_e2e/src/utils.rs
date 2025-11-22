@@ -241,7 +241,13 @@ pub async fn wait_for_process_ready(
         }
 
         if let Some(status) = process.try_wait()? {
-            return Err(anyhow!("Process exited prematurely with status {}", status));
+            // Try to read stderr log file for error details
+            let stderr_hint = try_read_stderr_log();
+            return Err(anyhow!(
+                "Process exited prematurely with status {}. {}",
+                status,
+                stderr_hint
+            ));
         }
 
         sleep_1s().await;
@@ -249,8 +255,33 @@ pub async fn wait_for_process_ready(
 
     // Final check after minimum wait
     if let Some(status) = process.try_wait()? {
-        return Err(anyhow!("Process exited prematurely with status {}", status));
+        let stderr_hint = try_read_stderr_log();
+        return Err(anyhow!(
+            "Process exited prematurely with status {}. {}",
+            status,
+            stderr_hint
+        ));
     }
 
     Ok(())
+}
+
+/// Try to read common stderr log file paths for debugging
+fn try_read_stderr_log() -> String {
+    let stderr_paths = [
+        "/tmp/server_http_persist_stderr.log",
+        "/tmp/server_mqtt_persist_stderr.log",
+        "/tmp/master_stderr.log",
+        "/tmp/slave_stderr.log",
+    ];
+
+    for path in &stderr_paths {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if !content.trim().is_empty() {
+                return format!("Stderr ({}): {}", path, content.trim());
+            }
+        }
+    }
+
+    "No stderr log found".to_string()
 }
