@@ -183,9 +183,17 @@ pub async fn test_mqtt_data_source() -> Result<()> {
 
     let server_output = temp_dir.join("server_mqtt_persist_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
+    let server_stderr = temp_dir.join("server_mqtt_persist_stderr.log");
+    let server_stderr_file = std::fs::File::create(&server_stderr)?;
 
     let binary = build_debug_bin("aoba")?;
     let register_length_arg = REGISTER_LENGTH.to_string();
+
+    log::info!(
+        "📋 Master logs will be at: stdout={:?}, stderr={:?}",
+        server_output,
+        server_stderr
+    );
 
     let mut master = std::process::Command::new(&binary)
         .arg("--enable-virtual-ports")
@@ -206,7 +214,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
             &mqtt_url,
         ])
         .stdout(Stdio::from(server_output_file))
-        .stderr(Stdio::piped())
+        .stderr(Stdio::from(server_stderr_file))
         .spawn()?;
 
     // Wait for master to be ready and MQTT connection to establish
@@ -248,6 +256,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 1: Slave poll command failed: {} (stderr: {})",
             client_output.status,
@@ -261,6 +270,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 1: Received values {:?} do not match expected {:?}",
             response.values,
@@ -305,6 +315,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 2: Slave poll command failed: {} (stderr: {})",
             client_output.status,
@@ -318,6 +329,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 2: Received values {:?} do not match expected {:?}",
             response.values,
@@ -362,6 +374,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 3: Slave poll command failed: {} (stderr: {})",
             client_output.status,
@@ -375,6 +388,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Round 3: Received values {:?} do not match expected {:?}",
             response.values,
@@ -386,6 +400,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
+        std::fs::remove_file(&server_stderr).ok();
         return Err(anyhow!(
             "Master exited after handling poll with status {status}"
         ));
@@ -394,6 +409,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
     master.kill().ok();
     let _ = master.wait();
     std::fs::remove_file(&server_output).ok();
+    std::fs::remove_file(&server_stderr).ok();
 
     log::info!("✅ MQTT data source test passed (all 3 rounds verified)");
     Ok(())
