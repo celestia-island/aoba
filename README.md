@@ -154,6 +154,54 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-For complete examples with custom data sources and hooks, see:
-- [`examples/api_master`](examples/api_master) - Master with fixed test data patterns
-- [`examples/api_slave`](examples/api_slave) - Slave with automatic register management
+### Running the API Examples
+
+**Method 1: Using the test script (recommended)**
+
+A Python test script is provided to run both master and slave examples simultaneously with colored, prefixed output:
+
+```bash
+# Run for 30 seconds
+python3 scripts/run_api_test.py --duration 30
+
+# Run indefinitely (Ctrl+C to stop)
+python3 scripts/run_api_test.py
+
+# Custom ports
+python3 scripts/run_api_test.py --master-port /dev/ttyUSB0 --slave-port /dev/ttyUSB1
+
+# Skip auto-build (use existing binaries)
+python3 scripts/run_api_test.py --no-build
+```
+
+> **Note**: You may see "Operation timed out" warnings in the logs. This is normal behavior:
+>
+> - The slave times out while waiting for master requests (1s timeout)
+> - The master times out while waiting for slave responses (2s timeout)
+> - Both automatically retry and continue operation
+> - Communication succeeds despite these warnings
+
+**Method 2: Manual execution**
+
+Run in separate terminals:
+
+```bash
+# Terminal 1: Start slave first
+cargo run --package api_slave -- /tmp/vcom2
+
+# Terminal 2: Start master
+cargo run --package api_master -- /tmp/vcom1
+```
+
+Note: On Linux/WSL, initialize virtual serial ports first:
+
+```bash
+./scripts/socat_init.sh
+```
+
+### Complete Examples
+
+For full examples with middleware hooks and data sources, see:
+
+- [`examples/api_master`](examples/api_master) - Master with logging hooks
+- [`examples/api_slave`](examples/api_slave) - Slave with request monitoring and statistics
