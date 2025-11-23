@@ -55,12 +55,13 @@ jobs:
 
       - name: Cache cargo registry
         uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ matrix.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ matrix.os }}-${{ matrix.rust }}-cargo-${{ github.sha }}
           restore-keys: |
             ${{ matrix.os }}-${{ matrix.rust }}-cargo-
             ${{ matrix.os }}-cargo-
