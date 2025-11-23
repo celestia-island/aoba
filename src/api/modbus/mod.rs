@@ -269,16 +269,17 @@ impl ModbusBuilder {
             anyhow!("Port name is required. Use with_port() or with_virtual_port()")
         })?;
 
-        slave::ModbusSlave::new(
+        let config = ModbusPortConfig {
             port_name,
-            self.baud_rate,
-            self.station_id,
-            self.register_mode,
-            self.register_address,
-            self.register_length,
-            self.timeout_ms,
-            self.hooks,
-        )
+            baud_rate: self.baud_rate,
+            station_id: self.station_id,
+            register_address: self.register_address,
+            register_length: self.register_length,
+            register_mode: self.register_mode,
+            timeout_ms: self.timeout_ms,
+        };
+
+        slave::ModbusSlave::new(config, self.hooks)
     }
 
     /// Build and start a Modbus master
@@ -315,29 +316,26 @@ impl ModbusBuilder {
         })?;
 
         // 如果有多个轮询配置，使用多寄存器模式
+        let config = ModbusPortConfig {
+            port_name,
+            baud_rate: self.baud_rate,
+            station_id: self.station_id,
+            register_address: self.register_address,
+            register_length: self.register_length,
+            register_mode: self.register_mode,
+            timeout_ms: self.timeout_ms,
+        };
+
         if !self.register_polls.is_empty() {
             master::ModbusMaster::new_multi_register(
-                port_name,
-                self.baud_rate,
-                self.station_id,
+                config,
                 self.register_polls,
-                self.timeout_ms,
                 self.hooks,
                 self.data_sources,
             )
         } else {
             // 单寄存器模式
-            master::ModbusMaster::new(
-                port_name,
-                self.baud_rate,
-                self.station_id,
-                self.register_mode,
-                self.register_address,
-                self.register_length,
-                self.timeout_ms,
-                self.hooks,
-                self.data_sources,
-            )
+            master::ModbusMaster::new(config, self.hooks, self.data_sources)
         }
     }
 }

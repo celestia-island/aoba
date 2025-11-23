@@ -26,32 +26,14 @@ impl ModbusSlave {
     ///
     /// Accepts hooks as a vector for middleware pattern.
     pub fn new(
-        port_name: String,
-        baud_rate: u32,
-        station_id: u8,
-        register_mode: RegisterMode,
-        register_address: u16,
-        register_length: u16,
-        timeout_ms: u64,
+        config: crate::api::modbus::ModbusPortConfig,
         hooks: Vec<Arc<dyn ModbusHook>>,
     ) -> Result<Self> {
         let (sender, receiver) = flume::unbounded();
         let (stop_tx, stop_rx) = flume::bounded::<()>(1);
 
         let handle = crate::core::task_manager::spawn_task(async move {
-            run_slave_loop(
-                port_name,
-                baud_rate,
-                station_id,
-                register_mode,
-                register_address,
-                register_length,
-                timeout_ms,
-                hooks,
-                sender,
-                Some(stop_rx),
-            )
-            .await
+            run_slave_loop(config, hooks, sender, Some(stop_rx)).await
         });
 
         Ok(Self {
@@ -526,17 +508,21 @@ pub async fn run_slave_loop_with_handler(
 
 /// Slave loop - uses middleware chains for hooks (Builder API)
 async fn run_slave_loop(
-    port_name: String,
-    baud_rate: u32,
-    station_id: u8,
-    register_mode: RegisterMode,
-    register_address: u16,
-    register_length: u16,
-    timeout_ms: u64,
+    config: crate::api::modbus::ModbusPortConfig,
     hooks: Vec<Arc<dyn ModbusHook>>,
     sender: flume::Sender<ModbusResponse>,
     control: Option<flume::Receiver<()>>,
 ) -> Result<()> {
+    let crate::api::modbus::ModbusPortConfig {
+        port_name,
+        baud_rate,
+        station_id,
+        register_address,
+        register_length,
+        register_mode,
+        timeout_ms,
+    } = config;
+
     log::info!("Starting slave loop (middleware) for {}", port_name);
     log::debug!("  Hooks: {}", hooks.len());
 

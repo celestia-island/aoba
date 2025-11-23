@@ -811,7 +811,9 @@ impl ResponseRegisterMode {
             2 => Self::DiscreteInputs,
             3 => Self::Holding,
             4 => Self::Input,
-            _ => Self::Custom { function_code: code },
+            _ => Self::Custom {
+                function_code: code,
+            },
         }
     }
 

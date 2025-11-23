@@ -11,8 +11,10 @@ use super::{
     emit_modbus_ipc_log, extract_values_from_storage, parse_register_mode, ModbusIpcLogPayload,
 };
 use crate::{
-    api::modbus::{ModbusResponse, ResponseRegisterMode},
-    api::utils::open_serial_port,
+    api::{
+        modbus::{ModbusResponse, ResponseRegisterMode},
+        utils::open_serial_port,
+    },
     cli::{actions, cleanup},
     protocol::status::types::cli::OutputSink,
     utils::sleep::{sleep_1s, sleep_3s},

@@ -27,33 +27,14 @@ impl ModbusMaster {
     /// - `hooks`: Vector of hooks (executed in order, first `Ok` intercepts)
     /// - `data_sources`: Vector of data sources (first to provide data wins)
     pub fn new(
-        port_name: String,
-        baud_rate: u32,
-        station_id: u8,
-        register_mode: super::RegisterMode,
-        register_address: u16,
-        register_length: u16,
-        timeout_ms: u64,
+        config: ModbusPortConfig,
         hooks: Vec<Arc<dyn ModbusHook>>,
         data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
     ) -> Result<Self> {
         let (sender, receiver) = flume::unbounded();
 
-        let handle = tokio::spawn(async move {
-            run_master_loop(
-                port_name,
-                baud_rate,
-                station_id,
-                register_mode,
-                register_address,
-                register_length,
-                timeout_ms,
-                hooks,
-                data_sources,
-                sender,
-            )
-            .await
-        });
+        let handle =
+            tokio::spawn(async move { run_master_loop(config, hooks, data_sources, sender).await });
 
         Ok(Self {
             receiver,
@@ -65,28 +46,15 @@ impl ModbusMaster {
     ///
     /// Polls multiple register types on the same port with middleware support.
     pub fn new_multi_register(
-        port_name: String,
-        baud_rate: u32,
-        station_id: u8,
+        config: ModbusPortConfig,
         register_polls: Vec<super::RegisterPollConfig>,
-        timeout_ms: u64,
         hooks: Vec<Arc<dyn ModbusHook>>,
         data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
     ) -> Result<Self> {
         let (sender, receiver) = flume::unbounded();
-
         let handle = tokio::spawn(async move {
-            run_multi_register_master_loop(
-                port_name,
-                baud_rate,
-                station_id,
-                register_polls,
-                timeout_ms,
-                hooks,
-                data_sources,
-                sender,
-            )
-            .await
+            run_multi_register_master_loop(config, register_polls, hooks, data_sources, sender)
+                .await
         });
 
         Ok(Self {
@@ -206,17 +174,21 @@ pub async fn run_master_loop_with_handler(
 ///
 /// 使用中间件链处理钩子和数据源
 async fn run_master_loop(
-    port_name: String,
-    baud_rate: u32,
-    station_id: u8,
-    register_mode: super::RegisterMode,
-    register_address: u16,
-    register_length: u16,
-    timeout_ms: u64,
+    config: ModbusPortConfig,
     hooks: Vec<Arc<dyn ModbusHook>>,
     mut data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
     sender: flume::Sender<ModbusResponse>,
 ) -> Result<()> {
+    let ModbusPortConfig {
+        port_name,
+        baud_rate,
+        station_id,
+        register_address,
+        register_length,
+        register_mode,
+        timeout_ms,
+    } = config;
+
     log::info!("Starting master loop (middleware) for {}", port_name);
     log::debug!(
         "  Hooks: {}, Data sources: {}",
@@ -293,15 +265,22 @@ async fn run_master_loop(
 ///
 /// Polls multiple register types with middleware support
 async fn run_multi_register_master_loop(
-    port_name: String,
-    baud_rate: u32,
-    station_id: u8,
+    config: ModbusPortConfig,
     register_polls: Vec<super::RegisterPollConfig>,
-    timeout_ms: u64,
     hooks: Vec<Arc<dyn ModbusHook>>,
     mut data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
     sender: flume::Sender<ModbusResponse>,
 ) -> Result<()> {
+    let ModbusPortConfig {
+        port_name,
+        baud_rate,
+        station_id,
+        register_address: _,
+        register_length: _,
+        register_mode: _,
+        timeout_ms,
+    } = config;
+
     log::info!(
         "Starting multi-register master loop (middleware) for {} ({} register types)",
         port_name,

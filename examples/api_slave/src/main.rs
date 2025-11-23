@@ -69,7 +69,7 @@ impl ModbusHook for StatisticsHook {
     fn on_after_response(&self, _port: &str, _response: &ModbusResponse) -> Result<()> {
         let mut count = self.total_requests.lock().unwrap();
         *count += 1;
-        if *count % 10 == 0 {
+        if (*count).is_multiple_of(10) {
             log::info!("📊 [StatisticsHook] Processed {} requests", *count);
         }
         Ok(())
