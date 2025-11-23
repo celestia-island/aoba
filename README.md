@@ -105,3 +105,55 @@ WantedBy=multi-user.target
 
 - Automated testing: auto-start Modbus simulators in CI/CD
 - Embedded systems: run Aoba as a daemon on embedded devices (e.g., Raspberry Pi) with USB-serial adapters
+
+## Programmatic API
+
+Aoba provides a trait-based Rust API for embedding Modbus functionality in your applications. The API supports both master (client) and slave (server) roles with customizable hooks and data sources.
+
+### Quick API Examples
+
+**Modbus Master (polling a slave):**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Create and start a master that polls a slave
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_register(RegisterMode::Holding, 0, 10)
+        .start_master(None, None)?;
+
+    // Receive responses via iterator interface
+    while let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
+        println!("Received: {:?}", response.values);
+    }
+    Ok(())
+}
+```
+
+**Modbus Slave (responding to requests):**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Create and start a slave that responds to master requests
+    let slave = ModbusBuilder::new_slave(1)
+        .with_port("/dev/ttyUSB0")
+        .with_register(RegisterMode::Holding, 0, 10)
+        .start_slave(None)?;
+
+    // Receive request notifications via iterator interface
+    while let Some(notification) = slave.recv_timeout(std::time::Duration::from_secs(10)) {
+        println!("Processed request: {:?}", notification.values);
+    }
+    Ok(())
+}
+```
+
+For complete examples with custom data sources and hooks, see:
+- [`examples/api_master`](examples/api_master) - Master with fixed test data patterns
+- [`examples/api_slave`](examples/api_slave) - Slave with automatic register management
