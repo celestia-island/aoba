@@ -1,3 +1,4 @@
+use anyhow::Result;
 /// Modbus Master API Example
 ///
 /// This example demonstrates how to use the Modbus API to create a custom master
@@ -5,8 +6,9 @@
 /// fixed data source for testing.
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
-use _main::api::modbus::{ModbusBuilder, ModbusDataSource, ModbusHook, ModbusResponse, RegisterMode};
+use _main::api::modbus::{
+    ModbusBuilder, ModbusDataSource, ModbusHook, ModbusResponse, RegisterMode,
+};
 
 /// Fixed test data source that cycles through predefined values
 struct FixedTestDataSource {
@@ -34,11 +36,15 @@ impl ModbusDataSource for FixedTestDataSource {
         if self.values.is_empty() {
             return None;
         }
-        
+
         self.index += 1;
         let data = self.values[(self.index - 1) % self.values.len()].clone();
-        
-        log::info!("📤 Providing test data (iteration {}): {:04X?}", self.index, data);
+
+        log::info!(
+            "📤 Providing test data (iteration {}): {:04X?}",
+            self.index,
+            data
+        );
         Some(data)
     }
 }

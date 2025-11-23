@@ -14,13 +14,13 @@ use _main::utils::sleep_3s;
 
 pub async fn test_api_master_with_cli_slave() -> Result<()> {
     log::info!("🧪 Testing API Master with CLI Slave communication...");
-    
+
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
 
     // Start CLI slave on port2
     log::info!("🧪 Starting CLI Slave on {}...", ports.port2_name);
     let aoba_binary = build_debug_bin("aoba")?;
-    
+
     let mut cli_slave = Command::new(&aoba_binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -69,7 +69,7 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
     // Start API master on port1
     log::info!("🧪 Starting API Master on {}...", ports.port1_name);
     let api_master_binary = build_debug_bin("api_master")?;
-    
+
     let mut api_master = Command::new(&api_master_binary)
         .arg(&ports.port1_name)
         .stdout(Stdio::piped())
@@ -79,11 +79,11 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
     // Wait for API master to complete (it runs for 10 iterations)
     // The API master example is designed to exit after 10 successful responses
     log::info!("⏳ Waiting for API Master to complete...");
-    
+
     const TEST_TIMEOUT_SECS: u64 = 30;
     let timeout_duration = Duration::from_secs(TEST_TIMEOUT_SECS);
     let start_time = std::time::Instant::now();
-    
+
     loop {
         match api_master.try_wait()? {
             Some(status) => {
@@ -99,10 +99,10 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
                         }
                         String::from_utf8_lossy(&buf).to_string()
                     };
-                    
+
                     // Clean up
                     cli_slave.kill()?;
-                    
+
                     return Err(anyhow!(
                         "API Master failed with status {}: {}",
                         status,
@@ -115,7 +115,10 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
                     // Timeout - kill both processes
                     api_master.kill()?;
                     cli_slave.kill()?;
-                    return Err(anyhow!("API Master test timed out after {} seconds", TEST_TIMEOUT_SECS));
+                    return Err(anyhow!(
+                        "API Master test timed out after {} seconds",
+                        TEST_TIMEOUT_SECS
+                    ));
                 }
                 // Still running, wait a bit
                 tokio::time::sleep(Duration::from_millis(500)).await;
@@ -127,7 +130,7 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
     cli_slave.kill()?;
     let cli_output = cli_slave.wait_with_output()?;
     let cli_stdout = String::from_utf8_lossy(&cli_output.stdout);
-    
+
     log::info!("📋 CLI Slave output sample:");
     for line in cli_stdout.lines().take(5) {
         log::info!("  {}", line);
@@ -136,7 +139,7 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
     // Verify API master output (logs go to stderr)
     let api_output = api_master.wait_with_output()?;
     let api_stderr = String::from_utf8_lossy(&api_output.stderr);
-    
+
     log::info!("📋 API Master output sample:");
     for line in api_stderr.lines().take(10) {
         log::info!("  {}", line);
@@ -145,7 +148,7 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
     // Basic validation - check that we got some responses
     let response_count = api_stderr.matches("Response #").count();
     log::info!("📊 API Master received {} responses", response_count);
-    
+
     if response_count < 5 {
         return Err(anyhow!(
             "Expected at least 5 responses, got {}",

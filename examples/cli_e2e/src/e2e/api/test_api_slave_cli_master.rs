@@ -11,13 +11,13 @@ use _main::utils::{sleep_1s, sleep_3s};
 
 pub async fn test_api_slave_with_cli_master() -> Result<()> {
     log::info!("🧪 Testing API Slave with CLI Client (slave-poll) communication...");
-    
+
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
 
     // Start API slave on port1
     log::info!("🧪 Starting API Slave on {}...", ports.port1_name);
     let api_slave_binary = build_debug_bin("api_slave")?;
-    
+
     let mut api_slave = Command::new(&api_slave_binary)
         .arg(&ports.port1_name)
         .stdout(Stdio::piped())
@@ -41,9 +41,12 @@ pub async fn test_api_slave_with_cli_master() -> Result<()> {
     }
 
     // Start CLI client (slave-poll) on port2 to poll the API Slave
-    log::info!("🧪 Starting CLI Client (slave-poll) on {}...", ports.port2_name);
+    log::info!(
+        "🧪 Starting CLI Client (slave-poll) on {}...",
+        ports.port2_name
+    );
     let aoba_binary = build_debug_bin("aoba")?;
-    
+
     // Run CLI client with slave-poll (it will poll once and exit in temporary mode)
     let cli_output = Command::new(&aoba_binary)
         .arg("--enable-virtual-ports")
@@ -85,7 +88,7 @@ pub async fn test_api_slave_with_cli_master() -> Result<()> {
     api_slave.kill()?;
     let api_output = api_slave.wait_with_output()?;
     let api_stderr = String::from_utf8_lossy(&api_output.stderr);
-    
+
     log::info!("📋 API Slave output sample:");
     for line in api_stderr.lines().take(10) {
         log::info!("  {}", line);
@@ -95,7 +98,7 @@ pub async fn test_api_slave_with_cli_master() -> Result<()> {
     // Note: CLI client (--slave-poll) in temporary mode only polls once by default
     let request_count = api_stderr.matches("Request #").count();
     log::info!("📊 API Slave processed {} requests", request_count);
-    
+
     if request_count < 1 {
         return Err(anyhow!(
             "Expected at least 1 request processed, got {}",
@@ -106,7 +109,7 @@ pub async fn test_api_slave_with_cli_master() -> Result<()> {
     // Validate CLI client got responses
     let response_count = cli_stdout.lines().filter(|l| l.contains("values")).count();
     log::info!("📊 CLI Client received {} JSON responses", response_count);
-    
+
     if response_count < 1 {
         return Err(anyhow!(
             "Expected at least 1 JSON response, got {}",
