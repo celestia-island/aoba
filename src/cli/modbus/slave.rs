@@ -11,7 +11,8 @@ use super::{
     emit_modbus_ipc_log, extract_values_from_storage, parse_register_mode, ModbusIpcLogPayload,
 };
 use crate::{
-    api::{modbus::ModbusResponse, utils::open_serial_port},
+    api::modbus::{ModbusResponse, ResponseRegisterMode},
+    api::utils::open_serial_port,
     cli::{actions, cleanup},
     protocol::status::types::cli::OutputSink,
     utils::sleep::{sleep_1s, sleep_3s},
@@ -169,7 +170,7 @@ fn run_slave_poll_transaction(
         Ok(ModbusResponse {
             station_id,
             register_address,
-            register_mode: format!("{reg_mode:?}"),
+            register_mode: ResponseRegisterMode::from_register_mode(reg_mode),
             values,
             timestamp: chrono::Utc::now().to_rfc3339(),
         })
@@ -458,7 +459,7 @@ fn listen_for_one_request(
     Ok(ModbusResponse {
         station_id,
         register_address,
-        register_mode: format!("{reg_mode:?}"),
+        register_mode: ResponseRegisterMode::from_register_mode(reg_mode),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
