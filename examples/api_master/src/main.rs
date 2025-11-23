@@ -5,7 +5,9 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode};
+use _main::api::modbus::{
+    ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode, ResponseRegisterMode,
+};
 
 /// Hook for logging master operations
 struct LoggingHook;
