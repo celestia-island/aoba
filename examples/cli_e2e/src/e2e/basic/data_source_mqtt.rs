@@ -130,7 +130,7 @@ pub async fn test_mqtt_data_source() -> Result<()> {
 
         // Try to start mosquitto in the background with explicit config
         let start_result = std::process::Command::new("mosquitto")
-            .args(&["-p", "1883", "-v"])
+            .args(["-p", "1883", "-v"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
