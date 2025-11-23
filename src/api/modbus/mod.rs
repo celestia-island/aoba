@@ -11,7 +11,9 @@ use std::sync::{Arc, Mutex};
 pub use crate::protocol::status::types::cli::OutputSink;
 #[doc(hidden)]
 pub use crate::protocol::status::types::modbus::ModbusMasterDataSource;
-pub use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode, StationMode};
+pub use crate::protocol::status::types::modbus::{
+    ModbusResponse, RegisterMode, ResponseRegisterMode, StationMode,
+};
 
 // Re-export core traits (API layer - abstract interfaces)
 pub use traits::{

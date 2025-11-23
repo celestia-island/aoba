@@ -151,6 +151,7 @@ impl FlumeHandlerControl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::status::types::modbus::ResponseRegisterMode;
 
     #[test]
     fn test_flume_slave_handler() {
@@ -159,7 +160,7 @@ mod tests {
         let response = ModbusResponse {
             station_id: 1,
             register_address: 0,
-            register_mode: "Holding".to_string(),
+            register_mode: ResponseRegisterMode::Holding,
             values: vec![1, 2, 3],
             timestamp: chrono::Utc::now().to_rfc3339(),
         };

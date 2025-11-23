@@ -24,7 +24,8 @@ use super::{
     emit_modbus_ipc_log, extract_values_from_station_configs, parse_data_line, parse_register_mode,
     ModbusIpcLogPayload,
 };
-use crate::api::{modbus::ModbusResponse, utils::open_serial_port};
+use crate::api::modbus::{ModbusResponse, ResponseRegisterMode};
+use crate::api::utils::open_serial_port;
 
 #[derive(Clone)]
 pub enum DataSource {
@@ -1745,19 +1746,19 @@ fn respond_to_request(
     let values = extract_values_from_response(&response)?;
     log::debug!("respond_to_request: Extracted values for output: {values:?}");
 
-    let register_mode_label = match frame.func {
-        rmodbus::consts::ModbusFunction::GetHoldings => "holding",
-        rmodbus::consts::ModbusFunction::GetCoils => "coils",
-        rmodbus::consts::ModbusFunction::GetDiscretes => "discrete",
-        rmodbus::consts::ModbusFunction::GetInputs => "input",
-        _ => "unknown",
+    let register_mode = match frame.func {
+        rmodbus::consts::ModbusFunction::GetHoldings => ResponseRegisterMode::Holding,
+        rmodbus::consts::ModbusFunction::GetCoils => ResponseRegisterMode::Coils,
+        rmodbus::consts::ModbusFunction::GetDiscretes => ResponseRegisterMode::DiscreteInputs,
+        rmodbus::consts::ModbusFunction::GetInputs => ResponseRegisterMode::Input,
+        other => ResponseRegisterMode::Custom { function_code: other as u8 },
     };
 
     Ok((
         ModbusResponse {
             station_id,
             register_address: frame.reg,
-            register_mode: register_mode_label.to_string(),
+            register_mode,
             values,
             timestamp: chrono::Utc::now().to_rfc3339(),
         },
