@@ -3,7 +3,6 @@
 /// This example demonstrates how to use the Modbus API to create a custom master
 /// that polls a slave and logs responses. It uses the trait-based API with a
 /// fixed data source for testing.
-
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
 

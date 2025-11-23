@@ -684,15 +684,29 @@ def process_file(path: Path) -> Optional[str]:
 
 
 def main() -> int:
+    print("Starting use statement enforcement...")
+    print(f"Working directory: {Path.cwd()}")
+    print(f"Python version: {sys.version}")
+    
     changed: List[str] = []
+    total_files = 0
+    
     for path in Path.cwd().rglob("*.rs"):
         if "target" in path.parts:
             continue
-        new_text = process_file(path)
-        if new_text is not None:
-            path.write_text(new_text, encoding="utf-8")
-            changed.append(str(path))
+        total_files += 1
+        try:
+            new_text = process_file(path)
+            if new_text is not None:
+                path.write_text(new_text, encoding="utf-8")
+                changed.append(str(path))
+        except Exception as e:
+            print(f"Error processing {path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return 1
 
+    print(f"Processed {total_files} Rust files")
     print(f"Updated {len(changed)} files")
     for item in changed:
         print(item)
@@ -700,13 +714,19 @@ def main() -> int:
     # Try to run `cargo fmt` once at the end, if `cargo` is available.
     try:
         if shutil.which("cargo"):
+            print("Running cargo fmt...")
             # Run in the repository root (current working directory)
-            subprocess.run(["cargo", "fmt"], check=False)
+            result = subprocess.run(["cargo", "fmt"], check=False, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"cargo fmt exit code: {result.returncode}")
+                if result.stderr:
+                    print(f"cargo fmt stderr: {result.stderr}")
         else:
             print("cargo not found in PATH; skipping cargo fmt")
     except Exception as e:  # pragma: no cover - don't fail the script on fmt errors
         print(f"Failed to run cargo fmt: {e}")
 
+    print("Use statement enforcement completed successfully")
     return 0
 
 
@@ -776,11 +796,27 @@ def test_underscore_classification() -> bool:
 
 
 if __name__ == "__main__":
-    # Check for test mode
-    if "--test" in sys.argv:
-        WORKSPACE_CRATES = load_workspace_crates(Path.cwd())
-        passed = test_underscore_classification()
-        sys.exit(0 if passed else 1)
+    try:
+        print("="*80)
+        print("ENFORCE USE STATEMENT GROUPS")
+        print("="*80)
+        
+        # Check for test mode
+        if "--test" in sys.argv:
+            print("Running in test mode...")
+            WORKSPACE_CRATES = load_workspace_crates(Path.cwd())
+            passed = test_underscore_classification()
+            sys.exit(0 if passed else 1)
 
-    WORKSPACE_CRATES = load_workspace_crates(Path.cwd())
-    sys.exit(main())
+        print("Loading workspace crates...")
+        WORKSPACE_CRATES = load_workspace_crates(Path.cwd())
+        print(f"Found {len(WORKSPACE_CRATES)} workspace crates")
+        
+        exit_code = main()
+        print(f"Exiting with code: {exit_code}")
+        sys.exit(exit_code)
+    except Exception as e:
+        print(f"FATAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
