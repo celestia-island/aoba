@@ -60,9 +60,9 @@ impl Default for FlumeSlaveHandler {
 }
 
 impl ModbusSlaveHandler for FlumeSlaveHandler {
-    fn handle_response(&self, response: ModbusResponse) -> Result<()> {
+    fn handle_response(&self, response: &ModbusResponse) -> Result<()> {
         self.sender
-            .send(response)
+            .send(response.clone())
             .map_err(|_| anyhow::anyhow!("Failed to send response: receiver dropped"))
     }
 
@@ -118,9 +118,9 @@ impl Default for FlumeMasterHandler {
 }
 
 impl ModbusMasterHandler for FlumeMasterHandler {
-    fn handle_response(&self, response: ModbusResponse) -> Result<()> {
+    fn handle_response(&self, response: &ModbusResponse) -> Result<()> {
         self.sender
-            .send(response)
+            .send(response.clone())
             .map_err(|_| anyhow::anyhow!("Failed to send response: receiver dropped"))
     }
 
@@ -164,7 +164,7 @@ mod tests {
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
 
-        handler.handle_response(response.clone()).unwrap();
+        handler.handle_response(&response).unwrap();
 
         let received = receiver.recv().unwrap();
         assert_eq!(received.station_id, response.station_id);
