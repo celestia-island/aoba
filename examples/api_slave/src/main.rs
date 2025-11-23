@@ -1,24 +1,42 @@
-/// Modbus Slave API Example
+/// Modbus Slave API V2 Example - Middleware Pattern
 ///
-/// This example demonstrates how to use the Modbus API to create a custom slave
-/// that listens for requests and provides fixed test data responses.
+/// This example demonstrates the new Builder API with:
+/// - Multiple hooks in a middleware chain
+/// - Interceptor pattern for response processing
 use anyhow::Result;
 use std::sync::Arc;
 
 use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode};
 
-/// Hook for logging slave operations
-struct LoggingHook;
+/// Hook 1: Monitors incoming requests
+struct RequestMonitorHook;
 
-impl ModbusHook for LoggingHook {
+impl ModbusHook for RequestMonitorHook {
     fn on_before_request(&self, port: &str) -> Result<()> {
-        log::debug!("👂 Listening for request on {}", port);
+        log::debug!("🔄 [RequestMonitorHook] Waiting for request on {}", port);
+        Ok(())
+    }
+
+    fn on_after_response(&self, _port: &str, _response: &ModbusResponse) -> Result<()> {
+        Ok(())
+    }
+
+    fn on_error(&self, port: &str, error: &anyhow::Error) {
+        log::warn!("❌ [RequestMonitorHook] Error on {}: {}", port, error);
+    }
+}
+
+/// Hook 2: Logs all responses with details
+struct ResponseLoggingHook;
+
+impl ModbusHook for ResponseLoggingHook {
+    fn on_before_request(&self, _port: &str) -> Result<()> {
         Ok(())
     }
 
     fn on_after_response(&self, port: &str, response: &ModbusResponse) -> Result<()> {
         log::info!(
-            "✅ Sent response on {}: station={}, address=0x{:04X}, values={:04X?}",
+            "✅ [ResponseLoggingHook] Sent response on {}: station={}, addr=0x{:04X}, values={:04X?}",
             port,
             response.station_id,
             response.register_address,
@@ -27,9 +45,37 @@ impl ModbusHook for LoggingHook {
         Ok(())
     }
 
-    fn on_error(&self, port: &str, error: &anyhow::Error) {
-        log::warn!("❌ Error on {}: {}", port, error);
+    fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
+}
+
+/// Hook 3: Statistics tracker
+struct StatisticsHook {
+    total_requests: Arc<std::sync::Mutex<usize>>,
+}
+
+impl StatisticsHook {
+    fn new() -> Self {
+        Self {
+            total_requests: Arc::new(std::sync::Mutex::new(0)),
+        }
     }
+}
+
+impl ModbusHook for StatisticsHook {
+    fn on_before_request(&self, _port: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn on_after_response(&self, _port: &str, _response: &ModbusResponse) -> Result<()> {
+        let mut count = self.total_requests.lock().unwrap();
+        *count += 1;
+        if *count % 10 == 0 {
+            log::info!("📊 [StatisticsHook] Processed {} requests", *count);
+        }
+        Ok(())
+    }
+
+    fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
 }
 
 #[tokio::main]
@@ -39,8 +85,10 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    log::info!("🚀 Starting Modbus Slave API Example");
-    log::info!("📝 This example demonstrates the trait-based Modbus API");
+    log::info!("🚀 Starting Modbus Slave API V2 Example (Middleware Pattern)");
+    log::info!("📝 This example demonstrates:");
+    log::info!("   - Multiple hooks in a middleware chain");
+    log::info!("   - Each hook processes before/after/error events");
 
     // Get port from command line or use default
     let args: Vec<String> = std::env::args().collect();
@@ -56,44 +104,37 @@ async fn main() -> Result<()> {
     log::info!("   - Register Mode: Holding");
     log::info!("   - Register Address: 0x0000");
     log::info!("   - Register Length: 5");
-    log::info!("   - Initial Register Values: [0x0000, 0x0000, 0x0000, 0x0000, 0x0000]");
 
-    // Build and start the slave
-    let slave = ModbusBuilder::new_slave(1)
+    // Create hooks
+    let monitor_hook: Arc<dyn ModbusHook> = Arc::new(RequestMonitorHook);
+    let logging_hook: Arc<dyn ModbusHook> = Arc::new(ResponseLoggingHook);
+    let stats_hook: Arc<dyn ModbusHook> = Arc::new(StatisticsHook::new());
+
+    log::info!("🔧 Building middleware chain:");
+    log::info!("   Hooks: RequestMonitorHook → ResponseLoggingHook → StatisticsHook");
+
+    // Build slave with multiple hooks
+    let _slave = ModbusBuilder::new_slave(1)
         .with_port(&port)
         .with_register(RegisterMode::Holding, 0, 5)
         .with_timeout(1000)
-        .start_slave(Some(Arc::new(LoggingHook)))?;
+        .add_hook(monitor_hook)
+        .add_hook(logging_hook)
+        .add_hook(stats_hook)
+        .build_slave()?;
 
-    log::info!("✅ Slave started, waiting for requests...");
-    log::info!("💡 The slave will respond to master requests");
-    log::info!("💡 Register values will be updated by master writes");
+    log::info!("✅ Slave started with middleware chain");
+    log::info!("💡 Listening for master requests on {}", port);
+    log::info!("📡 Each request will be processed by the hook chain:");
+    log::info!("   1. RequestMonitorHook logs before processing");
+    log::info!("   2. ResponseLoggingHook logs after response");
+    log::info!("   3. StatisticsHook tracks request count");
+    log::info!("");
     log::info!("💡 Press Ctrl+C to stop");
 
-    // Continuously receive and log responses
-    const MAX_REQUESTS: usize = 10;
-    let mut count = 0;
-    loop {
-        if let Some(response) = slave.recv_timeout(std::time::Duration::from_secs(10)) {
-            count += 1;
-            log::info!(
-                "📊 Request #{}: station={}, address=0x{:04X}, values={:04X?}",
-                count,
-                response.station_id,
-                response.register_address,
-                response.values
-            );
+    // Keep running
+    tokio::signal::ctrl_c().await?;
 
-            // Stop after MAX_REQUESTS successful responses for the example
-            if count >= MAX_REQUESTS {
-                log::info!("🎉 Processed {} requests, example complete!", MAX_REQUESTS);
-                break;
-            }
-        } else {
-            log::debug!("⏱️ Waiting for request...");
-        }
-    }
-
-    log::info!("👋 Example finished");
+    log::info!("✅ Slave stopped");
     Ok(())
 }
