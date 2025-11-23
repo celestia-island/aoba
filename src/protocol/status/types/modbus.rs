@@ -777,11 +777,100 @@ impl BaudRateOption {
     }
 }
 
+/// Register mode for ModbusResponse, supports standard types and custom mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseRegisterMode {
+    /// 0x01 - Read Coils
+    Coils,
+    /// 0x02 - Read Discrete Inputs
+    DiscreteInputs,
+    /// 0x03 - Read Holding Registers
+    Holding,
+    /// 0x04 - Read Input Registers
+    Input,
+    /// Custom mode with user-defined function code
+    Custom { function_code: u8 },
+}
+
+impl ResponseRegisterMode {
+    /// Create from RegisterMode
+    pub fn from_register_mode(mode: RegisterMode) -> Self {
+        match mode {
+            RegisterMode::Coils => Self::Coils,
+            RegisterMode::DiscreteInputs => Self::DiscreteInputs,
+            RegisterMode::Holding => Self::Holding,
+            RegisterMode::Input => Self::Input,
+        }
+    }
+
+    /// Create from function code (0x01-0x04 standard, others custom)
+    pub fn from_function_code(code: u8) -> Self {
+        match code {
+            1 => Self::Coils,
+            2 => Self::DiscreteInputs,
+            3 => Self::Holding,
+            4 => Self::Input,
+            _ => Self::Custom { function_code: code },
+        }
+    }
+
+    /// Get function code
+    pub fn function_code(self) -> u8 {
+        match self {
+            Self::Coils => 1,
+            Self::DiscreteInputs => 2,
+            Self::Holding => 3,
+            Self::Input => 4,
+            Self::Custom { function_code } => function_code,
+        }
+    }
+
+    /// Check if this is a standard mode
+    pub fn is_standard(self) -> bool {
+        !matches!(self, Self::Custom { .. })
+    }
+
+    /// Check if this is a custom mode
+    pub fn is_custom(self) -> bool {
+        matches!(self, Self::Custom { .. })
+    }
+
+    /// Try to convert to RegisterMode (only works for standard types)
+    pub fn to_register_mode(self) -> Option<RegisterMode> {
+        match self {
+            Self::Coils => Some(RegisterMode::Coils),
+            Self::DiscreteInputs => Some(RegisterMode::DiscreteInputs),
+            Self::Holding => Some(RegisterMode::Holding),
+            Self::Input => Some(RegisterMode::Input),
+            Self::Custom { .. } => None,
+        }
+    }
+}
+
+impl fmt::Display for ResponseRegisterMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Coils => write!(f, "Coils"),
+            Self::DiscreteInputs => write!(f, "DiscreteInputs"),
+            Self::Holding => write!(f, "Holding"),
+            Self::Input => write!(f, "Input"),
+            Self::Custom { function_code } => write!(f, "Custom(0x{:02X})", function_code),
+        }
+    }
+}
+
+impl From<RegisterMode> for ResponseRegisterMode {
+    fn from(mode: RegisterMode) -> Self {
+        Self::from_register_mode(mode)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModbusResponse {
     pub station_id: u8,
     pub register_address: u16,
-    pub register_mode: String,
+    pub register_mode: ResponseRegisterMode,
     pub values: Vec<u16>,
     pub timestamp: String,
 }

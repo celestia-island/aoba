@@ -11,7 +11,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode};
+use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode, ResponseRegisterMode};
 
 /// Listen for one Modbus request and respond (Slave/Server logic)
 ///
@@ -27,18 +27,33 @@ pub fn slave_process_one_request(
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
 
-    // Read request from port
+    // Read request from port with retry for complete frame
+    // Modbus RTU frames are typically 8+ bytes, but may arrive in fragments
     let mut buffer = vec![0u8; 256];
+    let mut total_bytes = 0;
     let mut port = port_arc.lock().unwrap();
-    let bytes_read = port.read(&mut buffer)?;
-    drop(port);
 
+    // First read - get initial data
+    let bytes_read = port.read(&mut buffer[total_bytes..])?;
     if bytes_read == 0 {
+        drop(port);
         return Err(anyhow!("No data received"));
     }
+    total_bytes += bytes_read;
 
-    let request = &buffer[..bytes_read];
-    log::debug!("Received request: {request:02X?}");
+    // Wait a bit for remaining data (Modbus RTU inter-frame delay)
+    // At 57600 baud, 8 bytes takes ~1.4ms, give it up to 10ms
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    // Try to read any remaining bytes
+    if let Ok(additional) = port.read(&mut buffer[total_bytes..]) {
+        total_bytes += additional;
+    }
+
+    drop(port);
+
+    let request = &buffer[..total_bytes];
+    log::debug!("Received request ({} bytes): {request:02X?}", total_bytes);
 
     // Parse and respond to request
     let mut response = Vec::new();
@@ -104,7 +119,7 @@ pub fn slave_process_one_request(
     Ok(ModbusResponse {
         station_id,
         register_address,
-        register_mode: format!("{actual_mode:?}"),
+        register_mode: ResponseRegisterMode::from_register_mode(actual_mode),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
@@ -155,26 +170,47 @@ pub fn master_poll_once(
         port.flush()?;
     }
 
+    // Read response with retry for complete frame (same as slave logic)
+    // Modbus responses can be large (e.g., 71 bytes for 33 registers)
     let mut buffer = vec![0u8; 256];
-    let bytes_read = {
-        let mut port = port_arc.lock().unwrap();
-        port.read(&mut buffer)?
-    };
+    let mut total_bytes = 0;
 
-    if bytes_read == 0 {
-        return Err(anyhow!("No response received"));
+    // First read - get initial data
+    {
+        let mut port = port_arc.lock().unwrap();
+        let bytes_read = port.read(&mut buffer[total_bytes..])?;
+        if bytes_read == 0 {
+            return Err(anyhow!("No response received"));
+        }
+        total_bytes += bytes_read;
     }
 
-    let response = &buffer[..bytes_read];
-    log::debug!("Received response from slave: {response:02X?}");
+    // Wait for remaining data (Modbus RTU inter-frame delay)
+    // At 57600 baud, 71 bytes takes ~12ms, give it up to 20ms
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    // Try to read any remaining bytes
+    {
+        let mut port = port_arc.lock().unwrap();
+        if let Ok(additional) = port.read(&mut buffer[total_bytes..]) {
+            total_bytes += additional;
+        }
+    }
+
+    let response = &buffer[..total_bytes];
+    log::debug!(
+        "Received response from slave ({} bytes): {response:02X?}",
+        total_bytes
+    );
 
     // Parse response values
     let values = parse_response_values(response, register_length, reg_mode)?;
+    log::debug!("Parsed {} values from response", values.len());
 
     Ok(ModbusResponse {
         station_id,
         register_address,
-        register_mode: format!("{reg_mode:?}"),
+        register_mode: ResponseRegisterMode::from_register_mode(reg_mode),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
@@ -189,17 +225,31 @@ fn parse_response_values(
     match reg_mode {
         RegisterMode::Holding | RegisterMode::Input => {
             if response.len() < 5 {
-                return Err(anyhow!("Response too short"));
+                return Err(anyhow!(
+                    "Response too short (len={}, need >=5)",
+                    response.len()
+                ));
             }
             let byte_count = response[2] as usize;
+            log::debug!(
+                "Parsing Holding/Input: byte_count={}, response.len()={}",
+                byte_count,
+                response.len()
+            );
             let mut values = Vec::new();
             for i in 0..(byte_count / 2) {
                 let offset = 3 + i * 2;
                 if offset + 1 < response.len() {
                     let value = u16::from_be_bytes([response[offset], response[offset + 1]]);
                     values.push(value);
+                } else {
+                    log::warn!(
+                        "Incomplete register at offset {}: response too short",
+                        offset
+                    );
                 }
             }
+            log::debug!("Parsed {} register values", values.len());
             Ok(values)
         }
         RegisterMode::Coils | RegisterMode::DiscreteInputs => {
