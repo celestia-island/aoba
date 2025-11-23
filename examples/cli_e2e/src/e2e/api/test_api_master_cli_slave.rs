@@ -80,7 +80,8 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
     // The API master example is designed to exit after 10 successful responses
     log::info!("⏳ Waiting for API Master to complete...");
     
-    let timeout_duration = Duration::from_secs(30);
+    const TEST_TIMEOUT_SECS: u64 = 30;
+    let timeout_duration = Duration::from_secs(TEST_TIMEOUT_SECS);
     let start_time = std::time::Instant::now();
     
     loop {
@@ -114,7 +115,7 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
                     // Timeout - kill both processes
                     api_master.kill()?;
                     cli_slave.kill()?;
-                    return Err(anyhow!("API Master test timed out after 30 seconds"));
+                    return Err(anyhow!("API Master test timed out after {} seconds", TEST_TIMEOUT_SECS));
                 }
                 // Still running, wait a bit
                 tokio::time::sleep(Duration::from_millis(500)).await;

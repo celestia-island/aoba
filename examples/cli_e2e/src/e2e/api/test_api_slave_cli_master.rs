@@ -92,7 +92,7 @@ pub async fn test_api_slave_with_cli_master() -> Result<()> {
     }
 
     // Basic validation - check that API slave processed at least 1 request
-    // Note: CLI slave-poll in temporary mode only polls once by default
+    // Note: CLI client (--slave-poll) in temporary mode only polls once by default
     let request_count = api_stderr.matches("Request #").count();
     log::info!("📊 API Slave processed {} requests", request_count);
     

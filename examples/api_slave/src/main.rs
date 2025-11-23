@@ -71,6 +71,7 @@ async fn main() -> Result<()> {
     log::info!("💡 Press Ctrl+C to stop");
 
     // Continuously receive and log responses
+    const MAX_REQUESTS: usize = 10;
     let mut count = 0;
     loop {
         if let Some(response) = slave.recv_timeout(std::time::Duration::from_secs(10)) {
@@ -83,9 +84,9 @@ async fn main() -> Result<()> {
                 response.values
             );
 
-            // Stop after 10 successful responses for the example
-            if count >= 10 {
-                log::info!("🎉 Processed 10 requests, example complete!");
+            // Stop after MAX_REQUESTS successful responses for the example
+            if count >= MAX_REQUESTS {
+                log::info!("🎉 Processed {} requests, example complete!", MAX_REQUESTS);
                 break;
             }
         } else {

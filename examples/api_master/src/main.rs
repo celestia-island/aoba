@@ -35,8 +35,8 @@ impl ModbusDataSource for FixedTestDataSource {
             return None;
         }
         
-        let data = self.values[self.index % self.values.len()].clone();
         self.index += 1;
+        let data = self.values[(self.index - 1) % self.values.len()].clone();
         
         log::info!("📤 Providing test data (iteration {}): {:04X?}", self.index, data);
         Some(data)
@@ -108,6 +108,7 @@ async fn main() -> Result<()> {
     log::info!("💡 Press Ctrl+C to stop");
 
     // Continuously receive and log responses
+    const MAX_RESPONSES: usize = 10;
     let mut count = 0;
     loop {
         if let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
@@ -120,9 +121,9 @@ async fn main() -> Result<()> {
                 response.values
             );
 
-            // Stop after 10 successful responses for the example
-            if count >= 10 {
-                log::info!("🎉 Received 10 responses, example complete!");
+            // Stop after MAX_RESPONSES successful responses for the example
+            if count >= MAX_RESPONSES {
+                log::info!("🎉 Received {} responses, example complete!", MAX_RESPONSES);
                 break;
             }
         } else {
