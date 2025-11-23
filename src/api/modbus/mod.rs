@@ -15,12 +15,14 @@ pub use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode, S
 
 // Re-export core traits (API layer - abstract interfaces)
 pub use traits::{
-    LoggingHandler, ModbusDataSource, ModbusMasterHandler, ModbusSlaveHandler, NoOpHandler,
+    execute_data_source_chain, execute_master_handler_chain, execute_slave_handler_chain,
+    HandlerError, LoggingHandler, ModbusDataSource, ModbusMasterHandler, ModbusSlaveHandler,
+    NoOpHandler,
 };
 
 // Re-export concrete implementations (kept for backward compatibility)
 pub use master::ModbusMaster;
-pub use slave::ModbusSlave;
+pub use slave::{ModbusSlave, ModbusSlaveIterator, TryIterator};
 
 // Re-export core functions for custom implementations
 pub use core::{master_poll_once, slave_process_one_request};
@@ -42,7 +44,22 @@ pub struct ModbusPortConfig {
     pub timeout_ms: u64,
 }
 
+/// Configuration for a single register polling task
+#[derive(Debug, Clone)]
+pub struct RegisterPollConfig {
+    pub register_mode: RegisterMode,
+    pub register_address: u16,
+    pub register_length: u16,
+}
+
 /// Builder for creating Modbus configurations and starting loops.
+///
+/// # Middleware Pattern
+///
+/// The builder supports middleware-style handler chains:
+/// - Add multiple hooks with `.add_hook()` (executed in order)
+/// - Add multiple data sources with `.add_data_source()` (for Master)
+/// - Handlers return `Ok` to intercept, `Err(NotHandled)` to pass through
 pub struct ModbusBuilder {
     port_name: Option<String>,
     baud_rate: u32,
@@ -52,6 +69,12 @@ pub struct ModbusBuilder {
     register_mode: RegisterMode,
     timeout_ms: u64,
     role: StationMode,
+    // 支持多寄存器类型轮询
+    register_polls: Vec<RegisterPollConfig>,
+    // 中间件链：支持多个钩子
+    hooks: Vec<Arc<dyn ModbusHook>>,
+    // 中间件链：支持多个数据源（仅 Master）
+    data_sources: Vec<Arc<Mutex<dyn traits::ModbusDataSource>>>,
 }
 
 impl ModbusBuilder {
@@ -66,6 +89,9 @@ impl ModbusBuilder {
             register_mode: RegisterMode::Holding,
             timeout_ms: 1000,
             role: StationMode::Master,
+            register_polls: Vec::new(),
+            hooks: Vec::new(),
+            data_sources: Vec::new(),
         }
     }
 
@@ -80,6 +106,9 @@ impl ModbusBuilder {
             register_mode: RegisterMode::Holding,
             timeout_ms: 1000,
             role: StationMode::Slave,
+            register_polls: Vec::new(),
+            hooks: Vec::new(),
+            data_sources: Vec::new(),
         }
     }
 
@@ -108,11 +137,38 @@ impl ModbusBuilder {
         self
     }
 
-    /// Set the register configuration.
+    /// Set the register configuration (single register, for backward compatibility).
     pub fn with_register(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
         self.register_mode = mode;
         self.register_address = address;
         self.register_length = length;
+        self
+    }
+
+    /// Add a register polling configuration (for multi-register Master).
+    ///
+    /// This allows a Master to poll multiple register types on the same port.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+    ///
+    /// let master = ModbusBuilder::new_master(19)
+    ///     .with_port("COM1")
+    ///     .with_baud_rate(57600)
+    ///     .add_register_poll(RegisterMode::Coils, 0x01, 11)      // Poll coils
+    ///     .add_register_poll(RegisterMode::Holding, 0x10, 33)    // Poll holdings
+    ///     .with_timeout(2000)
+    ///     .build_master()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn add_register_poll(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
+        self.register_polls.push(RegisterPollConfig {
+            register_mode: mode,
+            register_address: address,
+            register_length: length,
+        });
         self
     }
 
@@ -122,7 +178,53 @@ impl ModbusBuilder {
         self
     }
 
-    /// Build the configuration.
+    /// Add a hook to the middleware chain (can be called multiple times)
+    ///
+    /// Hooks are executed in the order they are added.
+    /// The first hook to return `Ok` will intercept the response.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use aoba::api::modbus::{ModbusBuilder, LoggingHandler};
+    /// use std::sync::Arc;
+    ///
+    /// let master = ModbusBuilder::new_master(1)
+    ///     .with_port("COM1")
+    ///     .add_hook(Arc::new(LoggingHandler))  // First hook
+    ///     .add_hook(Arc::new(CustomHook))      // Second hook
+    ///     .build_master()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn add_hook(mut self, hook: Arc<dyn ModbusHook>) -> Self {
+        self.hooks.push(hook);
+        self
+    }
+
+    /// Add a data source to the middleware chain (can be called multiple times, Master only)
+    ///
+    /// Data sources are tried in the order they are added.
+    /// The first source to return `Ok(Some(data))` will intercept.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use aoba::api::modbus::{ModbusBuilder, ModbusDataSource};
+    /// use std::sync::{Arc, Mutex};
+    ///
+    /// let master = ModbusBuilder::new_master(1)
+    ///     .with_port("COM1")
+    ///     .add_data_source(Arc::new(Mutex::new(FileDataSource::new("data.csv")?)))
+    ///     .add_data_source(Arc::new(Mutex::new(DefaultDataSource::new())))
+    ///     .build_master()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn add_data_source(mut self, source: Arc<Mutex<dyn traits::ModbusDataSource>>) -> Self {
+        self.data_sources.push(source);
+        self
+    }
+
+    /// Build the configuration (public legacy API).
     pub fn build(self) -> Result<ModbusPortConfig> {
         let port_name = self.port_name.ok_or_else(|| {
             anyhow!("Port name is required. Use with_port() or with_virtual_port()")
@@ -139,36 +241,102 @@ impl ModbusBuilder {
         })
     }
 
-    /// Start a Modbus slave and return a handle with iterator-like interface
-    pub fn start_slave(self, hooks: Option<Arc<dyn ModbusHook>>) -> Result<slave::ModbusSlave> {
+    /// Build and start a Modbus slave
+    ///
+    /// Uses the hooks and data sources configured with `.add_hook()` and `.add_data_source()`.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use aoba::api::modbus::{ModbusBuilder, LoggingHandler};
+    /// use std::sync::Arc;
+    ///
+    /// let slave = ModbusBuilder::new_slave(19)
+    ///     .with_port("COM2")
+    ///     .with_baud_rate(57600)
+    ///     .with_register(RegisterMode::Holding, 0x10, 33)
+    ///     .add_hook(Arc::new(LoggingHandler))
+    ///     .build_slave()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn build_slave(self) -> Result<slave::ModbusSlave> {
         if self.role != StationMode::Slave {
             return Err(anyhow!("Builder is configured for Master, not Slave"));
         }
-        let config = self.build()?;
-        slave::ModbusSlave::start(config, hooks)
+        let port_name = self.port_name.ok_or_else(|| {
+            anyhow!("Port name is required. Use with_port() or with_virtual_port()")
+        })?;
+
+        slave::ModbusSlave::new(
+            port_name,
+            self.baud_rate,
+            self.station_id,
+            self.register_mode,
+            self.register_address,
+            self.register_length,
+            self.timeout_ms,
+            self.hooks,
+        )
     }
 
-    /// Start a Modbus master and return a handle with iterator-like interface
-    pub fn start_master(
-        self,
-        hooks: Option<Arc<dyn ModbusHook>>,
-        data_source: Option<Arc<Mutex<dyn traits::ModbusDataSource>>>,
-    ) -> Result<master::ModbusMaster> {
+    /// Build and start a Modbus master
+    ///
+    /// Uses the hooks and data sources configured with `.add_hook()` and `.add_data_source()`.
+    ///
+    /// Supports two modes:
+    /// 1. Single register polling (using `with_register()`)
+    /// 2. Multi-register polling (using `add_register_poll()` multiple times)
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode, LoggingHandler};
+    /// use std::sync::Arc;
+    ///
+    /// let master = ModbusBuilder::new_master(19)
+    ///     .with_port("COM1")
+    ///     .with_baud_rate(57600)
+    ///     .add_register_poll(RegisterMode::Coils, 0x01, 11)
+    ///     .add_register_poll(RegisterMode::Holding, 0x10, 33)
+    ///     .add_hook(Arc::new(LoggingHandler))
+    ///     .with_timeout(2000)
+    ///     .build_master()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn build_master(self) -> Result<master::ModbusMaster> {
         if self.role != StationMode::Master {
             return Err(anyhow!("Builder is configured for Slave, not Master"));
         }
-        let config = self.build()?;
-        master::ModbusMaster::start(config, hooks, data_source)
-    }
 
-    /// Run the Modbus loop with the configured settings (legacy API, kept for compatibility).
-    pub async fn run(self, hooks: Option<Arc<dyn ModbusHook>>) -> Result<()> {
-        let role = self.role;
-        let config = self.build()?;
+        let port_name = self.port_name.ok_or_else(|| {
+            anyhow!("Port name is required. Use with_port() or with_virtual_port()")
+        })?;
 
-        // For now, we wrap the single config in a vector as the underlying run_modbus_loop expects multiple configs
-        // In the future, we might want to support multiple configs in the builder or change run_modbus_loop
-        run_modbus_loop(vec![config], role, None, hooks).await
+        // 如果有多个轮询配置，使用多寄存器模式
+        if !self.register_polls.is_empty() {
+            master::ModbusMaster::new_multi_register(
+                port_name,
+                self.baud_rate,
+                self.station_id,
+                self.register_polls,
+                self.timeout_ms,
+                self.hooks,
+                self.data_sources,
+            )
+        } else {
+            // 单寄存器模式
+            master::ModbusMaster::new(
+                port_name,
+                self.baud_rate,
+                self.station_id,
+                self.register_mode,
+                self.register_address,
+                self.register_length,
+                self.timeout_ms,
+                self.hooks,
+                self.data_sources,
+            )
+        }
     }
 }
 
@@ -180,42 +348,4 @@ pub trait ModbusHook: Send + Sync {
         Ok(())
     }
     fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
-}
-
-/// Run the Modbus loop with the given configurations (legacy API).
-pub async fn run_modbus_loop(
-    configs: Vec<ModbusPortConfig>,
-    role: StationMode,
-    _data_source: Option<ModbusMasterDataSource>,
-    hooks: Option<Arc<dyn ModbusHook>>,
-) -> Result<()> {
-    if configs.is_empty() {
-        return Err(anyhow!("No configurations provided"));
-    }
-
-    let mut handles = Vec::new();
-
-    for config in configs {
-        let hooks = hooks.clone();
-
-        let handle = tokio::spawn(async move {
-            match role {
-                StationMode::Slave => {
-                    let (sender, _receiver) = flume::unbounded();
-                    slave::run_slave_loop(config, hooks, sender, None).await
-                }
-                StationMode::Master => {
-                    let (sender, _receiver) = flume::unbounded();
-                    master::run_master_loop(config, hooks, None, sender).await
-                }
-            }
-        });
-        handles.push(handle);
-    }
-
-    for handle in handles {
-        handle.await??;
-    }
-
-    Ok(())
 }

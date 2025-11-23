@@ -156,6 +156,54 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-完整示例包含自定义数据源和钩子，请参考：
-- [`examples/api_master`](examples/api_master) - 主站示例（固定测试数据模式）
-- [`examples/api_slave`](examples/api_slave) - 从站示例（自动寄存器管理）
+### 运行 API 示例
+
+**方法 1：使用测试脚本（推荐）**
+
+提供了一个 Python 测试脚本，可以同时运行主站和从站示例，并输出带颜色的前缀标记：
+
+```bash
+# 运行 30 秒
+python3 scripts/run_api_test.py --duration 30
+
+# 无限运行（按 Ctrl+C 停止）
+python3 scripts/run_api_test.py
+
+# 自定义端口
+python3 scripts/run_api_test.py --master-port /dev/ttyUSB0 --slave-port /dev/ttyUSB1
+
+# 跳过自动构建（使用已有的二进制文件）
+python3 scripts/run_api_test.py --no-build
+```
+
+> **注意**：日志中可能会看到 "Operation timed out" 超时警告，这是正常行为：
+>
+> - 从站在等待主站请求时会超时（1秒超时）
+> - 主站在等待从站响应时会超时（2秒超时）
+> - 双方都会自动重试并继续运行
+> - 尽管有这些警告，通信仍然成功
+
+**方法 2：手动执行**
+
+在不同终端中运行：
+
+```bash
+# 终端 1：先启动从站
+cargo run --package api_slave -- /tmp/vcom2
+
+# 终端 2：再启动主站
+cargo run --package api_master -- /tmp/vcom1
+```
+
+注意：在 Linux/WSL 上需要先初始化虚拟串口：
+
+```bash
+./scripts/socat_init.sh
+```
+
+### 完整示例
+
+完整示例包含中间件钩子和数据源，请参考：
+
+- [`examples/api_master`](examples/api_master) - 主站示例（带日志钩子）
+- [`examples/api_slave`](examples/api_slave) - 从站示例（带请求监控和统计）

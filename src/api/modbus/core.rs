@@ -22,7 +22,7 @@ pub fn slave_process_one_request(
     station_id: u8,
     register_address: u16,
     register_length: u16,
-    reg_mode: RegisterMode,
+    _reg_mode: RegisterMode,
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
@@ -45,8 +45,30 @@ pub fn slave_process_one_request(
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response);
     frame.parse()?;
 
-    // Generate response based on register mode
-    let response_bytes = match reg_mode {
+    // Determine the actual register mode from the received function code
+    use rmodbus::consts::ModbusFunction;
+    let actual_mode = match frame.func {
+        ModbusFunction::GetHoldings => RegisterMode::Holding,
+        ModbusFunction::GetInputs => RegisterMode::Input,
+        ModbusFunction::GetCoils => RegisterMode::Coils,
+        ModbusFunction::GetDiscretes => RegisterMode::DiscreteInputs,
+        _ => {
+            return Err(anyhow!(
+                "Unsupported function code: 0x{:02X} ({:?})",
+                frame.func as u8,
+                frame.func
+            ));
+        }
+    };
+
+    log::debug!(
+        "Processing {:?} request (func code 0x{:02X})",
+        actual_mode,
+        frame.func as u8
+    );
+
+    // Generate response based on the actual function code in the request
+    let response_bytes = match actual_mode {
         RegisterMode::Holding => crate::protocol::modbus::build_slave_holdings_response(
             &mut frame,
             &mut storage.lock().unwrap(),
@@ -75,14 +97,14 @@ pub fn slave_process_one_request(
         log::debug!("Sent response: {resp:02X?}");
     }
 
-    // Extract values from storage for response
+    // Extract values from storage for response (use actual mode, not configured mode)
     let values =
-        extract_values_from_storage(&storage, register_address, register_length, reg_mode)?;
+        extract_values_from_storage(&storage, register_address, register_length, actual_mode)?;
 
     Ok(ModbusResponse {
         station_id,
         register_address,
-        register_mode: format!("{reg_mode:?}"),
+        register_mode: format!("{actual_mode:?}"),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
