@@ -47,9 +47,18 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
     // Check if CLI slave is still running
     match cli_slave.try_wait()? {
         Some(status) => {
+            let stderr = {
+                let mut buf = Vec::new();
+                if let Some(mut stderr) = cli_slave.stderr.take() {
+                    use std::io::Read;
+                    stderr.read_to_end(&mut buf)?;
+                }
+                String::from_utf8_lossy(&buf).to_string()
+            };
             return Err(anyhow!(
-                "CLI Slave exited prematurely with status {}",
-                status
+                "CLI Slave exited prematurely with status {}: {}",
+                status,
+                stderr
             ));
         }
         None => {
@@ -123,17 +132,17 @@ pub async fn test_api_master_with_cli_slave() -> Result<()> {
         log::info!("  {}", line);
     }
 
-    // Verify API master output
+    // Verify API master output (logs go to stderr)
     let api_output = api_master.wait_with_output()?;
-    let api_stdout = String::from_utf8_lossy(&api_output.stdout);
+    let api_stderr = String::from_utf8_lossy(&api_output.stderr);
     
     log::info!("📋 API Master output sample:");
-    for line in api_stdout.lines().take(10) {
+    for line in api_stderr.lines().take(10) {
         log::info!("  {}", line);
     }
 
     // Basic validation - check that we got some responses
-    let response_count = api_stdout.matches("Response #").count();
+    let response_count = api_stderr.matches("Response #").count();
     log::info!("📊 API Master received {} responses", response_count);
     
     if response_count < 5 {
