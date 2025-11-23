@@ -28,6 +28,8 @@ jobs:
           - data_source_virtual_port
           - slave_write_coils
           - slave_write_holding
+          - api_master_cli_slave
+          - api_slave_cli_master
 
     steps:
       - uses: actions/checkout@v5
@@ -52,12 +54,14 @@ jobs:
             cli-e2e-cargo-
 
       - name: Build packages
-        run: cargo build --package aoba --package cli_e2e
+        run: cargo build --package aoba --package cli_e2e --package api_master --package api_slave
 
       - name: Make binaries executable
         run: |
           chmod +x target/debug/aoba
           chmod +x target/debug/cli_e2e
+          chmod +x target/debug/api_master
+          chmod +x target/debug/api_slave
 
       - name: Install socat
         run: sudo apt-get update && sudo apt-get install -y socat
@@ -112,12 +116,14 @@ jobs:
             cli-e2e-cargo-
 
       - name: Build packages
-        run: cargo build --package aoba --package cli_e2e
+        run: cargo build --package aoba --package cli_e2e --package api_master --package api_slave
 
       - name: Make binaries executable
         run: |
           chmod +x target/debug/aoba
           chmod +x target/debug/cli_e2e
+          chmod +x target/debug/api_master
+          chmod +x target/debug/api_slave
 
       - name: Install socat
         run: sudo apt-get update && sudo apt-get install -y socat

@@ -202,6 +202,8 @@ declare -a CLI_MODULES=(
     "data_source_mqtt"
     "slave_write_coils"
     "slave_write_holding"
+    "api_master_cli_slave"
+    "api_slave_cli_master"
 )
 
 ## Docker support removed: this script runs tests locally only.

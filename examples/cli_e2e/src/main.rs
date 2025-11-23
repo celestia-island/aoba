@@ -15,6 +15,7 @@ use clap::Parser;
 
 // use config_mode::test_config_mode;
 use e2e::{
+    api::{test_api_master_with_cli_slave, test_api_slave_with_cli_master},
     basic::{
         test_basic_master_slave_communication, test_http_data_source, test_ipc_manual_data_source,
         test_ipc_pipe_data_source, test_mqtt_data_source, test_virtual_port,
@@ -176,6 +177,9 @@ async fn main() -> Result<()> {
             log::info!("  Write Tests (Slave-to-Master):");
             log::info!("    - slave_write_coils");
             log::info!("    - slave_write_holding");
+            log::info!("  API Tests (requires vcom ports):");
+            log::info!("    - api_master_cli_slave");
+            log::info!("    - api_slave_cli_master");
             log::info!("");
             log::info!("Usage: cargo run --package cli_e2e -- --module <module_name>");
             return Ok(());
@@ -219,6 +223,10 @@ async fn main() -> Result<()> {
         // Write tests (slave-to-master)
         "slave_write_coils" => test_slave_write_coils().await?,
         "slave_write_holding" => test_slave_write_holding().await?,
+
+        // API tests (require vcom ports)
+        "api_master_cli_slave" => test_api_master_with_cli_slave().await?,
+        "api_slave_cli_master" => test_api_slave_with_cli_master().await?,
 
         _ => {
             log::error!("❌ Unknown module: {module}");
