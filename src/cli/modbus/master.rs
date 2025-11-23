@@ -24,8 +24,10 @@ use super::{
     emit_modbus_ipc_log, extract_values_from_station_configs, parse_data_line, parse_register_mode,
     ModbusIpcLogPayload,
 };
-use crate::api::modbus::{ModbusResponse, ResponseRegisterMode};
-use crate::api::utils::open_serial_port;
+use crate::api::{
+    modbus::{ModbusResponse, ResponseRegisterMode},
+    utils::open_serial_port,
+};
 
 #[derive(Clone)]
 pub enum DataSource {
@@ -1751,7 +1753,9 @@ fn respond_to_request(
         rmodbus::consts::ModbusFunction::GetCoils => ResponseRegisterMode::Coils,
         rmodbus::consts::ModbusFunction::GetDiscretes => ResponseRegisterMode::DiscreteInputs,
         rmodbus::consts::ModbusFunction::GetInputs => ResponseRegisterMode::Input,
-        other => ResponseRegisterMode::Custom { function_code: other as u8 },
+        other => ResponseRegisterMode::Custom {
+            function_code: other as u8,
+        },
     };
 
     Ok((
