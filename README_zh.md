@@ -107,3 +107,55 @@ EOF
 
 - **自动化测试**：CI/CD 环境中自动启动 Modbus 模拟器
 - **嵌入式系统**：在诸如树莓派这样的开发板上运行 Modbus 守护进程，配合 CH340 等 USB 转串口模块工作
+
+## 编程 API
+
+Aoba 提供了基于 trait 的 Rust API，用于将 Modbus 功能嵌入到您的应用程序中。API 支持主站（客户端）和从站（服务器）角色，并可自定义钩子和数据源。
+
+### API 快速示例
+
+**Modbus 主站（轮询从站）：**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 创建并启动主站轮询从站
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_register(RegisterMode::Holding, 0, 10)
+        .start_master(None, None)?;
+
+    // 通过迭代器接口接收响应
+    while let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
+        println!("接收到: {:?}", response.values);
+    }
+    Ok(())
+}
+```
+
+**Modbus 从站（响应请求）：**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 创建并启动从站响应主站请求
+    let slave = ModbusBuilder::new_slave(1)
+        .with_port("/dev/ttyUSB0")
+        .with_register(RegisterMode::Holding, 0, 10)
+        .start_slave(None)?;
+
+    // 通过迭代器接口接收请求通知
+    while let Some(notification) = slave.recv_timeout(std::time::Duration::from_secs(10)) {
+        println!("已处理请求: {:?}", notification.values);
+    }
+    Ok(())
+}
+```
+
+完整示例包含自定义数据源和钩子，请参考：
+- [`examples/api_master`](examples/api_master) - 主站示例（固定测试数据模式）
+- [`examples/api_slave`](examples/api_slave) - 从站示例（自动寄存器管理）
