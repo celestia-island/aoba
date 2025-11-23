@@ -1,8 +1,9 @@
-use anyhow::Result;
 /// Modbus Slave API Example
 ///
 /// This example demonstrates how to use the Modbus API to create a custom slave
 /// that listens for requests and provides fixed test data responses.
+
+use anyhow::Result;
 use std::sync::Arc;
 
 use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode};
