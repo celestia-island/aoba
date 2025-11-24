@@ -898,10 +898,10 @@ async fn execute_match_master_registers_trigger(
     }
 
     for (i, (actual, expected)) in actual_values.iter().zip(expected_values.iter()).enumerate() {
-        let expected_u16 = expected
+        let expected_value_u64: u64 = expected
             .as_u64()
-            .ok_or_else(|| anyhow::anyhow!("Expected value at index {i} is not a number"))?
-            as u16;
+            .ok_or_else(|| anyhow::anyhow!("Expected value at index {i} is not a number"))?;
+        let expected_u16 = expected_value_u64 as u16;
 
         if *actual != expected_u16 {
             bail!(
