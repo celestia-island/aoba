@@ -107,11 +107,11 @@ pub struct ModbusSlaveIterator {
     port_name: String,
     hooks: Vec<Arc<dyn ModbusHook>>,
     residual_buffer: Arc<Mutex<Vec<u8>>>,
-    /// 错误恢复延迟（毫秒）
+    /// Error recovery delay (milliseconds)
     error_recovery_delay_ms: Option<u64>,
-    /// 连续解析失败次数计数器（用于检测持续错误）
+    /// Consecutive parse failure counter (for detecting persistent errors)
     consecutive_parse_failures: Arc<Mutex<u32>>,
-    /// 超时时间（毫秙），用于强制恢复延迟
+    /// Timeout (milliseconds), used for forced recovery delay
     timeout_ms: u64,
 }
 
@@ -219,7 +219,7 @@ impl ModbusSlaveIterator {
             residual_buffer: Arc::new(Mutex::new(Vec::new())),
             error_recovery_delay_ms,
             consecutive_parse_failures: Arc::new(Mutex::new(0)),
-            timeout_ms: Duration::from_secs(1).as_millis() as u64, // 默认1秒超时
+            timeout_ms: Duration::from_secs(1).as_millis() as u64, // Default 1 second timeout
         })
     }
 
@@ -247,7 +247,7 @@ impl ModbusSlaveIterator {
             };
             match super::core::slave_process_one_request_with_hooks(&params) {
                 Ok(response) => {
-                    // 成功接收并解析请求，重置连续失败计数器
+                    // Successfully received and parsed request, reset consecutive failure counter
                     {
                         let mut counter = self.consecutive_parse_failures.lock().unwrap();
                         if *counter > 0 {
@@ -268,24 +268,24 @@ impl ModbusSlaveIterator {
                     }
 
                     // Parse/protocol errors - log warning and continue
-                    // 特殊处理：PARSE_FAILED 表示需要检测连续失败
+                    // Special handling: PARSE_FAILED indicates need to detect consecutive failures
                     if err_msg.contains("parse_failed") {
-                        // 增加连续失败计数器
+                        // Increment consecutive failure counter
                         let mut counter = self.consecutive_parse_failures.lock().unwrap();
                         *counter += 1;
                         let current_count = *counter;
-                        drop(counter); // 释放锁
+                        drop(counter); // Release the lock
 
                         log::warn!(
                             "⚠️  Frame parsing failed (consecutive failures: {})",
                             current_count
                         );
 
-                        // 连续2次失败触发强制恢复
+                        // Consecutive 2 failures trigger forced recovery
                         if current_count >= 2 {
                             log::error!("🚨 Consecutive parse failures detected ({}), triggering FORCED RECOVERY", current_count);
 
-                            // 1. 清空残留缓冲区
+                            // 1. Clear residual buffer
                             {
                                 let mut residual = self.residual_buffer.lock().unwrap();
                                 if !residual.is_empty() {
@@ -297,11 +297,11 @@ impl ModbusSlaveIterator {
                                 }
                             }
 
-                            // 2. 等待完整超时时间（默认1秒），让双方缓冲区完全稳定
+                            // 2. Wait for full timeout period (default 1 second) to let both sides' buffers fully stabilize
                             log::info!("⏸️  FORCED: Waiting {}ms (full timeout) for complete buffer stabilization", self.timeout_ms);
                             std::thread::sleep(std::time::Duration::from_millis(self.timeout_ms));
 
-                            // 3. 重置计数器，完全从头开始
+                            // 3. Reset counter, start completely from scratch
                             {
                                 let mut counter = self.consecutive_parse_failures.lock().unwrap();
                                 *counter = 0;
@@ -358,7 +358,7 @@ impl ModbusSlaveIterator {
                 Err(e) => {
                     let err_msg = e.to_string().to_lowercase();
 
-                    // 特殊处理：PARSE_FAILED 需要暂停轮询
+                    // Special handling: PARSE_FAILED requires pausing polling
                     if err_msg.contains("parse_failed") {
                         log::warn!("⚠️  Frame parsing failed, applying recovery delay...");
 
@@ -368,7 +368,7 @@ impl ModbusSlaveIterator {
                             std::thread::sleep(std::time::Duration::from_millis(200));
                         }
 
-                        continue; // 延迟后重试
+                        continue; // Retry after delay
                     }
 
                     // ONLY retry timeout/empty read - return ALL other errors
@@ -627,13 +627,13 @@ async fn run_slave_loop(
         register_length,
         register_mode,
         timeout_ms,
-        error_recovery_delay_ms: _, // 由 ModbusSlaveIterator 使用，此处不需要
-        poll_interval_ms: _,        // Slave不使用此字段（仅Master使用）
+        error_recovery_delay_ms: _, // Used by ModbusSlaveIterator, not needed here
+        poll_interval_ms: _,        // Slave does not use this field (Master only)
     } = config;
 
     log::info!("Starting slave loop (middleware) for {}", port_name);
 
-    // 创建我们自己拥有的hooks向量，解决生命周期问题
+    // Create our own owned hooks vector to solve lifetime issues
 
     let port_handle = open_serial_port(&port_name, baud_rate, Duration::from_millis(timeout_ms))?;
     let port_arc = Arc::new(Mutex::new(port_handle));
@@ -643,7 +643,7 @@ async fn run_slave_loop(
         rmodbus::server::storage::ModbusStorageSmall::new(),
     ));
 
-    // 🔗 创建残留缓冲区，在整个循环生命周期内保留（用于帧拼接）
+    // 🔗 Create residual buffer, retained throughout the loop lifecycle (for frame stitching)
     let residual_buffer = Arc::new(Mutex::new(Vec::new()));
 
     loop {
@@ -670,7 +670,7 @@ async fn run_slave_loop(
             register_length,
             reg_mode: register_mode,
             storage: storage.clone(),
-            hooks: &[], // 暂时使用空钩子数组
+            hooks: &[], // Temporarily use empty hooks array
             port_name: port_name.clone(),
             residual_buffer: residual_buffer.clone(),
         };
