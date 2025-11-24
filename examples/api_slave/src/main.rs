@@ -12,7 +12,7 @@ use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode
 struct RequestMonitorHook;
 
 impl ModbusHook for RequestMonitorHook {
-    fn on_before_request(&self, port: &str) -> Result<()> {
+    fn on_before_request(&self, _port: &str) -> Result<()> {
         Ok(())
     }
 
@@ -20,8 +20,8 @@ impl ModbusHook for RequestMonitorHook {
         Ok(())
     }
 
-    fn on_error(&self, port: &str, error: &anyhow::Error) {
-        log::warn!("[RequestMonitorHook] Error on {}: {}", port, error);
+    fn on_error(&self, _port: &str, error: &anyhow::Error) {
+        log::warn!("[RequestMonitorHook] Error: {}", error);
     }
 }
 

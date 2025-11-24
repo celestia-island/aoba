@@ -263,7 +263,6 @@ pub struct IpcServer {
 impl IpcServer {
     /// Create a new IPC server that connects to the given socket name
     pub fn connect(socket_name: String) -> Result<Self> {
-
         // Try to connect to the named socket (TUI is listening)
         let name = socket_name
             .clone()
@@ -288,7 +287,6 @@ impl IpcServer {
             writeln!(stream, "{json}")?;
             stream.flush()?;
             if matches!(msg, IpcMessage::Heartbeat { .. }) {
-
             } else {
                 log::info!("IPC: Sent message: {msg:?}");
             }
@@ -313,7 +311,7 @@ impl IpcServer {
     /// Close the IPC connection
     pub fn close(&mut self) {
         if self.writer.is_some() {
-            let socket_name = self.socket_name.clone();
+            let _socket_name = self.socket_name.clone();
 
             let _ = self.send(&IpcMessage::shutdown());
             self.writer = None;
@@ -395,7 +393,6 @@ impl IpcConnection {
             Ok(_) => {
                 let msg = IpcMessage::from_json(line.trim())?;
                 if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-
                 } else {
                     log::info!("IPC: Received message: {msg:?}");
                 }
@@ -417,7 +414,6 @@ impl IpcConnection {
 
         let msg = IpcMessage::from_json(line.trim())?;
         if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-
         } else {
             log::info!("IPC: Received message: {msg:?}");
         }
@@ -474,7 +470,6 @@ impl IpcCommandClient {
     /// Close the command connection
     pub fn close(&mut self) {
         if self.stream.is_some() {
-            log::debug!("IPC CMD: Closing command connection");
             self.stream = None;
         }
     }

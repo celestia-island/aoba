@@ -354,7 +354,6 @@ pub async fn run_core_thread(
                         Some("user_edit"),
                     ) {
                         log::warn!("❌ Failed to send stations update for {port_name}: {err}");
-                    } else {
                     }
                 }
             }
@@ -417,7 +416,7 @@ pub async fn run_core_thread(
 
             for (port_name, exit_status) in dead_processes {
                 if let Some(Some(path)) = cleanup_paths.remove(&port_name) {
-                    if let Err(err) = fs::remove_file(&path) {}
+                    if let Err(_err) = fs::remove_file(&path) {}
                 }
                 append_subprocess_exited_log(&port_name, exit_status);
                 if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
@@ -539,7 +538,7 @@ async fn restart_runtime(
         }
 
         if let Some(path) = info.data_source_path.clone() {
-            if let Err(err) = fs::remove_file(&path) {}
+            if let Err(_err) = fs::remove_file(&path) {}
         }
 
         // Clear subprocess info but KEEP the port state and Modbus config
@@ -581,7 +580,7 @@ fn stop_runtime(
         }
 
         if let Some(path) = info.data_source_path.clone() {
-            if let Err(err) = fs::remove_file(&path) {}
+            if let Err(_err) = fs::remove_file(&path) {}
         }
 
         crate::tui::status::write_status(|status| {
@@ -847,7 +846,7 @@ async fn start_runtime(
                             Ok(())
                         })?;
 
-                        if let Err(remove_err) = fs::remove_file(&data_source_path) {}
+                        if let Err(_remove_err) = fs::remove_file(&data_source_path) {}
                     }
                 }
             }

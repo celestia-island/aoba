@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::tui::status;
 
+// 使用标准库的div_ceil方法
+
 /// For the config panel we have groups of options separated by blank lines.
 /// Define the sizes of each group so view_offset can account for the
 /// extra blank rows introduced between groups.

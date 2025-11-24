@@ -52,7 +52,7 @@ pub fn init_mock_state() {
     );
 
     *state = Value::Object(root);
-    log::debug!("🔧 Initialized mock state with default ports");
+
 }
 
 /// Synchronize the JSON mock state into the live TUI status tree so that
@@ -89,7 +89,7 @@ pub fn set_mock_state(path: &str, value: Value) -> Result<()> {
     apply_value_at_path(&mut state, &json_path, value.clone())
         .with_context(|| format!("Failed to apply value at path '{path}'"))?;
 
-    log::debug!("🔧 Mock state updated: {path} = {value:?}");
+
     Ok(())
 }
 
@@ -119,7 +119,7 @@ pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
         );
     }
 
-    log::debug!("✅ Mock state verified: {path} = {expected:?}");
+
     Ok(())
 }
 
@@ -133,7 +133,7 @@ pub fn get_full_mock_state() -> Value {
 pub fn save_mock_state_to_file(path: &str) -> Result<()> {
     let state = get_full_mock_state();
     std::fs::write(path, serde_json::to_string_pretty(&state)?)?;
-    log::debug!("💾 Saved mock state to: {path}");
+
     Ok(())
 }
 

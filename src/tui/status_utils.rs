@@ -49,7 +49,7 @@ pub(crate) fn check_and_update_temporary_statuses_with_now(
         crate::tui::status::write_status(move |status| {
             for (port_name, next_status) in &ports_to_update {
                 if let Some(port) = status.ports.map.get_mut(port_name) {
-                    let old_status = format!("{:?}", port.status_indicator);
+                    let _old_status = format!("{:?}", port.status_indicator);
                     port.status_indicator = next_status.clone();
 
                 }

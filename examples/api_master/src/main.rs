@@ -11,7 +11,7 @@ use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode
 struct LoggingHook;
 
 impl ModbusHook for LoggingHook {
-    fn on_before_request(&self, port: &str) -> Result<()> {
+    fn on_before_request(&self, _port: &str) -> Result<()> {
         Ok(())
     }
 
@@ -26,8 +26,8 @@ impl ModbusHook for LoggingHook {
         Ok(())
     }
 
-    fn on_error(&self, port: &str, error: &anyhow::Error) {
-        log::warn!("Error on {}: {}", port, error);
+    fn on_error(&self, _port: &str, error: &anyhow::Error) {
+        log::warn!("Error: {}", error);
     }
 }
 

@@ -5,7 +5,7 @@ use std::{
 };
 
 use super::{
-    core::{self, master_poll_loop},
+    core::{self, master_poll_loop, MasterPollParams},
     traits::{ModbusDataSource, ModbusMasterHandler},
     ModbusHook, ModbusPortConfig,
 };
@@ -78,16 +78,17 @@ impl ModbusMaster {
             let port_arc = Arc::new(Mutex::new(port_handle));
 
             // Run loop
-            master_poll_loop(
+            let params = MasterPollParams {
                 port_arc,
                 station_id,
                 register_address,
                 register_length,
-                register_mode,
+                reg_mode: register_mode,
                 response_tx,
-                Some(control_rx),
+                control_rx: Some(control_rx),
                 poll_interval_ms,
-            )
+            };
+            master_poll_loop(&params)
         });
 
         Ok(Self {
@@ -217,8 +218,7 @@ pub async fn run_master_loop_with_handler(
         // Check if data source has new data to write
         if let Some(ds) = &data_source {
             match ds.lock().unwrap().next_data() {
-                Ok(Some(values)) => {
-                    // debug removed: Writing values from data source
+                Ok(Some(_values)) => {
                     // TODO: Implement write operation based on register mode
                     // For now, we'll just log it
                 }
@@ -404,9 +404,7 @@ async fn run_master_loop(
                         }
                     }
                 }
-                Ok(None) => {
-                    // trace removed
-                }
+                Ok(None) => {}
                 Err(e) => {
                     log::error!("Data source chain error: {}", e);
                 }
@@ -477,13 +475,10 @@ async fn run_multi_register_master_loop(
         port_name,
         register_polls.len()
     );
-    // debug removed: hooks and data sources info
 
     // Open port once (shared across all register types)
     let port_handle = open_serial_port(&port_name, baud_rate, Duration::from_millis(timeout_ms))?;
     let port_arc = Arc::new(Mutex::new(port_handle));
-
-    let mut poll_index = 0;
 
     loop {
         // Poll each register type
@@ -544,8 +539,6 @@ async fn run_multi_register_master_loop(
                                             }
                                         }
 
-                                        // debug removed: Sending write request
-
                                         // Send write request
                                         let write_result = {
                                             let mut port = port_arc.lock().unwrap();
@@ -583,7 +576,6 @@ async fn run_multi_register_master_loop(
                                             match read_result {
                                                 Ok(bytes_read) if bytes_read >= 8 => {
                                                     let response = &buffer[..bytes_read];
-                                                    // debug removed: Write confirmation
                                                     if response[1] == 0x0F {
                                                         log::info!("Successfully wrote {} coils to slave at address 0x{:04X}", coil_values.len(), coils_config.register_address);
                                                     } else if response[1] & 0x80 != 0 {
@@ -617,9 +609,7 @@ async fn run_multi_register_master_loop(
                             log::warn!("Data source provided data but no Coils register type is configured for writing");
                         }
                     }
-                    Ok(None) => {
-                        // trace removed: No data sources provided for this poll
-                    }
+                    Ok(None) => {}
                     Err(e) => {
                         log::error!("Data source chain error: {}", e);
                     }
@@ -670,15 +660,8 @@ async fn run_multi_register_master_loop(
                 }
             }
 
-            // Wait the configured interval after polling each register type
-            // This ensures: Reg1 -> wait -> Reg2 -> wait -> Reg3 -> wait -> Reg1...
-            // Instead of: sending Reg1 + Reg2 + Reg3 together -> wait -> repeat
-            // Interval is configurable via .with_poll_interval(); default is 1000ms
-            // trace removed
+            // Interval is configurable via `with_poll_interval`; default is 1000ms
             tokio::time::sleep(Duration::from_millis(poll_interval_ms)).await;
         }
-
-        poll_index += 1;
-        // trace removed
     }
 }
