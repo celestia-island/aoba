@@ -30,12 +30,12 @@ pub async fn read_modbus_frame(
                     // Append newly read bytes and emit a debug trace describing the chunk
                     target.extend_from_slice(&buf[..n]);
                     if log::log_enabled!(log::Level::Debug) {
-                        let chunk_hex = buf[..n]
+                        let _chunk_hex = buf[..n]
                             .iter()
                             .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ");
-                        let so_far = target
+                        let _so_far = target
                             .iter()
                             .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()

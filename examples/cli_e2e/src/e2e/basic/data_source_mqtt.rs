@@ -56,7 +56,7 @@ async fn publish_mqtt_data(
         loop {
             match event_loop.poll().await {
                 Ok(Event::Incoming(Incoming::ConnAck(_))) => {
-                    log::debug!("MQTT publisher connected");
+        
                 }
                 Err(e) => {
                     log::warn!("MQTT event loop error: {}", e);

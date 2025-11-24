@@ -184,13 +184,13 @@ pub fn execute_slave_handler_chain(
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {
             Ok(()) => {
-                log::debug!("Handler {} intercepted the response", i);
+    
                 return Ok(()); // First success intercepts
             }
             Err(e) => {
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
-                        HandlerError::NotHandled(msg) => {
+                        HandlerError::NotHandled(_msg) => {
 
                             // Continue to next handler
                         }
@@ -226,13 +226,13 @@ pub fn execute_master_handler_chain(
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {
             Ok(()) => {
-                log::debug!("Handler {} intercepted the response", i);
+    
                 return Ok(()); // First success intercepts
             }
             Err(e) => {
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
-                        HandlerError::NotHandled(msg) => {
+                        HandlerError::NotHandled(_msg) => {
 
                             // Continue to next handler
                         }
@@ -270,7 +270,7 @@ pub fn execute_data_source_chain(
         let mut src = source.lock().unwrap();
         match src.next_data() {
             Ok(Some(data)) => {
-                log::debug!("Data source {} provided data", i);
+    
                 return Ok(Some(data)); // First data source intercepts
             }
             Ok(None) => {
@@ -280,7 +280,7 @@ pub fn execute_data_source_chain(
             Err(e) => {
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
-                        HandlerError::NotHandled(msg) => {
+                        HandlerError::NotHandled(_msg) => {
 
                             // Continue to next source
                         }

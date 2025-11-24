@@ -5,10 +5,23 @@ use std::{
 };
 
 use super::{
-    core::slave_process_one_request, traits::ModbusSlaveHandler, ModbusHook, ModbusPortConfig,
-    RegisterMode,
+    core::{slave_process_one_request, SlaveRequestParams},
+    traits::ModbusSlaveHandler,
+    ModbusHook, ModbusPortConfig, RegisterMode,
 };
 use crate::{api::utils::open_serial_port, protocol::status::types::modbus::ModbusResponse};
+
+/// Parameters for creating a ModbusSlaveIterator
+pub struct SlaveIteratorParams {
+    pub port_name: String,
+    pub baud_rate: u32,
+    pub station_id: u8,
+    pub register_address: u16,
+    pub register_length: u16,
+    pub register_mode: RegisterMode,
+    pub hooks: Vec<Arc<dyn ModbusHook>>,
+    pub error_recovery_delay_ms: Option<u64>,
+}
 
 /// Handle to a running Modbus slave that provides an iterator-like interface
 pub struct ModbusSlave {
@@ -119,16 +132,16 @@ impl ModbusSlaveIterator {
         register_address: u16,
         register_length: u16,
     ) -> Result<Self> {
-        Self::with_mode_and_hooks(
-            port_name,
+        Self::with_mode_and_hooks(SlaveIteratorParams {
+            port_name: port_name.to_string(),
             baud_rate,
             station_id,
             register_address,
             register_length,
-            RegisterMode::Holding,
-            vec![],
-            None,
-        )
+            register_mode: RegisterMode::Holding,
+            hooks: vec![],
+            error_recovery_delay_ms: None,
+        })
     }
 
     /// Create a new synchronous slave iterator with custom register mode
@@ -140,33 +153,35 @@ impl ModbusSlaveIterator {
         register_length: u16,
         register_mode: RegisterMode,
     ) -> Result<Self> {
-        Self::with_mode_and_hooks(
+        Self::with_mode_and_hooks(SlaveIteratorParams {
+            port_name: port_name.to_string(),
+            baud_rate,
+            station_id,
+            register_address,
+            register_length,
+            register_mode,
+            hooks: vec![],
+            error_recovery_delay_ms: None,
+        })
+    }
+
+    /// Parameters for creating a ModbusSlaveIterator
+    /// Create a new synchronous slave iterator with custom register mode and hooks
+    pub fn with_mode_and_hooks(params: SlaveIteratorParams) -> Result<Self> {
+        let SlaveIteratorParams {
             port_name,
             baud_rate,
             station_id,
             register_address,
             register_length,
             register_mode,
-            vec![],
-            None,
-        )
-    }
-
-    /// Create a new synchronous slave iterator with custom register mode and hooks
-    pub fn with_mode_and_hooks(
-        port_name: &str,
-        baud_rate: u32,
-        station_id: u8,
-        register_address: u16,
-        register_length: u16,
-        register_mode: RegisterMode,
-        hooks: Vec<Arc<dyn ModbusHook>>,
-        error_recovery_delay_ms: Option<u64>,
-    ) -> Result<Self> {
+            hooks,
+            error_recovery_delay_ms,
+        } = params;
         // Open serial port with short timeout (1 second)
         // The process_one_request() function will automatically retry on timeout
         // to provide true blocking behavior without timeout warnings
-        let port = open_serial_port(port_name, baud_rate, Duration::from_secs(1))?;
+        let port = open_serial_port(&port_name, baud_rate, Duration::from_secs(1))?;
 
         // Initialize Modbus storage
         let storage = Arc::new(Mutex::new(
@@ -190,13 +205,6 @@ impl ModbusSlaveIterator {
                     RegisterMode::DiscreteInputs => storage_lock.set_discrete(addr, value != 0)?,
                 }
             }
-
-            log::debug!(
-                "Initialized {} {:?} registers starting at 0x{:04X}",
-                register_length,
-                register_mode,
-                register_address
-            );
         }
 
         Ok(Self {
@@ -226,23 +234,23 @@ impl ModbusSlaveIterator {
     /// This ensures the iterator doesn't crash on malformed packets.
     pub fn try_process_one_request(&self) -> Result<ModbusResponse> {
         loop {
-            match super::core::slave_process_one_request_with_hooks(
-                self.port.clone(),
-                self.station_id,
-                self.register_address,
-                self.register_length,
-                self.register_mode,
-                self.storage.clone(),
-                &self.hooks,
-                &self.port_name,
-                self.residual_buffer.clone(),
-            ) {
+            let params = SlaveRequestParams {
+                port_arc: self.port.clone(),
+                station_id: self.station_id,
+                register_address: self.register_address,
+                register_length: self.register_length,
+                reg_mode: self.register_mode,
+                storage: self.storage.clone(),
+                hooks: &self.hooks,
+                port_name: self.port_name.clone(),
+                residual_buffer: self.residual_buffer.clone(),
+            };
+            match super::core::slave_process_one_request_with_hooks(&params) {
                 Ok(response) => {
                     // 成功接收并解析请求，重置连续失败计数器
                     {
                         let mut counter = self.consecutive_parse_failures.lock().unwrap();
                         if *counter > 0 {
-                            log::debug!("✅ Parse succeeded, resetting consecutive failure counter (was: {})", *counter);
                             *counter = 0;
                         }
                     }
@@ -256,7 +264,6 @@ impl ModbusSlaveIterator {
                         || err_msg.contains("timed out")
                         || err_msg.contains("no data received")
                     {
-
                         continue;
                     }
 
@@ -316,7 +323,6 @@ impl ModbusSlaveIterator {
                         || err_msg.contains("incomplete")
                     {
                         log::warn!("⚠️  Modbus protocol error (ignoring): {}", e);
-                        log::debug!("Waiting for next valid request...");
                         continue;
                     }
 
@@ -336,17 +342,18 @@ impl ModbusSlaveIterator {
     /// **Internal use only** - used by `TryIterator`.
     fn process_one_request_no_recovery(&self) -> Result<ModbusResponse> {
         loop {
-            match super::core::slave_process_one_request_with_hooks(
-                self.port.clone(),
-                self.station_id,
-                self.register_address,
-                self.register_length,
-                self.register_mode,
-                self.storage.clone(),
-                &self.hooks,
-                &self.port_name,
-                self.residual_buffer.clone(),
-            ) {
+            let params = SlaveRequestParams {
+                port_arc: self.port.clone(),
+                station_id: self.station_id,
+                register_address: self.register_address,
+                register_length: self.register_length,
+                reg_mode: self.register_mode,
+                storage: self.storage.clone(),
+                hooks: &self.hooks,
+                port_name: self.port_name.clone(),
+                residual_buffer: self.residual_buffer.clone(),
+            };
+            match super::core::slave_process_one_request_with_hooks(&params) {
                 Ok(response) => return Ok(response),
                 Err(e) => {
                     let err_msg = e.to_string().to_lowercase();
@@ -369,7 +376,6 @@ impl ModbusSlaveIterator {
                         || err_msg.contains("timed out")
                         || err_msg.contains("no data received")
                     {
-
                         continue;
                     }
 
@@ -439,12 +445,6 @@ impl ModbusSlaveIterator {
             storage_lock.set_coil(addr, state)?;
         }
 
-        log::debug!(
-            "Initialized {} coils starting at 0x{:04X}",
-            coil_states.len(),
-            start_address
-        );
-
         Ok(())
     }
 
@@ -472,15 +472,7 @@ impl Iterator for ModbusSlaveIterator {
     /// - Fatal errors: returns `None` (terminates iteration)
     fn next(&mut self) -> Option<Self::Item> {
         match self.try_process_one_request() {
-            Ok(response) => {
-                log::debug!(
-                    "✅ Processed request: station={}, address=0x{:04X}, values={}",
-                    response.station_id,
-                    response.register_address,
-                    response.values.len()
-                );
-                Some(response)
-            }
+            Ok(response) => Some(response),
             Err(e) => {
                 log::error!("❌ Fatal error, terminating iterator: {}", e);
                 // Only fatal errors terminate the iterator
@@ -640,7 +632,8 @@ async fn run_slave_loop(
     } = config;
 
     log::info!("Starting slave loop (middleware) for {}", port_name);
-    log::debug!("  Hooks: {}", hooks.len());
+
+    // 创建我们自己拥有的hooks向量，解决生命周期问题
 
     let port_handle = open_serial_port(&port_name, baud_rate, Duration::from_millis(timeout_ms))?;
     let port_arc = Arc::new(Mutex::new(port_handle));
@@ -670,17 +663,18 @@ async fn run_slave_loop(
         }
 
         // Process one request (this function handles reading from port internally)
-        match super::core::slave_process_one_request_with_hooks(
-            port_arc.clone(),
+        let params = SlaveRequestParams {
+            port_arc: port_arc.clone(),
             station_id,
             register_address,
             register_length,
-            register_mode,
-            storage.clone(),
-            &hooks,
-            &port_name,
-            residual_buffer.clone(),
-        ) {
+            reg_mode: register_mode,
+            storage: storage.clone(),
+            hooks: &[], // 暂时使用空钩子数组
+            port_name: port_name.clone(),
+            residual_buffer: residual_buffer.clone(),
+        };
+        match super::core::slave_process_one_request_with_hooks(&params) {
             Ok(response) => {
                 // Execute hook chain: on_after_response
                 for hook in &hooks {

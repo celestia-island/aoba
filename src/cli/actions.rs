@@ -65,17 +65,12 @@ fn check_port_occupation(port_name: &str) -> bool {
                 // ERROR_ACCESS_DENIED (5) may also indicate occupation
                 let is_occupied = matches!(error, WIN32_ERROR(32) | WIN32_ERROR(5));
 
-                log::debug!(
-                    "Windows API CreateFileW failed for {port_name}: error={error:?}, occupied={is_occupied}",
-                );
-
                 return is_occupied;
             }
 
             // Successfully opened, close it and return free
             let handle = handle.unwrap();
             let _ = CloseHandle(handle);
-            log::debug!("Windows API successfully opened {port_name}, port is free");
             false
         }
     }
@@ -158,11 +153,6 @@ fn check_port_occupation(port_name: &str) -> bool {
                     if let Ok(meta) = fs::metadata(&fd_path) {
                         let rdev = meta.rdev();
                         if rdev == target_rdev {
-                            log::debug!(
-                                "Detected matching device id for {} via {}",
-                                port_name,
-                                fd_path.display()
-                            );
                             return true;
                         }
                     }
@@ -171,12 +161,6 @@ fn check_port_occupation(port_name: &str) -> bool {
                     if let Ok(link) = fs::read_link(&fd_path) {
                         if let Ok(canon) = fs::canonicalize(&link) {
                             if canon == target_path {
-                                log::debug!(
-                                    "Detected open handle to {} by PID {} (fd: {})",
-                                    port_name,
-                                    pid,
-                                    fd_path.display()
-                                );
                                 return true;
                             }
                         }

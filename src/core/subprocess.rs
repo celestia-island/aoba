@@ -242,12 +242,12 @@ impl ManagedSubprocess {
                         result = Ok(client);
                         break;
                     }
-                    Err(err) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
+                    Err(_err) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
                         crate::utils::sleep::sleep_1s().await;
                     }
-                    Err(err) => {
-                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {err}");
-                        result = Err(err);
+                    Err(_err) => {
+                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {_err}");
+                        result = Err(_err);
                     }
                 }
             }
@@ -327,7 +327,7 @@ impl ManagedSubprocess {
             }
             Ok(None) => {
                 // Child still running; opportunistically finish IPC handshake if ready
-                if let Err(err) = self.try_complete_ipc_connection() {}
+                if let Err(_err) = self.try_complete_ipc_connection() {}
                 true
             }
             Err(err) => {
@@ -432,7 +432,7 @@ impl ManagedSubprocess {
         }
         if let Some(mut conn) = self.ipc_connection.take() {
             // Drain any remaining message to ensure socket closes cleanly
-            if let Err(err) = conn.try_recv() {}
+            if let Err(_err) = conn.try_recv() {}
         }
         Ok(())
     }
