@@ -14,7 +14,6 @@ use crate::{
 /// In normal mode, all available serial ports are enumerated using serialport library.
 pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool) -> Result<bool> {
     if *scan_in_progress {
-
         return Ok(false);
     }
 
@@ -50,7 +49,6 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 // For other states (Free, OccupiedByOther), reset to Free and re-check
                 // This prevents stale occupation status from being preserved
                 if !preserved.state.is_occupied_by_this() {
-
                     preserved.state = PortState::Free;
                 }
 
@@ -93,7 +91,6 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                     || !old_port_data.logs.is_empty();
 
                 if should_preserve {
-
                     new_order.push(old_port_name.clone());
                     new_map.insert(old_port_name.clone(), old_port_data.clone());
                 }
@@ -101,7 +98,6 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
         }
 
         // Update status with new port list
-
 
         // Log state of each port before updating
 
