@@ -347,9 +347,7 @@ pub async fn run_core_thread(
                     values,
                 } => {
                     log::info!("🔵 SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}");
-                    log::debug!(
-                        "📡 Sending full stations update for {port_name} to ensure synchronization (reason=user_edit)"
-                    );
+
                     if let Err(err) = subprocess_manager.send_stations_update_for_port(
                         &port_name,
                         get_stations_from_status,
@@ -357,9 +355,6 @@ pub async fn run_core_thread(
                     ) {
                         log::warn!("❌ Failed to send stations update for {port_name}: {err}");
                     } else {
-                        log::debug!(
-                            "✅ Sent full stations update for {port_name} with user_edit reason"
-                        );
                     }
                 }
             }
@@ -422,9 +417,7 @@ pub async fn run_core_thread(
 
             for (port_name, exit_status) in dead_processes {
                 if let Some(Some(path)) = cleanup_paths.remove(&port_name) {
-                    if let Err(err) = fs::remove_file(&path) {
-                        log::debug!("cleanup: failed to remove data source {path}: {err}");
-                    }
+                    if let Err(err) = fs::remove_file(&path) {}
                 }
                 append_subprocess_exited_log(&port_name, exit_status);
                 if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
@@ -546,9 +539,7 @@ async fn restart_runtime(
         }
 
         if let Some(path) = info.data_source_path.clone() {
-            if let Err(err) = fs::remove_file(&path) {
-                log::debug!("{label}: failed to remove data source {path}: {err}");
-            }
+            if let Err(err) = fs::remove_file(&path) {}
         }
 
         // Clear subprocess info but KEEP the port state and Modbus config
@@ -590,9 +581,7 @@ fn stop_runtime(
         }
 
         if let Some(path) = info.data_source_path.clone() {
-            if let Err(err) = fs::remove_file(&path) {
-                log::debug!("{label}: failed to remove data source {path}: {err}");
-            }
+            if let Err(err) = fs::remove_file(&path) {}
         }
 
         crate::tui::status::write_status(|status| {
@@ -858,12 +847,7 @@ async fn start_runtime(
                             Ok(())
                         })?;
 
-                        if let Err(remove_err) = fs::remove_file(&data_source_path) {
-                            log::debug!(
-                                "Cleanup of data source {} failed: {remove_err}",
-                                data_source_path.to_string_lossy()
-                            );
-                        }
+                        if let Err(remove_err) = fs::remove_file(&data_source_path) {}
                     }
                 }
             }

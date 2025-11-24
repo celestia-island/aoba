@@ -899,13 +899,7 @@ fn commit_text_edit(
                                 }
                             }
                         } else {
-                            log::debug!(
-                                "🚫 Not sending RegisterUpdate: subprocess_info_snapshot={:?}, payload={:?}",
-                                subprocess_info_snapshot
-                                    .as_ref()
-                                    .map(|info| format!("CliSubprocess(mode={:?})", info.mode)),
-                                payload.is_some()
-                            );
+
                         }
                     }
                 }

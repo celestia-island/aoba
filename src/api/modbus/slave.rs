@@ -91,6 +91,15 @@ pub struct ModbusSlaveIterator {
     register_address: u16,
     register_length: u16,
     register_mode: RegisterMode,
+    port_name: String,
+    hooks: Vec<Arc<dyn ModbusHook>>,
+    residual_buffer: Arc<Mutex<Vec<u8>>>,
+    /// 错误恢复延迟（毫秒）
+    error_recovery_delay_ms: Option<u64>,
+    /// 连续解析失败次数计数器（用于检测持续错误）
+    consecutive_parse_failures: Arc<Mutex<u32>>,
+    /// 超时时间（毫秙），用于强制恢复延迟
+    timeout_ms: u64,
 }
 
 impl ModbusSlaveIterator {
@@ -110,13 +119,15 @@ impl ModbusSlaveIterator {
         register_address: u16,
         register_length: u16,
     ) -> Result<Self> {
-        Self::with_mode(
+        Self::with_mode_and_hooks(
             port_name,
             baud_rate,
             station_id,
             register_address,
             register_length,
             RegisterMode::Holding,
+            vec![],
+            None,
         )
     }
 
@@ -128,6 +139,29 @@ impl ModbusSlaveIterator {
         register_address: u16,
         register_length: u16,
         register_mode: RegisterMode,
+    ) -> Result<Self> {
+        Self::with_mode_and_hooks(
+            port_name,
+            baud_rate,
+            station_id,
+            register_address,
+            register_length,
+            register_mode,
+            vec![],
+            None,
+        )
+    }
+
+    /// Create a new synchronous slave iterator with custom register mode and hooks
+    pub fn with_mode_and_hooks(
+        port_name: &str,
+        baud_rate: u32,
+        station_id: u8,
+        register_address: u16,
+        register_length: u16,
+        register_mode: RegisterMode,
+        hooks: Vec<Arc<dyn ModbusHook>>,
+        error_recovery_delay_ms: Option<u64>,
     ) -> Result<Self> {
         // Open serial port with short timeout (1 second)
         // The process_one_request() function will automatically retry on timeout
@@ -172,6 +206,12 @@ impl ModbusSlaveIterator {
             register_address,
             register_length,
             register_mode,
+            port_name: port_name.to_string(),
+            hooks,
+            residual_buffer: Arc::new(Mutex::new(Vec::new())),
+            error_recovery_delay_ms,
+            consecutive_parse_failures: Arc::new(Mutex::new(0)),
+            timeout_ms: Duration::from_secs(1).as_millis() as u64, // 默认1秒超时
         })
     }
 
@@ -186,15 +226,28 @@ impl ModbusSlaveIterator {
     /// This ensures the iterator doesn't crash on malformed packets.
     pub fn try_process_one_request(&self) -> Result<ModbusResponse> {
         loop {
-            match slave_process_one_request(
+            match super::core::slave_process_one_request_with_hooks(
                 self.port.clone(),
                 self.station_id,
                 self.register_address,
                 self.register_length,
                 self.register_mode,
                 self.storage.clone(),
+                &self.hooks,
+                &self.port_name,
+                self.residual_buffer.clone(),
             ) {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    // 成功接收并解析请求，重置连续失败计数器
+                    {
+                        let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                        if *counter > 0 {
+                            log::debug!("✅ Parse succeeded, resetting consecutive failure counter (was: {})", *counter);
+                            *counter = 0;
+                        }
+                    }
+                    return Ok(response);
+                }
                 Err(e) => {
                     let err_msg = e.to_string().to_lowercase();
 
@@ -203,11 +256,56 @@ impl ModbusSlaveIterator {
                         || err_msg.contains("timed out")
                         || err_msg.contains("no data received")
                     {
-                        log::trace!("Serial port read timeout, retrying...");
+
                         continue;
                     }
 
                     // Parse/protocol errors - log warning and continue
+                    // 特殊处理：PARSE_FAILED 表示需要检测连续失败
+                    if err_msg.contains("parse_failed") {
+                        // 增加连续失败计数器
+                        let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                        *counter += 1;
+                        let current_count = *counter;
+                        drop(counter); // 释放锁
+
+                        log::warn!(
+                            "⚠️  Frame parsing failed (consecutive failures: {})",
+                            current_count
+                        );
+
+                        // 连续2次失败触发强制恢复
+                        if current_count >= 2 {
+                            log::error!("🚨 Consecutive parse failures detected ({}), triggering FORCED RECOVERY", current_count);
+
+                            // 1. 清空残留缓冲区
+                            {
+                                let mut residual = self.residual_buffer.lock().unwrap();
+                                if !residual.is_empty() {
+                                    log::warn!(
+                                        "🗑️  FORCED: Clearing {} residual bytes",
+                                        residual.len()
+                                    );
+                                    residual.clear();
+                                }
+                            }
+
+                            // 2. 等待完整超时时间（默认1秒），让双方缓冲区完全稳定
+                            log::info!("⏸️  FORCED: Waiting {}ms (full timeout) for complete buffer stabilization", self.timeout_ms);
+                            std::thread::sleep(std::time::Duration::from_millis(self.timeout_ms));
+
+                            // 3. 重置计数器，完全从头开始
+                            {
+                                let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                                *counter = 0;
+                            }
+
+                            log::info!("✅ FORCED RECOVERY completed, restarting from clean state");
+                        }
+
+                        continue;
+                    }
+
                     if err_msg.contains("parse")
                         || err_msg.contains("invalid")
                         || err_msg.contains("checksum")
@@ -238,24 +336,40 @@ impl ModbusSlaveIterator {
     /// **Internal use only** - used by `TryIterator`.
     fn process_one_request_no_recovery(&self) -> Result<ModbusResponse> {
         loop {
-            match slave_process_one_request(
+            match super::core::slave_process_one_request_with_hooks(
                 self.port.clone(),
                 self.station_id,
                 self.register_address,
                 self.register_length,
                 self.register_mode,
                 self.storage.clone(),
+                &self.hooks,
+                &self.port_name,
+                self.residual_buffer.clone(),
             ) {
                 Ok(response) => return Ok(response),
                 Err(e) => {
                     let err_msg = e.to_string().to_lowercase();
+
+                    // 特殊处理：PARSE_FAILED 需要暂停轮询
+                    if err_msg.contains("parse_failed") {
+                        log::warn!("⚠️  Frame parsing failed, applying recovery delay...");
+
+                        if let Some(delay_ms) = self.error_recovery_delay_ms {
+                            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                        }
+
+                        continue; // 延迟后重试
+                    }
 
                     // ONLY retry timeout/empty read - return ALL other errors
                     if err_msg.contains("timeout")
                         || err_msg.contains("timed out")
                         || err_msg.contains("no data received")
                     {
-                        log::trace!("Serial port read timeout, retrying...");
+
                         continue;
                     }
 
@@ -521,6 +635,8 @@ async fn run_slave_loop(
         register_length,
         register_mode,
         timeout_ms,
+        error_recovery_delay_ms: _, // 由 ModbusSlaveIterator 使用，此处不需要
+        poll_interval_ms: _,        // Slave不使用此字段（仅Master使用）
     } = config;
 
     log::info!("Starting slave loop (middleware) for {}", port_name);
@@ -533,6 +649,9 @@ async fn run_slave_loop(
     let storage = Arc::new(Mutex::new(
         rmodbus::server::storage::ModbusStorageSmall::new(),
     ));
+
+    // 🔗 创建残留缓冲区，在整个循环生命周期内保留（用于帧拼接）
+    let residual_buffer = Arc::new(Mutex::new(Vec::new()));
 
     loop {
         // Check for external stop request (non-blocking)
@@ -551,13 +670,16 @@ async fn run_slave_loop(
         }
 
         // Process one request (this function handles reading from port internally)
-        match slave_process_one_request(
+        match super::core::slave_process_one_request_with_hooks(
             port_arc.clone(),
             station_id,
             register_address,
             register_length,
             register_mode,
             storage.clone(),
+            &hooks,
+            &port_name,
+            residual_buffer.clone(),
         ) {
             Ok(response) => {
                 // Execute hook chain: on_after_response

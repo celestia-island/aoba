@@ -148,7 +148,6 @@ impl IpcSender {
 
     /// Send a message to TUI
     pub async fn send(&mut self, message: E2EToTuiMessage) -> Result<()> {
-        log::debug!("IPC [{}] Send: {:?}", self.channel_id.0, message);
 
         let mut pipe = self
             .to_tui_pipe
@@ -178,10 +177,6 @@ impl IpcSender {
 
     /// Receive a message from TUI
     pub async fn receive(&mut self) -> Result<TuiToE2EMessage> {
-        log::debug!(
-            "IPC [{}] Receive: waiting for message from TUI",
-            self.channel_id.0
-        );
 
         let mut pipe = self
             .from_tui_pipe
@@ -255,10 +250,6 @@ impl IpcReceiver {
 
     /// Receive a message from E2E test
     pub async fn receive(&mut self) -> Result<E2EToTuiMessage> {
-        log::debug!(
-            "IPC [{}] Receive: waiting for message from E2E test",
-            self.channel_id.0
-        );
 
         let mut pipe = self
             .to_tui_pipe
@@ -288,7 +279,6 @@ impl IpcReceiver {
 
     /// Send a message to E2E test
     pub async fn send(&mut self, message: TuiToE2EMessage) -> Result<()> {
-        log::debug!("IPC [{}] Send: {:?}", self.channel_id.0, message);
 
         let mut pipe = self
             .from_tui_pipe

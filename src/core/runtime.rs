@@ -154,7 +154,6 @@ pub async fn run_core_thread<C: CoreContext>(
                                         // Send initial stations update
                                         // Note: This would need to be implemented by the context
                                         // For now, we skip this as the context should handle it
-                                        log::debug!("Subprocess started for {port_name}, context should send initial config");
                                     }
                                 }
                                 Err(err) => {
@@ -188,7 +187,6 @@ pub async fn run_core_thread<C: CoreContext>(
 
                                     // Send initial stations update
                                     // Note: This would need to be implemented by the context
-                                    log::debug!("Subprocess restarted for {port_name}, context should send initial config");
                                 }
                             }
                             Err(err) => {

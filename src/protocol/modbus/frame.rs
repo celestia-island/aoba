@@ -40,7 +40,7 @@ pub async fn read_modbus_frame(
                             .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ");
-                        log::debug!("serial read chunk={chunk_hex} collected={so_far}");
+
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::TimedOut => break,
@@ -198,7 +198,7 @@ pub async fn read_modbus_frame(
     // flush using the same guard
     guard.flush()?;
 
-    log::debug!("Received Modbus frame ({} bytes)", collected.len());
+
     Ok(Some(Bytes::from(collected)))
 }
 

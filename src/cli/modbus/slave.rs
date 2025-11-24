@@ -657,7 +657,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                     }
                     Err(e) => {
                         // Don't log every attempt to avoid spam, just keep trying
-                        log::trace!("Command channel accept not ready yet: {e}");
+
                     }
                 }
             }
