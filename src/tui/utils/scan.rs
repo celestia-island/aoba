@@ -14,7 +14,7 @@ use crate::{
 /// In normal mode, all available serial ports are enumerated using serialport library.
 pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool) -> Result<bool> {
     if *scan_in_progress {
-        log::trace!("scan_ports: skipped (scan already in progress)");
+
         return Ok(false);
     }
 
@@ -50,11 +50,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 // For other states (Free, OccupiedByOther), reset to Free and re-check
                 // This prevents stale occupation status from being preserved
                 if !preserved.state.is_occupied_by_this() {
-                    log::trace!(
-                        "Port {} state reset to Free for re-checking (was: {:?})",
-                        port_name,
-                        preserved.state
-                    );
+
                     preserved.state = PortState::Free;
                 }
 
@@ -97,13 +93,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                     || !old_port_data.logs.is_empty();
 
                 if should_preserve {
-                    log::debug!(
-                        "scan_ports: preserving non-enumerated port {} (type={}, state={:?}, has_config={})",
-                        old_port_name,
-                        old_port_data.port_type,
-                        old_port_data.state,
-                        has_config
-                    );
+
                     new_order.push(old_port_name.clone());
                     new_map.insert(old_port_name.clone(), old_port_data.clone());
                 }
@@ -111,27 +101,9 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
         }
 
         // Update status with new port list
-        log::debug!(
-            "scan_ports: updating global status with {} ports (order: {:?})",
-            new_order.len(),
-            new_order
-        );
+
 
         // Log state of each port before updating
-        for port_name in &new_order {
-            if let Some(port) = new_map.get(port_name) {
-                log::debug!(
-                    "  Port {}: state={:?}, type={}, has_config={}",
-                    port_name,
-                    port.state,
-                    port.port_type,
-                    match &port.config {
-                        crate::tui::status::port::PortConfig::Modbus { stations, .. } =>
-                            !stations.is_empty(),
-                    }
-                );
-            }
-        }
 
         status.ports.order = new_order;
         status.ports.map = new_map;
@@ -142,7 +114,6 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     // Check port occupation status using CLI subprocess via shared util
     // Important: Check ALL ports in the global status, not just enumerated ones
     // This ensures cached ports are also checked for occupation
-    log::debug!("scan_ports: checking port occupation via CLI subprocess");
 
     // Prepare previous-port snapshots for merge policy
     let previous_ports_snapshot: Vec<crate::utils::ports::PreviousPort> =

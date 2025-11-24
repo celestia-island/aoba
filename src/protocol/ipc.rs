@@ -263,7 +263,6 @@ pub struct IpcServer {
 impl IpcServer {
     /// Create a new IPC server that connects to the given socket name
     pub fn connect(socket_name: String) -> Result<Self> {
-        log::debug!("IPC: Attempting to connect to socket: {socket_name}");
 
         // Try to connect to the named socket (TUI is listening)
         let name = socket_name
@@ -289,7 +288,7 @@ impl IpcServer {
             writeln!(stream, "{json}")?;
             stream.flush()?;
             if matches!(msg, IpcMessage::Heartbeat { .. }) {
-                log::debug!("IPC: Sent heartbeat");
+
             } else {
                 log::info!("IPC: Sent message: {msg:?}");
             }
@@ -315,7 +314,7 @@ impl IpcServer {
     pub fn close(&mut self) {
         if self.writer.is_some() {
             let socket_name = self.socket_name.clone();
-            log::debug!("IPC: Closing connection to {socket_name}");
+
             let _ = self.send(&IpcMessage::shutdown());
             self.writer = None;
             self.reader = None;
@@ -356,7 +355,6 @@ impl IpcClient {
     /// Accept a connection from a CLI subprocess (blocking)
     pub fn accept(&self) -> Result<IpcConnection> {
         let socket_name = self.socket_name.clone();
-        log::debug!("IPC: Waiting for connection on {socket_name}");
 
         let stream = self.listener.accept()?;
         stream.set_nonblocking(true)?;
@@ -397,7 +395,7 @@ impl IpcConnection {
             Ok(_) => {
                 let msg = IpcMessage::from_json(line.trim())?;
                 if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-                    log::debug!("IPC: Received heartbeat");
+
                 } else {
                     log::info!("IPC: Received message: {msg:?}");
                 }
@@ -419,7 +417,7 @@ impl IpcConnection {
 
         let msg = IpcMessage::from_json(line.trim())?;
         if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-            log::debug!("IPC: Received heartbeat");
+
         } else {
             log::info!("IPC: Received message: {msg:?}");
         }

@@ -83,8 +83,6 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
             config_index,
             ..
         } => {
-            log::debug!("CLI[{port_name}]: ModbusData {direction} {data}");
-
             let register_mode = map_register_mode_hint(register_mode);
             let sanitized_error = error.and_then(|value| {
                 let trimmed = value.trim();

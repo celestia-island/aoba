@@ -203,7 +203,7 @@ pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     // and only return virtual ports to avoid interference from host serial devices
     let debug_enabled = crate::protocol::status::debug_dump::is_debug_dump_enabled();
     let mut raw_ports = if debug_enabled || is_virtual_port_hint_enabled() {
-        log::debug!("CI debug mode: skipping real serial port enumeration");
+
         Vec::new()
     } else {
         // Avoid serialport's libudev-based enumeration and instead rely on

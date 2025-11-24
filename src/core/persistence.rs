@@ -139,14 +139,12 @@ fn get_config_path() -> Result<Option<PathBuf>> {
 /// - `Err` if save failed
 pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
     if is_no_cache() {
-        log::debug!("⏭️  Skipping config save (--no-config-cache enabled)");
         return Ok(());
     }
 
     let path = match get_config_path()? {
         Some(p) => p,
         None => {
-            log::debug!("⏭️  Skipping config save (no config file specified - temporary mode)");
             return Ok(());
         }
     };
@@ -255,14 +253,12 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
 /// - `Err` if load failed
 pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     if is_no_cache() {
-        log::debug!("⏭️  Skipping config load (--no-config-cache enabled)");
         return Ok(HashMap::new());
     }
 
     let path = match get_config_path()? {
         Some(p) => p,
         None => {
-            log::debug!("⏭️  Skipping config load (no config file specified - temporary mode)");
             return Ok(HashMap::new());
         }
     };
