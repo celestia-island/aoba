@@ -505,7 +505,9 @@ pub(super) fn execute_single_poll_internal(
     // Calculate expected response length
     let expected_data_bytes = match reg_mode {
         RegisterMode::Holding | RegisterMode::Input => register_length as usize * 2,
-        RegisterMode::Coils | RegisterMode::DiscreteInputs => (register_length as usize + 7) / 8,
+        RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+            (register_length as usize).div_ceil(8)
+        }
     };
     let expected_frame_length = 3 + expected_data_bytes + 2;
 
@@ -576,7 +578,9 @@ pub(super) fn execute_single_poll_internal(
     let byte_count = response[2] as usize;
     let expected_byte_count = match reg_mode {
         RegisterMode::Holding | RegisterMode::Input => register_length as usize * 2,
-        RegisterMode::Coils | RegisterMode::DiscreteInputs => (register_length as usize + 7) / 8,
+        RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+            (register_length as usize).div_ceil(8)
+        }
     };
 
     if byte_count != expected_byte_count {
@@ -763,7 +767,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                             params.register_length as usize * 2
                         }
                         RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                            (params.register_length as usize + 7) / 8
+                            (params.register_length as usize).div_ceil(8)
                         }
                     };
                     let expected_frame_length = 3 + expected_data_bytes + 2;
@@ -852,7 +856,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                                     params.register_length as usize * 2
                                 }
                                 RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                                    (params.register_length as usize + 7) / 8
+                                    (params.register_length as usize).div_ceil(8)
                                 }
                             };
 

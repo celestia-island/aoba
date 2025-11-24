@@ -52,7 +52,6 @@ pub fn init_mock_state() {
     );
 
     *state = Value::Object(root);
-
 }
 
 /// Synchronize the JSON mock state into the live TUI status tree so that
@@ -89,7 +88,6 @@ pub fn set_mock_state(path: &str, value: Value) -> Result<()> {
     apply_value_at_path(&mut state, &json_path, value.clone())
         .with_context(|| format!("Failed to apply value at path '{path}'"))?;
 
-
     Ok(())
 }
 
@@ -118,7 +116,6 @@ pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
             "Mock state verification failed at path '{path}'\n  Expected: {expected:?}\n  Actual: {actual:?}"
         );
     }
-
 
     Ok(())
 }

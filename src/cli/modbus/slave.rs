@@ -652,179 +652,174 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
             if let Some(ref mut ipc_conns) = ipc {
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
-                    match msg {
-                        crate::protocol::ipc::IpcMessage::StationsUpdate {
-                            stations_data,
-                            update_reason,
-                            ..
-                        } => {
-                            log::info!(
-                                "Received stations update ({} bytes), reason={:?}",
-                                stations_data.len(),
-                                update_reason
-                            );
+                    if let crate::protocol::ipc::IpcMessage::StationsUpdate {
+                        stations_data,
+                        update_reason,
+                        ..
+                    } = msg
+                    {
+                        log::info!(
+                            "Received stations update ({} bytes), reason={:?}",
+                            stations_data.len(),
+                            update_reason
+                        );
 
-                            // Deserialize and use the stations configuration
-                            if let Ok(stations) = postcard::from_bytes::<
-                                Vec<crate::cli::config::StationConfig>,
-                            >(&stations_data)
-                            {
-                                log::info!("Deserialized {} stations", stations.len());
+                        // Deserialize and use the stations configuration
+                        if let Ok(stations) = postcard::from_bytes::<
+                            Vec<crate::cli::config::StationConfig>,
+                        >(&stations_data)
+                        {
+                            log::info!("Deserialized {} stations", stations.len());
 
-                                // For slave poll mode, we focus on the first slave station
-                                // In the future, this could be extended to handle multiple stations
-                                if let Some(first_station) = stations.first() {
-                                    if first_station.mode == crate::cli::config::StationMode::Slave
-                                    {
-                                        // Update configuration from the first slave station
-                                        current_station_id = first_station.station_id;
+                            // For slave poll mode, we focus on the first slave station
+                            // In the future, this could be extended to handle multiple stations
+                            if let Some(first_station) = stations.first() {
+                                if first_station.mode == crate::cli::config::StationMode::Slave {
+                                    // Update configuration from the first slave station
+                                    current_station_id = first_station.station_id;
 
-                                        // Determine write behavior based on update reason
-                                        // - "user_edit": Write all values including 0 (user intention)
-                                        // - "initial_config": Skip all writes (configuration initialization)
-                                        // - "sync" or None: Skip 0 values (likely defaults/heartbeat)
-                                        // - "read_response": Always apply (actual modbus read data)
-                                        let should_process_writes = match update_reason.as_deref() {
-                                            Some("user_edit") => true,     // User explicitly edited, write everything
-                                            Some("read_response") => true, // Actual read data, always apply
-                                            Some("initial_config") => false, // Initial config, skip writes
-                                            Some("sync") | None => last_written_values.is_some(), // Sync/unknown: only if we've read before
-                                            Some(other) => {
-                                                log::warn!("Unknown update_reason: {other}, defaulting to sync behavior");
-                                                last_written_values.is_some()
-                                            }
-                                        };
+                                    // Determine write behavior based on update reason
+                                    // - "user_edit": Write all values including 0 (user intention)
+                                    // - "initial_config": Skip all writes (configuration initialization)
+                                    // - "sync" or None: Skip 0 values (likely defaults/heartbeat)
+                                    // - "read_response": Always apply (actual modbus read data)
+                                    let should_process_writes = match update_reason.as_deref() {
+                                        Some("user_edit") => true,     // User explicitly edited, write everything
+                                        Some("read_response") => true, // Actual read data, always apply
+                                        Some("initial_config") => false, // Initial config, skip writes
+                                        Some("sync") | None => last_written_values.is_some(), // Sync/unknown: only if we've read before
+                                        Some(other) => {
+                                            log::warn!("Unknown update_reason: {other}, defaulting to sync behavior");
+                                            last_written_values.is_some()
+                                        }
+                                    };
 
-                                        let allow_zero_writes =
-                                            matches!(update_reason.as_deref(), Some("user_edit"));
+                                    let allow_zero_writes =
+                                        matches!(update_reason.as_deref(), Some("user_edit"));
 
-                                        log::info!(
-                                            "Write decision: reason={:?}, should_process={}, allow_zeros={}",
-                                            update_reason,
-                                            should_process_writes,
-                                            allow_zero_writes
-                                        );
+                                    log::info!(
+                                        "Write decision: reason={:?}, should_process={}, allow_zeros={}",
+                                        update_reason,
+                                        should_process_writes,
+                                        allow_zero_writes
+                                    );
 
-                                        if should_process_writes {
-                                            // Check all register ranges for values that should be written
-                                            for range in &first_station.map.holding {
-                                                for (idx, &value) in
-                                                    range.initial_values.iter().enumerate()
+                                    if should_process_writes {
+                                        // Check all register ranges for values that should be written
+                                        for range in &first_station.map.holding {
+                                            for (idx, &value) in
+                                                range.initial_values.iter().enumerate()
+                                            {
+                                                let addr = range.address_start + idx as u16;
+
+                                                // Skip zero values unless this is a user edit
+                                                if value == 0 && !allow_zero_writes {
+                                                    continue;
+                                                }
+
+                                                let needs_write = if let Some(prev_vals) =
+                                                    &last_written_values
                                                 {
-                                                    let addr = range.address_start + idx as u16;
+                                                    let relative_idx =
+                                                        (addr - current_register_address) as usize;
+                                                    relative_idx >= prev_vals.len()
+                                                        || prev_vals[relative_idx] != value
+                                                } else {
+                                                    false // Should not happen since we checked above
+                                                };
 
-                                                    // Skip zero values unless this is a user edit
-                                                    if value == 0 && !allow_zero_writes {
-                                                        continue;
-                                                    }
-
-                                                    let needs_write = if let Some(prev_vals) =
-                                                        &last_written_values
-                                                    {
-                                                        let relative_idx = (addr
-                                                            - current_register_address)
-                                                            as usize;
-                                                        relative_idx >= prev_vals.len()
-                                                            || prev_vals[relative_idx] != value
-                                                    } else {
-                                                        false // Should not happen since we checked above
-                                                    };
-
-                                                    if needs_write {
-                                                        log::info!("📤 Queueing write for holding register 0x{addr:04X} = 0x{value:04X}");
-                                                        pending_writes.push_back((
-                                                            addr,
-                                                            value,
-                                                            "holding".to_string(),
-                                                        ));
-                                                    }
+                                                if needs_write {
+                                                    log::info!("📤 Queueing write for holding register 0x{addr:04X} = 0x{value:04X}");
+                                                    pending_writes.push_back((
+                                                        addr,
+                                                        value,
+                                                        "holding".to_string(),
+                                                    ));
                                                 }
                                             }
+                                        }
 
-                                            for range in &first_station.map.coils {
-                                                for (idx, &value) in
-                                                    range.initial_values.iter().enumerate()
+                                        for range in &first_station.map.coils {
+                                            for (idx, &value) in
+                                                range.initial_values.iter().enumerate()
+                                            {
+                                                let addr = range.address_start + idx as u16;
+
+                                                // Skip zero values unless this is a user edit
+                                                if value == 0 && !allow_zero_writes {
+                                                    continue;
+                                                }
+
+                                                let needs_write = if let Some(prev_vals) =
+                                                    &last_written_values
                                                 {
-                                                    let addr = range.address_start + idx as u16;
+                                                    let relative_idx =
+                                                        (addr - current_register_address) as usize;
+                                                    relative_idx >= prev_vals.len()
+                                                        || prev_vals[relative_idx] != value
+                                                } else {
+                                                    false
+                                                };
 
-                                                    // Skip zero values unless this is a user edit
-                                                    if value == 0 && !allow_zero_writes {
-                                                        continue;
-                                                    }
-
-                                                    let needs_write = if let Some(prev_vals) =
-                                                        &last_written_values
-                                                    {
-                                                        let relative_idx = (addr
-                                                            - current_register_address)
-                                                            as usize;
-                                                        relative_idx >= prev_vals.len()
-                                                            || prev_vals[relative_idx] != value
-                                                    } else {
-                                                        false
-                                                    };
-
-                                                    if needs_write {
-                                                        log::info!("📤 Queueing write for coil 0x{addr:04X} = 0x{value:04X}");
-                                                        pending_writes.push_back((
-                                                            addr,
-                                                            value,
-                                                            "coil".to_string(),
-                                                        ));
-                                                    }
+                                                if needs_write {
+                                                    log::info!("📤 Queueing write for coil 0x{addr:04X} = 0x{value:04X}");
+                                                    pending_writes.push_back((
+                                                        addr,
+                                                        value,
+                                                        "coil".to_string(),
+                                                    ));
                                                 }
                                             }
-                                        } else {
-                                            log::info!("⏸️  Skipping initial write queue - will sync after first read from master");
                                         }
-
-                                        // Find the first register range to use as the polling target
-                                        if let Some(range) = first_station.map.holding.first() {
-                                            current_register_address = range.address_start;
-                                            current_register_length = range.length;
-                                            current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Holding;
-                                            log::info!(
-                                                "Updated slave config: station={current_station_id}, type=Holding, addr=0x{current_register_address:04X}, len={current_register_length}"
-                                            );
-                                        } else if let Some(range) = first_station.map.coils.first()
-                                        {
-                                            current_register_address = range.address_start;
-                                            current_register_length = range.length;
-                                            current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Coils;
-                                            log::info!(
-                                                "Updated slave config: station={current_station_id}, type=Coils, addr=0x{current_register_address:04X}, len={current_register_length}"
-                                            );
-                                        } else if let Some(range) =
-                                            first_station.map.discrete_inputs.first()
-                                        {
-                                            current_register_address = range.address_start;
-                                            current_register_length = range.length;
-                                            current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs;
-                                            log::info!(
-                                                "Updated slave config: station={current_station_id}, type=DiscreteInputs, addr=0x{current_register_address:04X}, len={current_register_length}"
-                                            );
-                                        } else if let Some(range) = first_station.map.input.first()
-                                        {
-                                            current_register_address = range.address_start;
-                                            current_register_length = range.length;
-                                            current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Input;
-                                            log::info!(
-                                                "Updated slave config: station={current_station_id}, type=Input, addr=0x{current_register_address:04X}, len={current_register_length}"
-                                            );
-                                        }
-
-                                        // Don't reset last_written_values here - we need it to detect changes
                                     } else {
-                                        log::warn!("Received master station config in slave poll mode, ignoring");
+                                        log::info!("⏸️  Skipping initial write queue - will sync after first read from master");
                                     }
+
+                                    // Find the first register range to use as the polling target
+                                    if let Some(range) = first_station.map.holding.first() {
+                                        current_register_address = range.address_start;
+                                        current_register_length = range.length;
+                                        current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Holding;
+                                        log::info!(
+                                            "Updated slave config: station={current_station_id}, type=Holding, addr=0x{current_register_address:04X}, len={current_register_length}"
+                                        );
+                                    } else if let Some(range) = first_station.map.coils.first() {
+                                        current_register_address = range.address_start;
+                                        current_register_length = range.length;
+                                        current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Coils;
+                                        log::info!(
+                                            "Updated slave config: station={current_station_id}, type=Coils, addr=0x{current_register_address:04X}, len={current_register_length}"
+                                        );
+                                    } else if let Some(range) =
+                                        first_station.map.discrete_inputs.first()
+                                    {
+                                        current_register_address = range.address_start;
+                                        current_register_length = range.length;
+                                        current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs;
+                                        log::info!(
+                                            "Updated slave config: station={current_station_id}, type=DiscreteInputs, addr=0x{current_register_address:04X}, len={current_register_length}"
+                                        );
+                                    } else if let Some(range) = first_station.map.input.first() {
+                                        current_register_address = range.address_start;
+                                        current_register_length = range.length;
+                                        current_reg_mode = crate::protocol::status::types::modbus::RegisterMode::Input;
+                                        log::info!(
+                                            "Updated slave config: station={current_station_id}, type=Input, addr=0x{current_register_address:04X}, len={current_register_length}"
+                                        );
+                                    }
+
+                                    // Don't reset last_written_values here - we need it to detect changes
                                 } else {
-                                    log::warn!("Received empty stations list, keeping current configuration");
+                                    log::warn!("Received master station config in slave poll mode, ignoring");
                                 }
                             } else {
-                                log::warn!("Failed to deserialize stations data");
+                                log::warn!(
+                                    "Received empty stations list, keeping current configuration"
+                                );
                             }
+                        } else {
+                            log::warn!("Failed to deserialize stations data");
                         }
-                        _ => {}
                     }
                 }
             }

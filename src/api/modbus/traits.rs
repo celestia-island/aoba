@@ -184,7 +184,6 @@ pub fn execute_slave_handler_chain(
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {
             Ok(()) => {
-    
                 return Ok(()); // First success intercepts
             }
             Err(e) => {
@@ -226,7 +225,6 @@ pub fn execute_master_handler_chain(
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {
             Ok(()) => {
-    
                 return Ok(()); // First success intercepts
             }
             Err(e) => {
@@ -270,7 +268,6 @@ pub fn execute_data_source_chain(
         let mut src = source.lock().unwrap();
         match src.next_data() {
             Ok(Some(data)) => {
-    
                 return Ok(Some(data)); // First data source intercepts
             }
             Ok(None) => {
