@@ -901,155 +901,152 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             // Check for incoming commands
             if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
-                    match msg {
-                        crate::protocol::ipc::IpcMessage::StationsUpdate {
-                            stations_data,
-                            update_reason,
-                            ..
-                        } => {
-                            let is_first_config =
-                                !FIRST_CONFIG_RECEIVED.load(std::sync::atomic::Ordering::Relaxed);
-                            FIRST_CONFIG_RECEIVED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    if let crate::protocol::ipc::IpcMessage::StationsUpdate {
+                        stations_data,
+                        update_reason,
+                        ..
+                    } = msg
+                    {
+                        let is_first_config =
+                            !FIRST_CONFIG_RECEIVED.load(std::sync::atomic::Ordering::Relaxed);
+                        FIRST_CONFIG_RECEIVED.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                        log::info!(
+                            "Received stations update ({} bytes, is_first={}, reason={:?})",
+                            stations_data.len(),
+                            is_first_config,
+                            update_reason
+                        );
+
+                        // Deserialize stations using postcard
+                        if let Ok(stations) = postcard::from_bytes::<
+                            Vec<crate::cli::config::StationConfig>,
+                        >(&stations_data)
+                        {
+                            log::info!("Deserialized {} stations", stations.len());
+
+                            // Determine whether to accept zero values based on update reason
+                            // - "user_edit": Accept all values including 0 (user intention)
+                            // - "initial_config": Skip 0 values (avoid overwriting with defaults)
+                            // - "sync" or None: Skip 0 values on first config only
+                            // - "read_response": Always apply (actual modbus read data)
+                            let allow_zero_writes = match update_reason.as_deref() {
+                                Some("user_edit") => true,
+                                Some("read_response") => true,
+                                Some("initial_config") => false,
+                                Some("sync") | None => !is_first_config, // Legacy behavior
+                                Some(other) => {
+                                    log::warn!(
+                                        "Unknown update_reason: {other}, using legacy behavior"
+                                    );
+                                    !is_first_config
+                                }
+                            };
 
                             log::info!(
-                                "Received stations update ({} bytes, is_first={}, reason={:?})",
-                                stations_data.len(),
+                                "Master storage decision: reason={:?}, is_first={}, allow_zeros={}",
+                                update_reason,
                                 is_first_config,
-                                update_reason
+                                allow_zero_writes
                             );
 
-                            // Deserialize stations using postcard
-                            if let Ok(stations) = postcard::from_bytes::<
-                                Vec<crate::cli::config::StationConfig>,
-                            >(&stations_data)
-                            {
-                                log::info!("Deserialized {} stations", stations.len());
-
-                                // Determine whether to accept zero values based on update reason
-                                // - "user_edit": Accept all values including 0 (user intention)
-                                // - "initial_config": Skip 0 values (avoid overwriting with defaults)
-                                // - "sync" or None: Skip 0 values on first config only
-                                // - "read_response": Always apply (actual modbus read data)
-                                let allow_zero_writes = match update_reason.as_deref() {
-                                    Some("user_edit") => true,
-                                    Some("read_response") => true,
-                                    Some("initial_config") => false,
-                                    Some("sync") | None => !is_first_config, // Legacy behavior
-                                    Some(other) => {
-                                        log::warn!(
-                                            "Unknown update_reason: {other}, using legacy behavior"
-                                        );
-                                        !is_first_config
-                                    }
-                                };
-
+                            // Apply the station updates to storage
+                            let mut context = storage.lock().unwrap();
+                            for station in &stations {
                                 log::info!(
-                                    "Master storage decision: reason={:?}, is_first={}, allow_zeros={}",
-                                    update_reason,
-                                    is_first_config,
-                                    allow_zero_writes
+                                    "  Applying Station {}: mode={:?}",
+                                    station.station_id,
+                                    station.mode
                                 );
 
-                                // Apply the station updates to storage
-                                let mut context = storage.lock().unwrap();
-                                for station in &stations {
+                                // Update holding registers
+                                for range in &station.map.holding {
                                     log::info!(
-                                        "  Applying Station {}: mode={:?}",
-                                        station.station_id,
-                                        station.mode
+                                        "🔧 Processing holding range: addr=0x{:04X}, len={}, values={:?}, allow_zeros={}",
+                                        range.address_start,
+                                        range.initial_values.len(),
+                                        range.initial_values,
+                                        allow_zero_writes
                                     );
-
-                                    // Update holding registers
-                                    for range in &station.map.holding {
-                                        log::info!(
-                                            "🔧 Processing holding range: addr=0x{:04X}, len={}, values={:?}, allow_zeros={}",
-                                            range.address_start,
-                                            range.initial_values.len(),
-                                            range.initial_values,
-                                            allow_zero_writes
-                                        );
-                                        for (i, &val) in range.initial_values.iter().enumerate() {
-                                            let addr = range.address_start + i as u16;
-                                            // Apply based on update reason
-                                            if allow_zero_writes || val != 0 {
-                                                if let Err(e) = context.set_holding(addr, val) {
-                                                    log::warn!(
-                                                        "❌ Failed to set holding register at 0x{addr:04X}: {e}"
-                                                    );
-                                                } else {
-                                                    log::info!("✅ Updated holding register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
-                                                }
+                                    for (i, &val) in range.initial_values.iter().enumerate() {
+                                        let addr = range.address_start + i as u16;
+                                        // Apply based on update reason
+                                        if allow_zero_writes || val != 0 {
+                                            if let Err(e) = context.set_holding(addr, val) {
+                                                log::warn!(
+                                                    "❌ Failed to set holding register at 0x{addr:04X}: {e}"
+                                                );
                                             } else {
-                                                log::info!("⏭️  Skipped holding register 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                                log::info!("✅ Updated holding register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
                                             }
-                                        }
-                                    }
-
-                                    // Update coils
-                                    for range in &station.map.coils {
-                                        for (i, &val) in range.initial_values.iter().enumerate() {
-                                            let addr = range.address_start + i as u16;
-                                            // Apply based on update reason
-                                            if allow_zero_writes || val != 0 {
-                                                if let Err(e) = context.set_coil(addr, val != 0) {
-                                                    log::warn!("Failed to set coil at {addr}: {e}");
-                                                } else {
-                                                    log::info!(
-                                                        "✏️ Updated coil 0x{addr:04X} = {val} (reason={:?})",
-                                                        update_reason
-                                                    );
-                                                }
-                                            } else {
-                                                log::info!("⏭️  Skipped coil 0x{addr:04X} (value=0, reason={:?})", update_reason);
-                                            }
-                                        }
-                                    }
-
-                                    // Update discrete inputs
-                                    for range in &station.map.discrete_inputs {
-                                        for (i, &val) in range.initial_values.iter().enumerate() {
-                                            let addr = range.address_start + i as u16;
-                                            // Apply based on update reason
-                                            if allow_zero_writes || val != 0 {
-                                                if let Err(e) = context.set_discrete(addr, val != 0)
-                                                {
-                                                    log::warn!(
-                                                        "Failed to set discrete input at {addr}: {e}"
-                                                    );
-                                                } else {
-                                                    log::info!("✏️ Updated discrete input 0x{addr:04X} = {val} (reason={:?})", update_reason);
-                                                }
-                                            } else {
-                                                log::info!("⏭️  Skipped discrete input 0x{addr:04X} (value=0, reason={:?})", update_reason);
-                                            }
-                                        }
-                                    }
-
-                                    // Update input registers
-                                    for range in &station.map.input {
-                                        for (i, &val) in range.initial_values.iter().enumerate() {
-                                            let addr = range.address_start + i as u16;
-                                            // Apply based on update reason
-                                            if allow_zero_writes || val != 0 {
-                                                if let Err(e) = context.set_input(addr, val) {
-                                                    log::warn!(
-                                                        "Failed to set input register at {addr}: {e}"
-                                                    );
-                                                } else {
-                                                    log::info!("✏️ Updated input register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
-                                                }
-                                            } else {
-                                                log::info!("⏭️  Skipped input register 0x{addr:04X} (value=0, reason={:?})", update_reason);
-                                            }
+                                        } else {
+                                            log::info!("⏭️  Skipped holding register 0x{addr:04X} (value=0, reason={:?})", update_reason);
                                         }
                                     }
                                 }
-                                log::info!("Applied all station updates to storage");
-                            } else {
-                                log::warn!("Failed to deserialize stations data");
+
+                                // Update coils
+                                for range in &station.map.coils {
+                                    for (i, &val) in range.initial_values.iter().enumerate() {
+                                        let addr = range.address_start + i as u16;
+                                        // Apply based on update reason
+                                        if allow_zero_writes || val != 0 {
+                                            if let Err(e) = context.set_coil(addr, val != 0) {
+                                                log::warn!("Failed to set coil at {addr}: {e}");
+                                            } else {
+                                                log::info!(
+                                                    "✏️ Updated coil 0x{addr:04X} = {val} (reason={:?})",
+                                                    update_reason
+                                                );
+                                            }
+                                        } else {
+                                            log::info!("⏭️  Skipped coil 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        }
+                                    }
+                                }
+
+                                // Update discrete inputs
+                                for range in &station.map.discrete_inputs {
+                                    for (i, &val) in range.initial_values.iter().enumerate() {
+                                        let addr = range.address_start + i as u16;
+                                        // Apply based on update reason
+                                        if allow_zero_writes || val != 0 {
+                                            if let Err(e) = context.set_discrete(addr, val != 0) {
+                                                log::warn!(
+                                                    "Failed to set discrete input at {addr}: {e}"
+                                                );
+                                            } else {
+                                                log::info!("✏️ Updated discrete input 0x{addr:04X} = {val} (reason={:?})", update_reason);
+                                            }
+                                        } else {
+                                            log::info!("⏭️  Skipped discrete input 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        }
+                                    }
+                                }
+
+                                // Update input registers
+                                for range in &station.map.input {
+                                    for (i, &val) in range.initial_values.iter().enumerate() {
+                                        let addr = range.address_start + i as u16;
+                                        // Apply based on update reason
+                                        if allow_zero_writes || val != 0 {
+                                            if let Err(e) = context.set_input(addr, val) {
+                                                log::warn!(
+                                                    "Failed to set input register at {addr}: {e}"
+                                                );
+                                            } else {
+                                                log::info!("✏️ Updated input register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
+                                            }
+                                        } else {
+                                            log::info!("⏭️  Skipped input register 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        }
+                                    }
+                                }
                             }
+                            log::info!("Applied all station updates to storage");
+                        } else {
+                            log::warn!("Failed to deserialize stations data");
                         }
-                        _ => {}
                     }
                 }
             }

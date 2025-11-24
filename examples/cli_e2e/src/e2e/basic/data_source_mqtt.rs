@@ -55,9 +55,7 @@ async fn publish_mqtt_data(
     let event_handle = tokio::spawn(async move {
         loop {
             match event_loop.poll().await {
-                Ok(Event::Incoming(Incoming::ConnAck(_))) => {
-        
-                }
+                Ok(Event::Incoming(Incoming::ConnAck(_))) => {}
                 Err(e) => {
                     log::warn!("MQTT event loop error: {}", e);
                     break;

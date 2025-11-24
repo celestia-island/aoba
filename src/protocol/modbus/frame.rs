@@ -40,7 +40,6 @@ pub async fn read_modbus_frame(
                             .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ");
-
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::TimedOut => break,
@@ -197,7 +196,6 @@ pub async fn read_modbus_frame(
     // Flush serial output buffers (optional safety)
     // flush using the same guard
     guard.flush()?;
-
 
     Ok(Some(Bytes::from(collected)))
 }
