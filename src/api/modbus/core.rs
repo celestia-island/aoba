@@ -5,7 +5,6 @@
 /// - Master: send requests and parse responses
 ///
 /// These functions are pure and don't depend on specific communication channels.
-#[allow(clippy::manual_div_ceil)]
 use anyhow::{anyhow, Result};
 use std::{
     io::{Read, Write},

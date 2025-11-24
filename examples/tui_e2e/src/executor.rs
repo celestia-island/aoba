@@ -358,8 +358,6 @@ async fn execute_step_sequence(
     // Group steps into retryable units
     let groups = group_steps(steps);
 
-    if !groups.is_empty() {}
-
     let mut current_group_idx = 0;
     let mut i = 0;
 
@@ -377,7 +375,6 @@ async fn execute_step_sequence(
             current_group_idx += 1;
         } else {
             // Execute single step normally (not part of any group)
-            if step.description.is_some() {}
             execute_single_step(ctx, workflow_id, step).await?;
             i += 1;
         }
@@ -424,8 +421,6 @@ async fn execute_step_group_with_retry(
 
         for &step_idx in &group.step_indices {
             let step = &all_steps[step_idx];
-
-            if step.description.is_some() {}
 
             match execute_single_step(ctx, workflow_id, step).await {
                 Ok(()) => {}
