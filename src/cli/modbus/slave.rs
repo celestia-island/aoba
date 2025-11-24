@@ -43,10 +43,6 @@ fn run_slave_poll_transaction(
     let mut request_frame = Vec::new();
 
     let transaction_result: Result<ModbusResponse> = (|| {
-        log::debug!(
-            "run_slave_poll_transaction: Preparing request for station={station_id}, addr=0x{register_address:04X}, len={register_length}, mode={reg_mode:?}"
-        );
-
         let request_bytes = match reg_mode {
             crate::protocol::status::types::modbus::RegisterMode::Holding => {
                 crate::protocol::modbus::generate_pull_get_holdings_request(
@@ -86,8 +82,6 @@ fn run_slave_poll_transaction(
             port.write_all(&request_frame)?;
             port.flush()?;
         }
-
-        log::debug!("run_slave_poll_transaction: Request sent, waiting for response...");
 
         let mut buffer = vec![0u8; 256];
         let bytes_read = {
@@ -284,19 +278,15 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let port_name_clone = port.to_string();
+        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
-            log::debug!("Cleanup handler: Releasing port {port_name_clone}");
             // Explicitly drop the port and wait for OS to release it
             if let Ok(mut port) = pa.lock() {
                 // Try to flush any pending data
                 let _ = std::io::Write::flush(&mut **port);
-                log::debug!("Cleanup handler: Flushed port {port_name_clone}");
             }
             drop(pa);
-            log::debug!("Cleanup handler: Port {port_name_clone} released");
         });
-        log::debug!("Registered cleanup handler for port {port}");
     }
 
     // Initialize modbus storage
@@ -612,19 +602,15 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let port_name_clone = port.to_string();
+        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
-            log::debug!("Cleanup handler: Releasing port {port_name_clone}");
             // Explicitly drop the port and wait for OS to release it
             if let Ok(mut port) = pa.lock() {
                 // Try to flush any pending data
                 let _ = std::io::Write::flush(&mut **port);
-                log::debug!("Cleanup handler: Flushed port {port_name_clone}");
             }
             drop(pa);
-            log::debug!("Cleanup handler: Port {port_name_clone} released");
         });
-        log::debug!("Registered cleanup handler for port {port}");
     }
 
     // Flag to track whether command channel has been accepted
@@ -655,9 +641,8 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                         log::info!("Command channel accepted");
                         COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         // Don't log every attempt to avoid spam, just keep trying
-
                     }
                 }
             }
@@ -730,7 +715,6 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
                                                     // Skip zero values unless this is a user edit
                                                     if value == 0 && !allow_zero_writes {
-                                                        log::debug!("⏭️ Skipping write for holding register 0x{addr:04X} (value=0, reason={:?})", update_reason);
                                                         continue;
                                                     }
 
@@ -765,7 +749,6 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
                                                     // Skip zero values unless this is a user edit
                                                     if value == 0 && !allow_zero_writes {
-                                                        log::debug!("⏭️ Skipping write for coil 0x{addr:04X} (value=0, reason={:?})", update_reason);
                                                         continue;
                                                     }
 
@@ -841,9 +824,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                 log::warn!("Failed to deserialize stations data");
                             }
                         }
-                        _ => {
-                            log::debug!("Received unexpected IPC message in slave poll mode");
-                        }
+                        _ => {}
                     }
                 }
             }
@@ -973,8 +954,6 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                 );
                                 if let Err(e) = ipc_conns.status.send(&msg) {
                                     log::warn!("Failed to send StationsUpdate via IPC: {e}");
-                                } else {
-                                    log::debug!("Successfully sent StationsUpdate via IPC");
                                 }
                             }
                             Err(e) => {
@@ -1096,17 +1075,13 @@ pub async fn handle_slave_listen_ipc_channel(
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let port_name_clone = port.to_string();
+        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
-            log::debug!("Cleanup handler: Releasing port {port_name_clone}");
             if let Ok(mut port) = pa.lock() {
                 let _ = std::io::Write::flush(&mut **port);
-                log::debug!("Cleanup handler: Flushed port {port_name_clone}");
             }
             drop(pa);
-            log::debug!("Cleanup handler: Port {port_name_clone} released");
         });
-        log::debug!("Registered cleanup handler for port {port}");
     }
 
     // Initialize modbus storage

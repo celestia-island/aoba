@@ -5,6 +5,7 @@
 /// - Master: send requests and parse responses
 ///
 /// These functions are pure and don't depend on specific communication channels.
+#[allow(clippy::manual_div_ceil)]
 use anyhow::{anyhow, Result};
 use std::{
     io::{Read, Write},
@@ -26,34 +27,40 @@ pub fn slave_process_one_request(
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<ModbusResponse> {
     let residual_buffer = Arc::new(Mutex::new(Vec::new()));
-    slave_process_one_request_with_hooks(
+    let params = SlaveRequestParams {
         port_arc,
         station_id,
         register_address,
         register_length,
-        _reg_mode,
+        reg_mode: _reg_mode,
         storage,
-        &[],
-        "",
+        hooks: &[],
+        port_name: "".to_string(),
         residual_buffer,
-    )
+    };
+    slave_process_one_request_with_hooks(&params)
+}
+
+/// Slave request processing parameters
+pub struct SlaveRequestParams<'a> {
+    pub port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    pub station_id: u8,
+    pub register_address: u16,
+    pub register_length: u16,
+    pub reg_mode: RegisterMode,
+    pub storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    pub hooks: &'a [Arc<dyn super::ModbusHook>],
+    pub port_name: String,
+    pub residual_buffer: Arc<Mutex<Vec<u8>>>,
 }
 
 /// Process one slave request with hook support, sliding window parsing, and frame reassembly
 pub fn slave_process_one_request_with_hooks(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
-    station_id: u8,
-    register_address: u16,
-    register_length: u16,
-    _reg_mode: RegisterMode,
-    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    hooks: &[Arc<dyn super::ModbusHook>],
-    port_name: &str,
-    residual_buffer: Arc<Mutex<Vec<u8>>>,
+    params: &SlaveRequestParams<'_>,
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
 
-    let mut residual = residual_buffer.lock().unwrap();
+    let mut residual = params.residual_buffer.lock().unwrap();
     let residual_len = residual.len();
 
     // Read request from port with retry for complete frame
@@ -69,7 +76,7 @@ pub fn slave_process_one_request_with_hooks(
     }
     drop(residual);
 
-    let mut port = port_arc.lock().unwrap();
+    let mut port = params.port_arc.lock().unwrap();
 
     // First read - get initial data
     let bytes_read = port.read(&mut buffer[total_bytes..])?;
@@ -96,13 +103,13 @@ pub fn slave_process_one_request_with_hooks(
     // A slave should only handle request frames: function codes 0x01/0x03/0x0F/0x10 are request types
     // Response frames have the same function codes but different frame structure; we can quickly filter by frame length
     if total_bytes >= 2 {
-        let func_code = original_data[1];
+        let _func_code = original_data[1];
         // Response frames are usually longer (>15 bytes) and contain larger payloads
         // Request frames are usually shorter (8-13 bytes)
         // Lower threshold to 20 bytes to more aggressively filter short response frames
         if total_bytes > 20 {
             // Clear buffer; do not attempt parsing
-            let mut residual = residual_buffer.lock().unwrap();
+            let mut residual = params.residual_buffer.lock().unwrap();
             residual.clear();
             return Err(anyhow!(
                 "Skipped response frame echo ({} bytes)",
@@ -125,13 +132,18 @@ pub fn slave_process_one_request_with_hooks(
 
         // Apply hooks for each candidate frame
         let mut hooked_data = request_data.clone();
-        for hook in hooks {
-            if let Err(e) = hook.on_after_receive_request(port_name, &mut hooked_data) {}
+        for hook in params.hooks {
+            if let Err(_e) = hook.on_after_receive_request(&params.port_name, &mut hooked_data) {}
         }
 
         // Try parsing this candidate frame
         let mut response = Vec::new();
-        let mut frame = ModbusFrame::new(station_id, &hooked_data, ModbusProto::Rtu, &mut response);
+        let mut frame = ModbusFrame::new(
+            params.station_id,
+            &hooked_data,
+            ModbusProto::Rtu,
+            &mut response,
+        );
 
         match frame.parse() {
             Ok(()) => {
@@ -151,12 +163,12 @@ pub fn slave_process_one_request_with_hooks(
                 if remaining_start < total_bytes {
                     let remaining = original_data[remaining_start..].to_vec();
                     if !remaining.is_empty() {
-                        let mut residual = residual_buffer.lock().unwrap();
+                        let mut residual = params.residual_buffer.lock().unwrap();
                         *residual = remaining.clone();
                     }
                 } else {
                     // No remaining data; ensure residual buffer is empty
-                    let mut residual = residual_buffer.lock().unwrap();
+                    let mut residual = params.residual_buffer.lock().unwrap();
                     residual.clear();
                 }
 
@@ -182,13 +194,13 @@ pub fn slave_process_one_request_with_hooks(
                 let actual_address = if hooked_data.len() >= 6 {
                     u16::from_be_bytes([hooked_data[2], hooked_data[3]])
                 } else {
-                    register_address // fallback to default value
+                    params.register_address // fallback to default value
                 };
 
                 let actual_length = if hooked_data.len() >= 6 {
                     u16::from_be_bytes([hooked_data[4], hooked_data[5]])
                 } else {
-                    register_length // fallback to default value
+                    params.register_length // fallback to default value
                 };
 
                 // Generate response (code continues)
@@ -196,41 +208,41 @@ pub fn slave_process_one_request_with_hooks(
                     RegisterMode::Holding => {
                         crate::protocol::modbus::build_slave_holdings_response(
                             &mut frame,
-                            &mut storage.lock().unwrap(),
+                            &mut params.storage.lock().unwrap(),
                         )?
                     }
                     RegisterMode::Input => crate::protocol::modbus::build_slave_inputs_response(
                         &mut frame,
-                        &mut storage.lock().unwrap(),
+                        &mut params.storage.lock().unwrap(),
                     )?,
                     RegisterMode::Coils => crate::protocol::modbus::build_slave_coils_response(
                         &mut frame,
-                        &mut storage.lock().unwrap(),
+                        &mut params.storage.lock().unwrap(),
                     )?,
                     RegisterMode::DiscreteInputs => {
                         crate::protocol::modbus::build_slave_discrete_inputs_response(
                             &mut frame,
-                            &mut storage.lock().unwrap(),
+                            &mut params.storage.lock().unwrap(),
                         )?
                     }
                 };
 
                 if let Some(resp) = response_bytes {
-                    let mut port = port_arc.lock().unwrap();
+                    let mut port = params.port_arc.lock().unwrap();
                     port.write_all(&resp)?;
                     port.flush()?;
                 }
 
                 // Extract values and return (using actual request address and length)
                 let values = extract_values_from_storage(
-                    &storage,
+                    &params.storage,
                     actual_address,
                     actual_length,
                     actual_mode,
                 )?;
 
                 return Ok(ModbusResponse {
-                    station_id,
+                    station_id: params.station_id,
                     register_address: actual_address,
                     register_mode: match actual_mode {
                         RegisterMode::Coils => crate::protocol::status::types::modbus::ResponseRegisterMode::Coils,
@@ -261,7 +273,7 @@ pub fn slave_process_one_request_with_hooks(
     // Reason: if data cannot be parsed, residuals accumulate and worsen the issue
     // After clearing, wait (by caller control) to allow buffer stabilization
     {
-        let mut residual = residual_buffer.lock().unwrap();
+        let mut residual = params.residual_buffer.lock().unwrap();
         if !residual.is_empty() {
             log::warn!(
                 "Clearing {} residual bytes (parse failed too many times)",
@@ -659,31 +671,34 @@ pub(super) fn execute_single_poll_internal(
 /// # Example (One-Shot Request)
 ///
 /// For CLI or single-request scenarios, use `master_poll_once_and_stop` wrapper.
-pub fn master_poll_loop(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
-    station_id: u8,
-    register_address: u16,
-    register_length: u16,
-    reg_mode: RegisterMode,
-    response_tx: flume::Sender<ModbusResponse>,
-    control_rx: Option<flume::Receiver<String>>,
-    poll_interval_ms: u64,
-) -> Result<()> {
+/// Master polling configuration parameters
+pub struct MasterPollParams {
+    pub port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    pub station_id: u8,
+    pub register_address: u16,
+    pub register_length: u16,
+    pub reg_mode: RegisterMode,
+    pub response_tx: flume::Sender<ModbusResponse>,
+    pub control_rx: Option<flume::Receiver<String>>,
+    pub poll_interval_ms: u64,
+}
+
+pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
     log::info!(
         "Starting master poll loop: station={}, addr=0x{:04X}, len={}, mode={:?}",
-        station_id,
-        register_address,
-        register_length,
-        reg_mode
+        params.station_id,
+        params.register_address,
+        params.register_length,
+        params.reg_mode
     );
 
-    let poll_interval = std::time::Duration::from_millis(poll_interval_ms);
+    let poll_interval = std::time::Duration::from_millis(params.poll_interval_ms);
     let mut consecutive_errors = 0u32;
     const MAX_CONSECUTIVE_ERRORS: u32 = 10;
 
     loop {
         // Check for control messages (non-blocking)
-        if let Some(ref control) = control_rx {
+        if let Some(ref control) = params.control_rx {
             if let Ok(cmd) = control.try_recv() {
                 match cmd.as_str() {
                     "stop" => {
@@ -704,27 +719,27 @@ pub fn master_poll_loop(
         // ==================== Execute one poll (inline logic) ====================
 
         // Generate request frame
-        let request_bytes = match reg_mode {
+        let request_bytes = match params.reg_mode {
             RegisterMode::Holding => crate::protocol::modbus::generate_pull_get_holdings_request(
-                station_id,
-                register_address,
-                register_length,
+                params.station_id,
+                params.register_address,
+                params.register_length,
             ),
             RegisterMode::Input => crate::protocol::modbus::generate_pull_get_inputs_request(
-                station_id,
-                register_address,
-                register_length,
+                params.station_id,
+                params.register_address,
+                params.register_length,
             ),
             RegisterMode::Coils => crate::protocol::modbus::generate_pull_get_coils_request(
-                station_id,
-                register_address,
-                register_length,
+                params.station_id,
+                params.register_address,
+                params.register_length,
             ),
             RegisterMode::DiscreteInputs => {
                 crate::protocol::modbus::generate_pull_get_discrete_inputs_request(
-                    station_id,
-                    register_address,
-                    register_length,
+                    params.station_id,
+                    params.register_address,
+                    params.register_length,
                 )
             }
         };
@@ -735,7 +750,7 @@ pub fn master_poll_loop(
 
                 // Send request
                 if let Err(e) = (|| -> Result<()> {
-                    let mut port = port_arc.lock().unwrap();
+                    let mut port = params.port_arc.lock().unwrap();
                     port.write_all(&request_frame)?;
                     port.flush()?;
                     Ok(())
@@ -743,10 +758,12 @@ pub fn master_poll_loop(
                     Err(anyhow!("Failed to send request: {}", e))
                 } else {
                     // Calculate expected response length
-                    let expected_data_bytes = match reg_mode {
-                        RegisterMode::Holding | RegisterMode::Input => register_length as usize * 2,
+                    let expected_data_bytes = match params.reg_mode {
+                        RegisterMode::Holding | RegisterMode::Input => {
+                            params.register_length as usize * 2
+                        }
                         RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                            (register_length as usize + 7) / 8
+                            (params.register_length as usize + 7) / 8
                         }
                     };
                     let expected_frame_length = 3 + expected_data_bytes + 2;
@@ -757,7 +774,7 @@ pub fn master_poll_loop(
 
                     // First read
                     {
-                        let mut port = port_arc.lock().unwrap();
+                        let mut port = params.port_arc.lock().unwrap();
                         match port.read(&mut buffer[total_bytes..]) {
                             Ok(0) => Err(anyhow!("No response received")),
                             Ok(bytes_read) => {
@@ -772,7 +789,7 @@ pub fn master_poll_loop(
                     if total_bytes < expected_frame_length {
                         std::thread::sleep(std::time::Duration::from_millis(20));
 
-                        let mut port = port_arc.lock().unwrap();
+                        let mut port = params.port_arc.lock().unwrap();
                         let remaining_needed = expected_frame_length - total_bytes;
                         if let Ok(additional) =
                             port.read(&mut buffer[total_bytes..total_bytes + remaining_needed + 10])
@@ -788,15 +805,15 @@ pub fn master_poll_loop(
                     // Validate response
                     if total_bytes < 5 {
                         Err(anyhow!("Response too short: {} bytes", total_bytes))
-                    } else if response[0] != station_id {
+                    } else if response[0] != params.station_id {
                         Err(anyhow!(
                             "Station ID mismatch: expected {}, got {}",
-                            station_id,
+                            params.station_id,
                             response[0]
                         ))
                     } else {
                         // Verify function code
-                        let expected_func = match reg_mode {
+                        let expected_func = match params.reg_mode {
                             RegisterMode::Holding => 0x03,
                             RegisterMode::Input => 0x04,
                             RegisterMode::Coils => 0x01,
@@ -808,13 +825,13 @@ pub fn master_poll_loop(
                             log::warn!(
                                 "Function code mismatch: expected 0x{:02X} ({:?}), got 0x{:02X}",
                                 expected_func,
-                                reg_mode,
+                                params.reg_mode,
                                 actual_func
                             );
 
                             // Flush RX buffer
                             let mut flush_buffer = vec![0u8; 256];
-                            let mut port = port_arc.lock().unwrap();
+                            let mut port = params.port_arc.lock().unwrap();
                             if let Ok(n) = port.read(&mut flush_buffer) {
                                 if n > 0 {
                                     log::warn!("Flushed {} residual bytes", n);
@@ -823,19 +840,19 @@ pub fn master_poll_loop(
 
                             Err(anyhow!(
                                 "Function code mismatch: expected {:?} (0x{:02X}), got 0x{:02X}",
-                                reg_mode,
+                                params.reg_mode,
                                 expected_func,
                                 actual_func
                             ))
                         } else {
                             // Verify byte count
                             let byte_count = response[2] as usize;
-                            let expected_byte_count = match reg_mode {
+                            let expected_byte_count = match params.reg_mode {
                                 RegisterMode::Holding | RegisterMode::Input => {
-                                    register_length as usize * 2
+                                    params.register_length as usize * 2
                                 }
                                 RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                                    (register_length as usize + 7) / 8
+                                    (params.register_length as usize + 7) / 8
                                 }
                             };
 
@@ -847,21 +864,25 @@ pub fn master_poll_loop(
                                 ))
                             } else {
                                 // Parse values
-                                match parse_response_values(response, register_length, reg_mode) {
+                                match parse_response_values(
+                                    response,
+                                    params.register_length,
+                                    params.reg_mode,
+                                ) {
                                     Ok(values) => {
-                                        if values.len() != register_length as usize {
+                                        if values.len() != params.register_length as usize {
                                             Err(anyhow!(
                                                 "Value count mismatch: expected {}, got {}",
-                                                register_length,
+                                                params.register_length,
                                                 values.len()
                                             ))
                                         } else {
                                             Ok(ModbusResponse {
-                                                station_id,
-                                                register_address,
+                                                station_id: params.station_id,
+                                                register_address: params.register_address,
                                                 register_mode:
                                                     ResponseRegisterMode::from_register_mode(
-                                                        reg_mode,
+                                                        params.reg_mode,
                                                     ),
                                                 values,
                                                 timestamp: chrono::Utc::now().to_rfc3339(),
@@ -886,7 +907,7 @@ pub fn master_poll_loop(
                 consecutive_errors = 0;
 
                 // Send response via channel (non-blocking)
-                if let Err(e) = response_tx.try_send(response) {
+                if let Err(e) = params.response_tx.try_send(response) {
                     log::warn!("Failed to send response to channel: {}", e);
                     if matches!(e, flume::TrySendError::Disconnected(_)) {
                         log::error!("Response channel disconnected, stopping poll loop");
@@ -968,16 +989,17 @@ pub fn master_poll_once_and_stop(
     // Spawn poll loop in background
     let port_clone = port_arc.clone();
     let handle = std::thread::spawn(move || {
-        master_poll_loop(
-            port_clone,
+        let params = MasterPollParams {
+            port_arc: port_clone,
             station_id,
             register_address,
             register_length,
             reg_mode,
             response_tx,
-            Some(control_rx),
-            100, // Fast polling for one-shot
-        )
+            control_rx: Some(control_rx),
+            poll_interval_ms: 100, // Fast polling for one-shot
+        };
+        master_poll_loop(&params)
     });
 
     // Wait for first response with timeout

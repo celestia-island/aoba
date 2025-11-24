@@ -180,7 +180,6 @@ async fn handle_stations_post(
         "📥 HTTP Server: Received POST request with {} stations",
         stations.len()
     );
-    log::debug!("📥 HTTP Server: Station details: {:?}", stations);
 
     // Clone stations for forwarding and for building the response snapshot
     let stations_for_send = stations.clone();
@@ -893,9 +892,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         log::info!("Command channel accepted");
                         COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         // Don't log every attempt to avoid spam, just keep trying
-
                     }
                 }
             }
@@ -1051,9 +1049,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                 log::warn!("Failed to deserialize stations data");
                             }
                         }
-                        _ => {
-                            log::debug!("Ignoring non-command IPC message");
-                        }
+                        _ => {}
                     }
                 }
             }
@@ -1382,9 +1378,6 @@ fn respond_to_request(
 
     let request_station_id = request[0];
     if request_station_id != station_id {
-        log::debug!(
-            "respond_to_request: Ignoring request for station {request_station_id} (we are station {station_id})",
-        );
         return Err(anyhow!(
             "Request for different station ID: {request_station_id} (we are {station_id})",
         ));
@@ -1398,24 +1391,11 @@ fn respond_to_request(
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response_buf);
     frame.parse()?;
 
-    log::debug!(
-        "respond_to_request: Parsed frame - func={:?}, reg_addr=0x{:04X?}, count={}",
-        frame.func,
-        frame.reg,
-        frame.count
-    );
-
     #[allow(unreachable_patterns)]
     let response = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => {
             match build_slave_holdings_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => {
-                    log::debug!(
-                        "respond_to_request: Built holdings response ({} bytes)",
-                        resp.len()
-                    );
-                    resp
-                }
+                Ok(Some(resp)) => resp,
                 _ => {
                     log::error!("respond_to_request: Failed to build holdings response");
                     return Err(anyhow!("Failed to build holdings response"));
@@ -1424,13 +1404,7 @@ fn respond_to_request(
         }
         rmodbus::consts::ModbusFunction::GetInputs => {
             match build_slave_inputs_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => {
-                    log::debug!(
-                        "respond_to_request: Built input registers response ({} bytes)",
-                        resp.len()
-                    );
-                    resp
-                }
+                Ok(Some(resp)) => resp,
                 _ => {
                     log::error!("respond_to_request: Failed to build input registers response");
                     return Err(anyhow!("Failed to build input registers response"));
@@ -1439,13 +1413,7 @@ fn respond_to_request(
         }
         rmodbus::consts::ModbusFunction::GetCoils => {
             match build_slave_coils_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => {
-                    log::debug!(
-                        "respond_to_request: Built coils response ({} bytes)",
-                        resp.len()
-                    );
-                    resp
-                }
+                Ok(Some(resp)) => resp,
                 _ => {
                     log::error!("respond_to_request: Failed to build coils response");
                     return Err(anyhow!("Failed to build coils response"));
@@ -1454,13 +1422,7 @@ fn respond_to_request(
         }
         rmodbus::consts::ModbusFunction::GetDiscretes => {
             match build_slave_discrete_inputs_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => {
-                    log::debug!(
-                        "respond_to_request: Built discrete inputs response ({} bytes)",
-                        resp.len()
-                    );
-                    resp
-                }
+                Ok(Some(resp)) => resp,
                 _ => {
                     log::error!("respond_to_request: Failed to build discrete inputs response");
                     return Err(anyhow!("Failed to build discrete inputs response"));
@@ -1746,7 +1708,6 @@ fn respond_to_request(
 
     // Extract values from response for JSON output
     let values = extract_values_from_response(&response)?;
-    log::debug!("respond_to_request: Extracted values for output: {values:?}");
 
     let register_mode = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => ResponseRegisterMode::Holding,
@@ -1798,7 +1759,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
         match &data_source {
             DataSource::Manual => {
                 // Manual mode: no automatic updates, values are set via IPC or other means
-                log::debug!("Manual data source mode - sleeping");
+
                 sleep_3s().await;
                 continue;
             }
@@ -1853,7 +1814,6 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         match notification {
                             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
                                 let payload = String::from_utf8_lossy(&publish.payload).to_string();
-                                log::debug!("Received MQTT message: {}", payload);
 
                                 // Send to async loop
                                 if mqtt_tx.send(payload).is_err() {
@@ -1968,7 +1928,6 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 "📥 HTTP: Received {} stations from HTTP server",
                                 stations.len()
                             );
-                            log::debug!("📥 HTTP: Station data: {:?}", stations);
 
                             // Extract values for this station
                             match super::extract_values_from_station_configs(
@@ -2103,7 +2062,6 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                 }
 
                 // Pipe closed, reopen and continue
-                log::debug!("IPC pipe closed, reopening...");
             }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
@@ -2200,9 +2158,6 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                 }
 
                 // After reading all lines, loop back to start of file
-                log::debug!(
-                    "Reached end of data file ({line_count} lines processed), looping back to start"
-                );
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it
@@ -2272,7 +2227,6 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                 }
 
                 // Pipe closed by writer, reopen and continue
-                log::debug!("Pipe closed, reopening...");
             }
         }
     }
@@ -2363,7 +2317,6 @@ async fn read_one_data_update(
             // Use spawn_blocking to avoid blocking the async runtime
             let url = url.clone();
             let join_result = tokio::task::spawn_blocking(move || {
-                log::debug!("Connecting to MQTT broker: {}", url);
                 let parsed_url =
                     url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
                 let host = parsed_url
@@ -2406,7 +2359,7 @@ async fn read_one_data_update(
         }
         DataSource::HttpServer(_) => {
             // HTTP server sends updates via a separate daemon; return empty initial values
-            log::debug!("HTTP Server mode - returning empty initial values");
+
             Ok(vec![])
         }
         DataSource::IpcPipe(path) => {
