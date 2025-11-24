@@ -898,8 +898,6 @@ fn commit_text_edit(
                                     );
                                 }
                             }
-                        } else {
-
                         }
                     }
                 }

@@ -76,10 +76,6 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
         // Track when we enter the modbus panel
         if step_name == "enter_modbus_panel" {
             ctx.in_modbus_panel = true;
-            log::debug!(
-                "📍 Entering modbus panel - slave line adjustment enabled: {}",
-                ctx.is_slave_test
-            );
         }
 
         let steps = workflow
@@ -99,10 +95,6 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
             // Track when we enter the modbus panel (may happen in recycle too)
             if step_name == "enter_modbus_panel" {
                 ctx.in_modbus_panel = true;
-                log::debug!(
-                    "📍 Entering modbus panel - slave line adjustment enabled: {}",
-                    ctx.is_slave_test
-                );
             }
 
             let steps = workflow
@@ -138,8 +130,6 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
     // Use a fixed IPC channel ID - no need to make it unique per test
     // The TUI process doesn't care which test is running
     let channel_id = IpcChannelId("tui_e2e".to_string());
-
-    log::debug!("Using IPC channel ID: {}", channel_id.0);
 
     // Create IPC server sockets FIRST (before spawning TUI)
     // This eliminates timing issues - sockets are ready before TUI even starts
@@ -330,10 +320,6 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
     let config_path = "/tmp/tui_e2e_emulator.json";
     std::fs::write(config_path, serde_json::to_string_pretty(&config)?)?;
     log::info!("📝 Wrote CLI config to {config_path}");
-    log::debug!(
-        "Config: {config}",
-        config = serde_json::to_string_pretty(&config)?
-    );
 
     // Find CLI binary
     let cli_binary = if std::path::Path::new("target/debug/aoba").exists() {
@@ -372,9 +358,7 @@ async fn execute_step_sequence(
     // Group steps into retryable units
     let groups = group_steps(steps);
 
-    if !groups.is_empty() {
-        log::debug!("📦 Identified {} retryable step groups", groups.len());
-    }
+    if !groups.is_empty() {}
 
     let mut current_group_idx = 0;
     let mut i = 0;
@@ -393,9 +377,7 @@ async fn execute_step_sequence(
             current_group_idx += 1;
         } else {
             // Execute single step normally (not part of any group)
-            if let Some(desc) = &step.description {
-                log::debug!("    [{i}] {desc}");
-            }
+            if step.description.is_some() {}
             execute_single_step(ctx, workflow_id, step).await?;
             i += 1;
         }
@@ -443,9 +425,7 @@ async fn execute_step_group_with_retry(
         for &step_idx in &group.step_indices {
             let step = &all_steps[step_idx];
 
-            if let Some(desc) = &step.description {
-                log::debug!("    [{step_idx}] {desc}");
-            }
+            if step.description.is_some() {}
 
             match execute_single_step(ctx, workflow_id, step).await {
                 Ok(()) => {}
@@ -457,9 +437,6 @@ async fn execute_step_group_with_retry(
                         if first_failure_screenshot.is_none() {
                             match capture_screenshot(ctx).await {
                                 Ok(captured) => {
-                                    log::debug!(
-                                        "📸 Captured first failure screenshot for later reporting"
-                                    );
                                     first_failure_screenshot = Some(captured);
                                 }
                                 Err(capture_err) => {
@@ -671,11 +648,6 @@ async fn execute_single_step(
                 // Therefore, for any line_num >= 2 checking station content, we add 2
                 if ctx.is_slave_test && ctx.in_modbus_panel && line_num >= 2 {
                     line_num += 2;
-                    log::debug!(
-                        "🔧 Adjusted line number for slave mode: {} -> {}",
-                        line_num - 2,
-                        line_num
-                    );
                 }
 
                 let lines: Vec<&str> = screen_content.lines().collect();
@@ -751,8 +723,6 @@ async fn execute_single_step(
             };
 
         verification_result.map_err(anyhow::Error::from)?;
-
-        log::debug!("✅ Screen verified: '{expected_text}'");
     }
 
     // Handle triggers - custom actions
@@ -780,15 +750,12 @@ async fn execute_single_step(
 /// This function is used in DrillDown mode to simulate keyboard events.
 /// It sends the keyboard event through the IPC channel to the TUI process.
 async fn simulate_key_input(ctx: &mut ExecutionContext, key: &str) -> Result<()> {
-    log::debug!("🎹 Simulating key press: {key}");
-
     if let Some(sender) = ctx.ipc_sender.as_mut() {
         sender
             .send(E2EToTuiMessage::KeyPress {
                 key: key.to_string(),
             })
             .await?;
-        log::debug!("   ✅ Key sent via IPC: {key}");
     } else {
         log::warn!("   ⚠️  No IPC sender available");
     }
@@ -800,11 +767,8 @@ async fn simulate_key_input(ctx: &mut ExecutionContext, key: &str) -> Result<()>
 ///
 /// This function is used in DrillDown mode to simulate typing characters.
 async fn simulate_char_input(ctx: &mut ExecutionContext, ch: char) -> Result<()> {
-    log::debug!("🎹 Simulating character input: '{ch}'");
-
     if let Some(sender) = ctx.ipc_sender.as_mut() {
         sender.send(E2EToTuiMessage::CharInput { ch }).await?;
-        log::debug!("   ✅ Character sent via IPC: '{ch}'");
     } else {
         log::warn!("   ⚠️  No IPC sender available");
     }
@@ -924,7 +888,6 @@ async fn execute_match_master_registers_trigger(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    log::debug!("CLI output: {stdout}");
 
     // Parse the CLI output to extract register values
     // Expected format varies by register type, but generally includes register values in hex or decimal

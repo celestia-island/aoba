@@ -156,12 +156,7 @@ pub fn parse_data_line(
                 register_length,
             );
         }
-        Err(e) => {
-            log::debug!(
-                "Failed to parse as Vec<StationConfig>: {}. Trying legacy format...",
-                e
-            );
-        }
+        Err(_e) => {}
     }
 
     // Fallback: legacy format {"values": [...]}

@@ -571,7 +571,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 .map(|p| {
                     let port = p;
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
-                    let count = stations.len();
+                    let _count = stations.len();
 
                     !stations.is_empty()
                 })
