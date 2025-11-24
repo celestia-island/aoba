@@ -380,7 +380,7 @@ impl ModbusBuilder {
             anyhow!("Port name is required. Use with_port() or with_virtual_port()")
         })?;
 
-        // 如果有多个轮询配置，使用多寄存器模式
+        // If there are multiple polling configurations, use multi-register mode
         let config = ModbusPortConfig {
             port_name,
             baud_rate: self.baud_rate,
@@ -401,7 +401,7 @@ impl ModbusBuilder {
                 self.data_sources,
             )
         } else {
-            // 单寄存器模式
+            // Single register mode
             master::ModbusMaster::new(config, self.hooks, self.data_sources)
         }
     }
