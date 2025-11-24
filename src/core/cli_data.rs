@@ -152,12 +152,6 @@ pub fn initialize_cli_data_source(
         let start_offset = (station.register_address - min_addr) as usize;
         let station_values = station_values_for_cli(station);
 
-        log::debug!(
-            "  Merging station at 0x{:04X}, length={}, into offset {}",
-            station.register_address,
-            station_values.len(),
-            start_offset
-        );
 
         for (i, &value) in station_values.iter().enumerate() {
             let target_idx = start_offset + i;

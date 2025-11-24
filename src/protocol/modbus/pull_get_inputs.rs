@@ -22,7 +22,6 @@ pub fn parse_pull_get_inputs(request: &mut ModbusRequest, response: Vec<u8>) -> 
         .chunks_exact(2)
         .map(|c| u16::from_be_bytes([c[0], c[1]]))
         .collect::<Vec<_>>();
-    log::debug!("Received input registers: {values:?}");
 
     Ok(values)
 }

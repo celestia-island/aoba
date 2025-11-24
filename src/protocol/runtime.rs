@@ -392,14 +392,7 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> 
     let mut frames = Vec::new();
     finalize_residual(buf, &mut frames);
     if frames.is_empty() {
-        if log::log_enabled!(log::Level::Debug) {
-            let hex = buf
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<Vec<_>>()
-                .join(" ");
-            log::debug!("finalize: no frame len={} hex={hex}", buf.len());
-        }
+
     } else {
         for frame in frames {
             if log::log_enabled!(log::Level::Info) {
