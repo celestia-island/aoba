@@ -89,7 +89,6 @@ fn ensure_status_initialized() -> Result<()> {
         // Initialize with default status
         let app = Arc::new(RwLock::new(_main::tui::status::Status::default()));
         _main::tui::status::init_status(app)?;
-    
     }
 
     Ok(())

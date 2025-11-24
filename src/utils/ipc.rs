@@ -148,7 +148,6 @@ impl IpcSender {
 
     /// Send a message to TUI
     pub async fn send(&mut self, message: E2EToTuiMessage) -> Result<()> {
-
         let mut pipe = self
             .to_tui_pipe
             .take()
@@ -177,7 +176,6 @@ impl IpcSender {
 
     /// Receive a message from TUI
     pub async fn receive(&mut self) -> Result<TuiToE2EMessage> {
-
         let mut pipe = self
             .from_tui_pipe
             .take()
@@ -250,7 +248,6 @@ impl IpcReceiver {
 
     /// Receive a message from E2E test
     pub async fn receive(&mut self) -> Result<E2EToTuiMessage> {
-
         let mut pipe = self
             .to_tui_pipe
             .take()
@@ -279,7 +276,6 @@ impl IpcReceiver {
 
     /// Send a message to E2E test
     pub async fn send(&mut self, message: TuiToE2EMessage) -> Result<()> {
-
         let mut pipe = self
             .from_tui_pipe
             .take()
