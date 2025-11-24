@@ -895,7 +895,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                     }
                     Err(e) => {
                         // Don't log every attempt to avoid spam, just keep trying
-                        log::trace!("Command channel accept not ready yet: {e}");
+
                     }
                 }
             }

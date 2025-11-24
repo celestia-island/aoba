@@ -132,10 +132,7 @@ impl ManagedSubprocess {
         // If TUI is in debug CI E2E test mode, propagate to CLI subprocess
         if is_debug_dump_enabled() {
             args.push("--debug-ci-e2e-test".to_string());
-            log::debug!("Injecting --debug-ci-e2e-test flag to CLI subprocess");
         }
-
-        log::debug!("CLI subprocess command: {exe_path:?} {args:?}");
 
         // Spawn the subprocess
         let mut child = Command::new(exe_path)
@@ -157,7 +154,6 @@ impl ManagedSubprocess {
                     line.clear();
                     match reader.read_line(&mut line) {
                         Ok(0) => {
-                            log::debug!("CLI[{}] stdout closed", port_label);
                             break;
                         }
                         Ok(_) => {
@@ -189,7 +185,6 @@ impl ManagedSubprocess {
                     line.clear();
                     match reader.read_line(&mut line) {
                         Ok(0) => {
-                            log::debug!("CLI[{}] stderr closed", port_label);
                             break;
                         }
                         Ok(_) => {
@@ -248,7 +243,6 @@ impl ManagedSubprocess {
                         break;
                     }
                     Err(err) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
-                        log::debug!("Command channel connect attempt {attempt} failed: {err}");
                         crate::utils::sleep::sleep_1s().await;
                     }
                     Err(err) => {
@@ -333,12 +327,7 @@ impl ManagedSubprocess {
             }
             Ok(None) => {
                 // Child still running; opportunistically finish IPC handshake if ready
-                if let Err(err) = self.try_complete_ipc_connection() {
-                    log::debug!(
-                        "Failed to complete IPC connection for {}: {err:?}",
-                        self.config.port_name
-                    );
-                }
+                if let Err(err) = self.try_complete_ipc_connection() {}
                 true
             }
             Err(err) => {
@@ -443,12 +432,7 @@ impl ManagedSubprocess {
         }
         if let Some(mut conn) = self.ipc_connection.take() {
             // Drain any remaining message to ensure socket closes cleanly
-            if let Err(err) = conn.try_recv() {
-                log::debug!(
-                    "IPC drain after kill failed for {}: {err}",
-                    self.config.port_name
-                );
-            }
+            if let Err(err) = conn.try_recv() {}
         }
         Ok(())
     }

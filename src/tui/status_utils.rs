@@ -51,10 +51,7 @@ pub(crate) fn check_and_update_temporary_statuses_with_now(
                 if let Some(port) = status.ports.map.get_mut(port_name) {
                     let old_status = format!("{:?}", port.status_indicator);
                     port.status_indicator = next_status.clone();
-                    log::debug!(
-                        "Auto-transitioned {port_name} status from {old_status} to {:?}",
-                        port.status_indicator
-                    );
+
                 }
             }
             Ok(())

@@ -33,7 +33,6 @@ pub fn parse_pull_get_coils(
         values.len() == count as usize,
         "Invalid number of coils in response"
     );
-    log::debug!("Received coils: {values:?}");
 
     Ok(values)
 }

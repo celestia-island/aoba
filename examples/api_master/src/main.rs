@@ -12,13 +12,12 @@ struct LoggingHook;
 
 impl ModbusHook for LoggingHook {
     fn on_before_request(&self, port: &str) -> Result<()> {
-        log::debug!("🔄 About to poll on {}", port);
         Ok(())
     }
 
     fn on_after_response(&self, port: &str, response: &ModbusResponse) -> Result<()> {
         log::info!(
-            "✅ Received response from {}: station={}, address=0x{:04X}, values={:04X?}",
+            "Received response from {}: station={}, address=0x{:04X}, values={:04X?}",
             port,
             response.station_id,
             response.register_address,
@@ -28,7 +27,7 @@ impl ModbusHook for LoggingHook {
     }
 
     fn on_error(&self, port: &str, error: &anyhow::Error) {
-        log::warn!("❌ Error on {}: {}", port, error);
+        log::warn!("Error on {}: {}", port, error);
     }
 }
 
@@ -39,8 +38,8 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    log::info!("🚀 Starting Modbus Master API Example");
-    log::info!("📝 This example demonstrates the trait-based Modbus API with hooks");
+    log::info!("Starting Modbus Master API Example");
+    log::info!("This example demonstrates the trait-based Modbus API with hooks");
 
     // Get port from command line or use default
     let args: Vec<String> = std::env::args().collect();
@@ -50,8 +49,8 @@ async fn main() -> Result<()> {
         "/tmp/vcom1".to_string()
     };
 
-    log::info!("📍 Using port: {}", port);
-    log::info!("🔧 Configuration:");
+    log::info!("Using port: {}", port);
+    log::info!("Configuration:");
     log::info!("   - Station ID: 1");
     log::info!("   - Register Mode: Holding");
     log::info!("   - Register Address: 0x0000");
@@ -66,8 +65,8 @@ async fn main() -> Result<()> {
         .add_hook(Arc::new(LoggingHook))
         .build_master()?;
 
-    log::info!("✅ Master started, waiting for responses...");
-    log::info!("💡 Press Ctrl+C to stop");
+    log::info!("Master started, waiting for responses...");
+    log::info!("Press Ctrl+C to stop");
 
     // Continuously receive and log responses
     const MAX_RESPONSES: usize = 10;
@@ -76,18 +75,18 @@ async fn main() -> Result<()> {
         if let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
             count += 1;
             log::info!(
-                "📊 Response #{}: Station {}, {} values received",
+                "Response #{}: Station {}, {} values received",
                 count,
                 response.station_id,
                 response.values.len()
             );
 
             if count >= MAX_RESPONSES {
-                log::info!("✅ Received {} responses, example completed", MAX_RESPONSES);
+                log::info!("Received {} responses, example completed", MAX_RESPONSES);
                 break;
             }
         } else {
-            log::warn!("⏱️ Timeout waiting for response, continuing...");
+            log::warn!("Timeout waiting for response, continuing...");
         }
     }
 

@@ -572,7 +572,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                     let port = p;
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
                     let count = stations.len();
-                    log::debug!("🟦 Port {name} has {count} stations");
+
                     !stations.is_empty()
                 })
                 .unwrap_or(false);

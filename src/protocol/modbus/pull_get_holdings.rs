@@ -20,7 +20,6 @@ pub fn parse_pull_get_holdings(request: &mut ModbusRequest, response: Vec<u8>) -
         .chunks_exact(2)
         .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
         .collect::<Vec<_>>();
-    log::debug!("Received holding registers (BE 0,1): {values:?}");
 
     Ok(values)
 }

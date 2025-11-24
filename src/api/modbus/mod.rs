@@ -27,7 +27,7 @@ pub use master::ModbusMaster;
 pub use slave::{ModbusSlave, ModbusSlaveIterator, TryIterator};
 
 // Re-export core functions for custom implementations
-pub use core::{master_poll_once, slave_process_one_request};
+pub use core::{master_poll_loop, master_poll_once_and_stop, slave_process_one_request};
 
 // Re-export CLI default handlers (flume-based implementations)
 pub use crate::cli::modbus::handlers::{
@@ -44,6 +44,14 @@ pub struct ModbusPortConfig {
     pub register_length: u16,
     pub register_mode: RegisterMode,
     pub timeout_ms: u64,
+    /// Error recovery delay (milliseconds): pause polling when parsing repeatedly fails to
+    /// let both sides' buffers stabilize. Recommended: 100-500ms; adjust according to baud rate
+    /// and communication quality.
+    pub error_recovery_delay_ms: Option<u64>,
+    /// Poll interval (milliseconds): delay between each poll request. For multi-register polling
+    /// this is the interval between each register type poll, ensuring the slave has time to process.
+    /// Default: 1000ms (1 second); adjust based on slave response time and communication stability.
+    pub poll_interval_ms: u64,
 }
 
 /// Configuration for a single register polling task
@@ -65,17 +73,20 @@ pub struct RegisterPollConfig {
 pub struct ModbusBuilder {
     port_name: Option<String>,
     baud_rate: u32,
+    poll_interval_ms: u64,
     station_id: u8,
     register_address: u16,
     register_length: u16,
     register_mode: RegisterMode,
     timeout_ms: u64,
+    error_recovery_delay_ms: Option<u64>,
     role: StationMode,
-    // 支持多寄存器类型轮询
+
+    // Supports multi-register type polling
     register_polls: Vec<RegisterPollConfig>,
-    // 中间件链：支持多个钩子
+    // Middleware chain: supports multiple hooks
     hooks: Vec<Arc<dyn ModbusHook>>,
-    // 中间件链：支持多个数据源（仅 Master）
+    // Middleware chain: supports multiple data sources (Master only)
     data_sources: Vec<Arc<Mutex<dyn traits::ModbusDataSource>>>,
 }
 
@@ -85,11 +96,13 @@ impl ModbusBuilder {
         Self {
             port_name: None,
             baud_rate: 9600,
+            poll_interval_ms: 1000, // Default 1-second poll interval
             station_id,
             register_address: 0,
-            register_length: 10,
+            register_length: 1,
             register_mode: RegisterMode::Holding,
             timeout_ms: 1000,
+            error_recovery_delay_ms: None,
             role: StationMode::Master,
             register_polls: Vec::new(),
             hooks: Vec::new(),
@@ -102,11 +115,13 @@ impl ModbusBuilder {
         Self {
             port_name: None,
             baud_rate: 9600,
+            poll_interval_ms: 1000, // Default 1-second poll interval (unused by Slave)
             station_id,
             register_address: 0,
             register_length: 10,
             register_mode: RegisterMode::Holding,
             timeout_ms: 1000,
+            error_recovery_delay_ms: Some(300), // Slave defaults to 300ms error recovery delay
             role: StationMode::Slave,
             register_polls: Vec::new(),
             hooks: Vec::new(),
@@ -180,6 +195,52 @@ impl ModbusBuilder {
         self
     }
 
+    /// Set the error recovery delay in milliseconds (Slave only).
+    ///
+    /// When frame parsing fails continuously, the slave will pause polling
+    /// for this duration to let both sides' buffers stabilize.
+    ///
+    /// Recommended: 100-500ms depending on baud rate and communication quality.
+    /// Default for Slave: 300ms. Master ignores this setting.
+    pub fn with_error_recovery_delay(mut self, delay_ms: u64) -> Self {
+        self.error_recovery_delay_ms = Some(delay_ms);
+        self
+    }
+
+    /// Set the polling interval in milliseconds (Master only).
+    ///
+    /// For multi-register masters, this is the delay **between each register type poll**.
+    /// Example: poll_interval=1000ms means:
+    /// - Poll Coils → wait 1s → Poll Holding → wait 1s → Poll Coils...
+    ///
+    /// Shorter intervals = faster updates but higher bus load.
+    /// Longer intervals = more stable but slower updates.
+    ///
+    /// Recommended: 500-2000ms depending on:
+    /// - Slave response time
+    /// - Number of register types
+    /// - Communication stability requirements
+    ///
+    /// Default: 1000ms (1 second)
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+    ///
+    /// let master = ModbusBuilder::new_master(19)
+    ///     .with_port("COM1")
+    ///     .add_register_poll(RegisterMode::Coils, 0x01, 11)
+    ///     .add_register_poll(RegisterMode::Holding, 0x10, 33)
+    ///     .with_poll_interval(500)  // Poll every 500ms
+    ///     .build_master()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn with_poll_interval(mut self, interval_ms: u64) -> Self {
+        self.poll_interval_ms = interval_ms;
+        self
+    }
+
     /// Add a hook to the middleware chain (can be called multiple times)
     ///
     /// Hooks are executed in the order they are added.
@@ -240,6 +301,8 @@ impl ModbusBuilder {
             register_length: self.register_length,
             register_mode: self.register_mode,
             timeout_ms: self.timeout_ms,
+            error_recovery_delay_ms: self.error_recovery_delay_ms,
+            poll_interval_ms: self.poll_interval_ms,
         })
     }
 
@@ -277,6 +340,8 @@ impl ModbusBuilder {
             register_length: self.register_length,
             register_mode: self.register_mode,
             timeout_ms: self.timeout_ms,
+            error_recovery_delay_ms: self.error_recovery_delay_ms,
+            poll_interval_ms: self.poll_interval_ms,
         };
 
         slave::ModbusSlave::new(config, self.hooks)
@@ -324,6 +389,8 @@ impl ModbusBuilder {
             register_length: self.register_length,
             register_mode: self.register_mode,
             timeout_ms: self.timeout_ms,
+            error_recovery_delay_ms: self.error_recovery_delay_ms,
+            poll_interval_ms: self.poll_interval_ms,
         };
 
         if !self.register_polls.is_empty() {
@@ -348,4 +415,46 @@ pub trait ModbusHook: Send + Sync {
         Ok(())
     }
     fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
+
+    /// Called before writing data to Modbus (Master writing to Slave)
+    ///
+    /// This hook allows transforming the data before it's sent over the wire.
+    /// Use cases include byte-order corrections, data validation, etc.
+    ///
+    /// # Parameters
+    ///
+    /// * `port` - The serial port name
+    /// * `data` - Mutable reference to the data buffer (can be modified in-place)
+    /// * `register_mode` - The type of register being written (Coils, Holding, etc.)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Continue with the write operation
+    /// * `Err(_)` - Abort the write operation and report error
+    fn on_before_write(
+        &self,
+        _port: &str,
+        _data: &mut Vec<u8>,
+        _register_mode: RegisterMode,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// Called after receiving a request but before processing it (Slave receiving from Master)
+    ///
+    /// This hook allows transforming the received request data before parsing.
+    /// Use cases include byte-order corrections for hardware issues.
+    ///
+    /// # Parameters
+    ///
+    /// * `port` - The serial port name
+    /// * `data` - Mutable reference to the request buffer (can be modified in-place)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Continue with request processing
+    /// * `Err(_)` - Abort processing and report error
+    fn on_after_receive_request(&self, _port: &str, _data: &mut [u8]) -> Result<()> {
+        Ok(())
+    }
 }

@@ -191,7 +191,7 @@ pub fn execute_slave_handler_chain(
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
                         HandlerError::NotHandled(msg) => {
-                            log::trace!("Handler {} passed through: {}", i, msg);
+
                             // Continue to next handler
                         }
                         HandlerError::ProcessingError(msg) => {
@@ -233,7 +233,7 @@ pub fn execute_master_handler_chain(
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
                         HandlerError::NotHandled(msg) => {
-                            log::trace!("Handler {} passed through: {}", i, msg);
+
                             // Continue to next handler
                         }
                         HandlerError::ProcessingError(msg) => {
@@ -274,14 +274,14 @@ pub fn execute_data_source_chain(
                 return Ok(Some(data)); // First data source intercepts
             }
             Ok(None) => {
-                log::trace!("Data source {} returned None", i);
+
                 // Continue to next source
             }
             Err(e) => {
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
                         HandlerError::NotHandled(msg) => {
-                            log::trace!("Data source {} passed through: {}", i, msg);
+
                             // Continue to next source
                         }
                         HandlerError::ProcessingError(msg) => {
