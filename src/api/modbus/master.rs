@@ -254,9 +254,92 @@ pub async fn run_master_loop_with_handler(
                 }
             }
             Err(err) => {
-                log::warn!("Error polling on {}: {}", config.port_name, err);
+                // Determine retry policy from optional hook values
+                let mut max_retries = 0u32;
+                let mut retry_delay_ms = 500u64;
                 if let Some(h) = &hooks {
-                    h.on_error(&config.port_name, &err);
+                    if let Some(v) = h.hook_max_retries() {
+                        max_retries = v;
+                    }
+                    if let Some(v) = h.hook_retry_delay_ms() {
+                        retry_delay_ms = v;
+                    }
+                }
+
+                if max_retries == 0 {
+                    log::warn!("Error polling on {}: {}", config.port_name, err);
+                    if let Some(h) = &hooks {
+                        h.on_error(&config.port_name, &err);
+                    }
+                } else {
+                    log::warn!(
+                        "Error polling on {}: {} - retrying up to {} times",
+                        config.port_name,
+                        err,
+                        max_retries
+                    );
+                    let mut last_err = err;
+                    let mut success = false;
+                    for attempt in 1..=max_retries {
+                        // wait before retrying
+                        tokio::time::sleep(std::time::Duration::from_millis(retry_delay_ms)).await;
+
+                        // call before_request hooks again
+                        if let Some(h) = &hooks {
+                            if let Err(e) = h.on_before_request(&config.port_name) {
+                                log::warn!("Hook on_before_request failed during retry: {}", e);
+                            }
+                        }
+
+                        match core::execute_single_poll_internal(
+                            &port_arc,
+                            config.station_id,
+                            config.register_address,
+                            config.register_length,
+                            config.register_mode,
+                        ) {
+                            Ok(response) => {
+                                if let Some(h) = &hooks {
+                                    if let Err(e) =
+                                        h.on_after_response(&config.port_name, &response)
+                                    {
+                                        log::warn!("Hook on_after_response failed: {}", e);
+                                    }
+                                }
+                                if let Err(e) = handler.handle_response(&response) {
+                                    log::error!(
+                                        "Handler failed to process response after retry: {}",
+                                        e
+                                    );
+                                    if let Some(h) = &hooks {
+                                        h.on_error(&config.port_name, &e);
+                                    }
+                                }
+                                success = true;
+                                break;
+                            }
+                            Err(e2) => {
+                                last_err = e2;
+                                if let Some(h) = &hooks {
+                                    h.on_error(&config.port_name, &last_err);
+                                }
+                                log::warn!(
+                                    "Retry {}/{} failed: {}",
+                                    attempt,
+                                    max_retries,
+                                    last_err
+                                );
+                            }
+                        }
+                    }
+
+                    if !success {
+                        log::warn!(
+                            "Retries exhausted for {}: last error: {}",
+                            config.port_name,
+                            last_err
+                        );
+                    }
                 }
             }
         }
@@ -434,9 +517,88 @@ async fn run_master_loop(
                 }
             }
             Err(err) => {
-                log::warn!("Error polling on {}: {}", port_name, err);
+                // Determine retry policy from hooks (first provider wins)
+                let mut max_retries = 0u32;
+                let mut retry_delay_ms = 500u64;
                 for hook in &hooks {
-                    hook.on_error(&port_name, &err);
+                    if max_retries == 0 {
+                        if let Some(v) = hook.hook_max_retries() {
+                            max_retries = v;
+                        }
+                    }
+                    if retry_delay_ms == 500 {
+                        if let Some(v) = hook.hook_retry_delay_ms() {
+                            retry_delay_ms = v;
+                        }
+                    }
+                }
+
+                if max_retries == 0 {
+                    log::warn!("Error polling on {}: {}", port_name, err);
+                    for hook in &hooks {
+                        hook.on_error(&port_name, &err);
+                    }
+                } else {
+                    log::warn!(
+                        "Error polling on {}: {} - retrying up to {} times",
+                        port_name,
+                        err,
+                        max_retries
+                    );
+                    let mut last_err = err;
+                    let mut success = false;
+                    for attempt in 1..=max_retries {
+                        tokio::time::sleep(std::time::Duration::from_millis(retry_delay_ms)).await;
+
+                        // call before_request hooks again
+                        for hook in &hooks {
+                            if let Err(e) = hook.on_before_request(&port_name) {
+                                log::warn!("Hook on_before_request failed during retry: {}", e);
+                            }
+                        }
+
+                        match core::execute_single_poll_internal(
+                            &port_arc,
+                            station_id,
+                            register_address,
+                            register_length,
+                            register_mode,
+                        ) {
+                            Ok(response) => {
+                                for hook in &hooks {
+                                    if let Err(e) = hook.on_after_response(&port_name, &response) {
+                                        log::warn!("Hook on_after_response failed: {}", e);
+                                    }
+                                }
+                                if sender.send(response).is_err() {
+                                    log::warn!("Receiver dropped, stopping master loop");
+                                    return Ok(());
+                                }
+                                success = true;
+                                break;
+                            }
+                            Err(e2) => {
+                                last_err = e2;
+                                for hook in &hooks {
+                                    hook.on_error(&port_name, &last_err);
+                                }
+                                log::warn!(
+                                    "Retry {}/{} failed: {}",
+                                    attempt,
+                                    max_retries,
+                                    last_err
+                                );
+                            }
+                        }
+                    }
+
+                    if !success {
+                        log::warn!(
+                            "Retries exhausted for {}: last error: {}",
+                            port_name,
+                            last_err
+                        );
+                    }
                 }
             }
         }
@@ -647,14 +809,97 @@ async fn run_multi_register_master_loop(
                         port_name,
                         err
                     );
+                    let err_msg = err.to_string();
+
+                    // Extract retry policy from hooks (first provider wins)
+                    let mut max_retries = 0u32;
+                    let mut retry_delay_ms = 500u64;
                     for hook in &hooks {
-                        hook.on_error(&port_name, &err);
+                        if max_retries == 0 {
+                            if let Some(v) = hook.hook_max_retries() {
+                                max_retries = v;
+                            }
+                        }
+                        if retry_delay_ms == 500 {
+                            if let Some(v) = hook.hook_retry_delay_ms() {
+                                retry_delay_ms = v;
+                            }
+                        }
+                    }
+
+                    if max_retries == 0 {
+                        for hook in &hooks {
+                            hook.on_error(&port_name, &err);
+                        }
+                    } else {
+                        log::warn!(
+                            "Retrying {} register on {} up to {} times",
+                            poll_config.register_mode,
+                            port_name,
+                            max_retries
+                        );
+                        let mut last_err = err;
+                        let mut success = false;
+                        for attempt in 1..=max_retries {
+                            tokio::time::sleep(std::time::Duration::from_millis(retry_delay_ms))
+                                .await;
+
+                            // call before_request hooks again
+                            for hook in &hooks {
+                                if let Err(e) = hook.on_before_request(&port_name) {
+                                    log::warn!("Hook on_before_request failed during retry: {}", e);
+                                }
+                            }
+
+                            match core::execute_single_poll_internal(
+                                &port_arc,
+                                station_id,
+                                poll_config.register_address,
+                                poll_config.register_length,
+                                poll_config.register_mode,
+                            ) {
+                                Ok(response) => {
+                                    for hook in &hooks {
+                                        if let Err(e) =
+                                            hook.on_after_response(&port_name, &response)
+                                        {
+                                            log::warn!("Hook on_after_response failed: {}", e);
+                                        }
+                                    }
+                                    if sender.send(response).is_err() {
+                                        log::warn!("Receiver dropped, stopping master loop");
+                                        return Ok(());
+                                    }
+                                    success = true;
+                                    break;
+                                }
+                                Err(e2) => {
+                                    last_err = e2;
+                                    for hook in &hooks {
+                                        hook.on_error(&port_name, &last_err);
+                                    }
+                                    log::warn!(
+                                        "Retry {}/{} failed: {}",
+                                        attempt,
+                                        max_retries,
+                                        last_err
+                                    );
+                                }
+                            }
+                        }
+
+                        if !success {
+                            log::warn!(
+                                "Retries exhausted for {} register on {}: last error: {}",
+                                poll_config.register_mode,
+                                port_name,
+                                last_err
+                            );
+                        }
                     }
 
                     // Additional delay after an error to give the serial buffer time to recover
-                    // Especially important after function code mismatch errors - ensure buffer drain/flush completes
-                    if err.to_string().contains("Function code mismatch") {
-                        // additional delay; debug message removed
+                    if err_msg.contains("Function code mismatch") {
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     }
                 }

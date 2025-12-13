@@ -540,7 +540,8 @@ struct RobustModeHook {
 
 impl ModbusHook for RobustModeHook {
     fn on_before_request(&self, _port: &str) -> Result<()> {
-        // Could implement flush here in future
+        // Log configured max_retries so the field is actively used.
+        log::debug!("Robust mode: configured max_retries = {}", self.max_retries);
         Ok(())
     }
 
@@ -561,6 +562,14 @@ impl ModbusHook for RobustModeHook {
             self.retry_delay_ms
         );
         std::thread::sleep(std::time::Duration::from_millis(self.retry_delay_ms));
+    }
+
+    fn hook_max_retries(&self) -> Option<u32> {
+        Some(self.max_retries)
+    }
+
+    fn hook_retry_delay_ms(&self) -> Option<u64> {
+        Some(self.retry_delay_ms)
     }
 }
 
@@ -613,5 +622,17 @@ pub trait ModbusHook: Send + Sync {
     /// * `Err(_)` - Abort processing and report error
     fn on_after_receive_request(&self, _port: &str, _data: &mut [u8]) -> Result<()> {
         Ok(())
+    }
+
+    /// Optional: return the number of retries this hook requests for failed polls.
+    /// Default: `None` (no special retry behavior).
+    fn hook_max_retries(&self) -> Option<u32> {
+        None
+    }
+
+    /// Optional: return the retry delay in milliseconds to use between attempts.
+    /// Default: `None` (caller may use a reasonable default).
+    fn hook_retry_delay_ms(&self) -> Option<u64> {
+        None
     }
 }
