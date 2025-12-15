@@ -171,7 +171,7 @@ impl ModbusMaster {
     /// Write coils (01 function code) to the slave
     ///
     /// Returns Ok(()) if write was acknowledged successfully.
-    /// 
+    ///
     /// **Note for 储氢罐 hardware**: The hardware requires byte-swapping for 11-coil writes.
     /// Apply `swap_coils_byte_order()` before calling this method if needed.
     pub fn write_coils(&self, address: u16, values: &[bool]) -> Result<()> {
