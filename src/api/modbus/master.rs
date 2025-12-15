@@ -19,6 +19,10 @@ pub struct ModbusMaster {
     receiver: flume::Receiver<ModbusResponse>,
     control_sender: Option<flume::Sender<String>>,
     _handle: tokio::task::JoinHandle<Result<()>>,
+    /// Shared port handle for manual operations
+    port_arc: Option<Arc<Mutex<Box<dyn serialport::SerialPort>>>>,
+    /// Station ID for manual operations
+    station_id: u8,
 }
 
 impl ModbusMaster {
@@ -95,52 +99,140 @@ impl ModbusMaster {
             receiver: response_rx,
             control_sender: Some(control_tx),
             _handle: handle,
+            port_arc: None,
+            station_id,
         })
     }
 
-    /// Create and start a new Modbus master (legacy Builder API with middleware)
+    /// Create a new Modbus master with manual control capability
     ///
-    /// Accepts hooks and data sources as vectors for middleware pattern.
-    pub fn new(
-        config: ModbusPortConfig,
-        hooks: Vec<Arc<dyn ModbusHook>>,
-        data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
-    ) -> Result<Self> {
-        let (sender, receiver) = flume::unbounded();
+    /// This variant provides access to the port handle for manual single-shot operations.
+    /// Does NOT start automatic polling - use `poll_once` or `write_coils` methods.
+    pub fn new_manual(config: ModbusPortConfig) -> Result<Self> {
+        let (_response_tx, response_rx) = flume::unbounded();
+        let (control_tx, control_rx) = flume::unbounded();
 
-        let handle =
-            tokio::spawn(async move { run_master_loop(config, hooks, data_sources, sender).await });
+        let port_name = config.port_name.clone();
+        let baud_rate = config.baud_rate;
+        let timeout_ms = config.timeout_ms;
+        let station_id = config.station_id;
 
-        Ok(Self {
-            receiver,
-            control_sender: None,
-            _handle: handle,
-        })
-    }
+        // Open port once
+        let port_handle = crate::api::utils::open_serial_port(
+            &port_name,
+            baud_rate,
+            std::time::Duration::from_millis(timeout_ms),
+        )?;
+        let port_arc = Arc::new(Mutex::new(port_handle));
+        let port_arc_clone = Arc::clone(&port_arc);
 
-    /// Create and start a multi-register Modbus master (new Builder API)
-    ///
-    /// Polls multiple register types on the same port with middleware support.
-    pub fn new_multi_register(
-        config: ModbusPortConfig,
-        register_polls: Vec<super::RegisterPollConfig>,
-        hooks: Vec<Arc<dyn ModbusHook>>,
-        data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
-    ) -> Result<Self> {
-        let (sender, receiver) = flume::unbounded();
-        let handle = tokio::spawn(async move {
-            run_multi_register_master_loop(config, register_polls, hooks, data_sources, sender)
-                .await
+        // Spawn a minimal background task (just keeps the handle alive)
+        let handle = tokio::task::spawn_blocking(move || {
+            // Wait for stop command
+            while let Ok(cmd) = control_rx.recv() {
+                if cmd == "stop" {
+                    break;
+                }
+            }
+            Ok(())
         });
 
         Ok(Self {
-            receiver,
-            control_sender: None,
+            receiver: response_rx,
+            control_sender: Some(control_tx),
             _handle: handle,
+            port_arc: Some(port_arc_clone),
+            station_id,
         })
     }
 
-    /// Create and start a multi-register Modbus masterrator-like interface)
+    /// Execute a single poll operation (manual mode only)
+    ///
+    /// Returns the response immediately without going through the receiver channel.
+    pub fn poll_once(
+        &self,
+        register_mode: RegisterMode,
+        address: u16,
+        length: u16,
+    ) -> Result<ModbusResponse> {
+        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+        })?;
+
+        core::execute_single_poll_internal(
+            port_arc,
+            self.station_id,
+            address,
+            length,
+            register_mode,
+        )
+    }
+
+    /// Write coils (01 function code) to the slave
+    ///
+    /// Returns Ok(()) if write was acknowledged successfully.
+    /// 
+    /// **Note for 储氢罐 hardware**: The hardware requires byte-swapping for 11-coil writes.
+    /// Apply `swap_coils_byte_order()` before calling this method if needed.
+    pub fn write_coils(&self, address: u16, values: &[bool]) -> Result<()> {
+        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+        })?;
+
+        use crate::protocol::modbus::generate_pull_set_coils_request;
+        use std::io::{Read, Write};
+
+        // Generate write request
+        let mut request = generate_pull_set_coils_request(self.station_id, values.to_vec())?;
+        let mut frame = Vec::new();
+        request.generate_set_coils_bulk(address, values, &mut frame)?;
+
+        // Apply byte-swapping for 储氢罐 hardware (11 coils = 2 bytes)
+        // Modbus frame: [station(1), func(1), addr(2), count(2), bytes(1), data(...), CRC(2)]
+        if values.len() == 11 && frame.len() >= 9 && frame[6] == 2 {
+            frame.swap(7, 8);
+            log::debug!("🔄 Applied byte-swap for 11-coil write");
+        }
+
+        // Send request
+        let mut port = port_arc.lock().unwrap();
+        port.write_all(&frame)?;
+        port.flush()?;
+
+        // Read confirmation
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut buffer = vec![0u8; 256];
+        let bytes_read = port.read(&mut buffer)?;
+
+        if bytes_read < 8 {
+            return Err(anyhow::anyhow!(
+                "Incomplete write response: {} bytes",
+                bytes_read
+            ));
+        }
+
+        // Check response
+        let response = &buffer[..bytes_read];
+        if response[1] == 0x0F {
+            // Success
+            Ok(())
+        } else if response[1] & 0x80 != 0 {
+            // Exception
+            Err(anyhow::anyhow!(
+                "Modbus exception: error code 0x{:02X}",
+                response[2]
+            ))
+        } else {
+            Err(anyhow::anyhow!("Unexpected response"))
+        }
+    }
+
+    /// Get a reference to the port handle for advanced operations (manual mode only)
+    pub fn port_handle(&self) -> Option<&Arc<Mutex<Box<dyn serialport::SerialPort>>>> {
+        self.port_arc.as_ref()
+    }
+
+    /// Try to receive without blocking (iterator-like interface)
     pub fn try_recv(&self) -> Option<ModbusResponse> {
         self.receiver.try_recv().ok()
     }
@@ -177,6 +269,65 @@ impl ModbusMaster {
     /// Stop the master loop gracefully
     pub fn stop(&self) -> Result<()> {
         self.send_control("stop")
+    }
+}
+
+/// Create and start a new Modbus master (legacy Builder API with middleware)
+///
+/// Accepts hooks and data sources as vectors for middleware pattern.
+fn new_master_legacy(
+    config: ModbusPortConfig,
+    hooks: Vec<Arc<dyn ModbusHook>>,
+    data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
+) -> Result<ModbusMaster> {
+    let (sender, receiver) = flume::unbounded();
+    let station_id = config.station_id;
+
+    let handle =
+        tokio::spawn(async move { run_master_loop(config, hooks, data_sources, sender).await });
+
+    Ok(ModbusMaster {
+        receiver,
+        control_sender: None,
+        _handle: handle,
+        port_arc: None,
+        station_id,
+    })
+}
+
+impl ModbusMaster {
+    /// Create and start a multi-register Modbus master (new Builder API)
+    ///
+    /// Polls multiple register types on the same port with middleware support.
+    pub fn new_multi_register(
+        config: ModbusPortConfig,
+        register_polls: Vec<super::RegisterPollConfig>,
+        hooks: Vec<Arc<dyn ModbusHook>>,
+        data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
+    ) -> Result<Self> {
+        let (sender, receiver) = flume::unbounded();
+        let station_id = config.station_id;
+        let handle = tokio::spawn(async move {
+            run_multi_register_master_loop(config, register_polls, hooks, data_sources, sender)
+                .await
+        });
+
+        Ok(Self {
+            receiver,
+            control_sender: None,
+            _handle: handle,
+            port_arc: None,
+            station_id,
+        })
+    }
+
+    /// Legacy constructor using hooks and data sources
+    pub fn new(
+        config: ModbusPortConfig,
+        hooks: Vec<Arc<dyn ModbusHook>>,
+        data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
+    ) -> Result<Self> {
+        new_master_legacy(config, hooks, data_sources)
     }
 }
 
