@@ -62,48 +62,6 @@ pub struct RegisterPollConfig {
     pub register_length: u16,
 }
 
-/// Robust mode configuration for unreliable or slow devices.
-///
-/// Enables aggressive retry and recovery strategies for devices with:
-/// - Very slow response times (3-4+ seconds)
-/// - High packet loss rates
-/// - Poor buffer management
-/// - Intermittent data corruption
-#[derive(Debug, Clone)]
-pub struct RobustModeConfig {
-    /// Increase read timeout significantly (milliseconds).
-    /// Recommended: 5000ms for very slow devices. Default: 5000ms.
-    pub read_timeout_ms: u64,
-
-    /// Number of retries for failed requests.
-    /// Recommended: 10 for extremely unreliable devices. Default: 5.
-    pub max_retries: u32,
-
-    /// Delay after timeout/failure before retry (milliseconds).
-    /// Recommended: 500ms to let slave stabilize. Default: 500ms.
-    pub retry_delay_ms: u64,
-
-    /// Delay after successful reception before next poll (milliseconds).
-    /// Recommended: 1000ms to give slave breathing room. Default: 1000ms.
-    pub success_delay_ms: u64,
-
-    /// Force flush input buffer before each write (clears residual data).
-    /// Recommended: true. Default: true.
-    pub flush_input_buffer: bool,
-}
-
-impl Default for RobustModeConfig {
-    fn default() -> Self {
-        Self {
-            read_timeout_ms: 5000,
-            max_retries: 5,
-            retry_delay_ms: 500,
-            success_delay_ms: 1000,
-            flush_input_buffer: true,
-        }
-    }
-}
-
 /// Builder for creating Modbus configurations and starting loops.
 ///
 /// # Middleware Pattern
@@ -130,9 +88,6 @@ pub struct ModbusBuilder {
     hooks: Vec<Arc<dyn ModbusHook>>,
     // Middleware chain: supports multiple data sources (Master only)
     data_sources: Vec<Arc<Mutex<dyn traits::ModbusDataSource>>>,
-
-    // Robust mode configuration (for unreliable devices)
-    robust_mode: Option<RobustModeConfig>,
 }
 
 impl ModbusBuilder {
@@ -152,7 +107,6 @@ impl ModbusBuilder {
             register_polls: Vec::new(),
             hooks: Vec::new(),
             data_sources: Vec::new(),
-            robust_mode: None,
         }
     }
 
@@ -172,7 +126,6 @@ impl ModbusBuilder {
             register_polls: Vec::new(),
             hooks: Vec::new(),
             data_sources: Vec::new(),
-            robust_mode: None,
         }
     }
 
@@ -285,66 +238,6 @@ impl ModbusBuilder {
     /// ```
     pub fn with_poll_interval(mut self, interval_ms: u64) -> Self {
         self.poll_interval_ms = interval_ms;
-        self
-    }
-
-    /// Enable robust mode for unreliable or very slow devices.
-    ///
-    /// Applies aggressive retry and recovery strategies:
-    /// - Increases read timeout to 5 seconds
-    /// - Enables 5-10 retries per request
-    /// - Adds recovery delays between failures
-    /// - Flushes input buffer before each write
-    /// - Adds breathing time after successful reads
-    ///
-    /// Recommended for devices with:
-    /// - Very slow response times (3-4+ seconds)
-    /// - High packet loss rates
-    /// - Poor buffer management
-    /// - Intermittent data corruption
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode};
-    ///
-    /// let master = ModbusBuilder::new_master(0x13)
-    ///     .with_port("ttyUSB-CH340-A")
-    ///     .with_baud_rate(57600)
-    ///     .with_register(RegisterMode::Holding, 0x12, 2)
-    ///     .with_robust_mode()  // Enable for unreliable device
-    ///     .build_master()?;
-    /// # Ok::<(), anyhow::Error>(())
-    /// ```
-    pub fn with_robust_mode(mut self) -> Self {
-        self.robust_mode = Some(RobustModeConfig::default());
-        self
-    }
-
-    /// Enable robust mode with custom configuration.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode, RobustModeConfig};
-    ///
-    /// let robust = RobustModeConfig {
-    ///     read_timeout_ms: 8000,       // 8 seconds for extremely slow device
-    ///     max_retries: 10,             // Try up to 10 times
-    ///     retry_delay_ms: 1000,        // Wait 1s between retries
-    ///     success_delay_ms: 2000,      // Wait 2s after successful read
-    ///     flush_input_buffer: true,
-    /// };
-    ///
-    /// let master = ModbusBuilder::new_master(0x13)
-    ///     .with_port("ttyUSB-CH340-A")
-    ///     .with_baud_rate(57600)
-    ///     .with_robust_mode_config(robust)
-    ///     .build_master()?;
-    /// # Ok::<(), anyhow::Error>(())
-    /// ```
-    pub fn with_robust_mode_config(mut self, config: RobustModeConfig) -> Self {
-        self.robust_mode = Some(config);
         self
     }
 
@@ -478,7 +371,7 @@ impl ModbusBuilder {
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn build_master(mut self) -> Result<master::ModbusMaster> {
+    pub fn build_master(self) -> Result<master::ModbusMaster> {
         if self.role != StationMode::Master {
             return Err(anyhow!("Builder is configured for Slave, not Master"));
         }
@@ -486,23 +379,6 @@ impl ModbusBuilder {
         let port_name = self.port_name.ok_or_else(|| {
             anyhow!("Port name is required. Use with_port() or with_virtual_port()")
         })?;
-
-        // Apply robust mode configuration if enabled
-        if let Some(robust) = &self.robust_mode {
-            self.timeout_ms = robust.read_timeout_ms;
-
-            // Add robust mode hook if flush_input_buffer is enabled
-            if robust.flush_input_buffer {
-                self.hooks.push(Arc::new(RobustModeHook {
-                    retry_delay_ms: robust.retry_delay_ms,
-                    success_delay_ms: robust.success_delay_ms,
-                    max_retries: robust.max_retries,
-                }));
-            }
-
-            // Adjust poll interval to include breathing room after success
-            self.poll_interval_ms = self.poll_interval_ms.max(robust.success_delay_ms);
-        }
 
         // If there are multiple polling configurations, use multi-register mode
         let config = ModbusPortConfig {
@@ -529,47 +405,56 @@ impl ModbusBuilder {
             master::ModbusMaster::new(config, self.hooks, self.data_sources)
         }
     }
-}
 
-/// Robust mode hook for managing retries and buffer flushing
-struct RobustModeHook {
-    retry_delay_ms: u64,
-    success_delay_ms: u64,
-    max_retries: u32,
-}
+    /// Build a manual-mode Modbus master
+    ///
+    /// This creates a master that does NOT automatically poll.
+    /// Instead, you must call `poll_once()` or `write_coils()` manually.
+    ///
+    /// Use this when you need fine-grained control over polling timing,
+    /// such as implementing a state machine or adaptive polling strategy.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+    ///
+    /// let master = ModbusBuilder::new_master(19)
+    ///     .with_port("COM1")
+    ///     .with_baud_rate(57600)
+    ///     .with_timeout(5000)
+    ///     .build_master_manual()?;
+    ///
+    /// // Manual single-shot poll
+    /// let response = master.poll_once(RegisterMode::Holding, 0x10, 33)?;
+    /// println!("Values: {:?}", response.values);
+    ///
+    /// // Write coils
+    /// master.write_coils(0x01, &[true, false, true])?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn build_master_manual(self) -> Result<master::ModbusMaster> {
+        if self.role != StationMode::Master {
+            return Err(anyhow!("Builder is configured for Slave, not Master"));
+        }
 
-impl ModbusHook for RobustModeHook {
-    fn on_before_request(&self, _port: &str) -> Result<()> {
-        // Log configured max_retries so the field is actively used.
-        log::debug!("Robust mode: configured max_retries = {}", self.max_retries);
-        Ok(())
-    }
+        let port_name = self.port_name.ok_or_else(|| {
+            anyhow!("Port name is required. Use with_port() or with_virtual_port()")
+        })?;
 
-    fn on_after_response(&self, _port: &str, _response: &ModbusResponse) -> Result<()> {
-        // Add breathing time after successful response
-        log::debug!(
-            "Robust mode: adding {}ms delay after successful response",
-            self.success_delay_ms
-        );
-        std::thread::sleep(std::time::Duration::from_millis(self.success_delay_ms));
-        Ok(())
-    }
+        let config = ModbusPortConfig {
+            port_name,
+            baud_rate: self.baud_rate,
+            station_id: self.station_id,
+            register_address: self.register_address,
+            register_length: self.register_length,
+            register_mode: self.register_mode,
+            timeout_ms: self.timeout_ms,
+            error_recovery_delay_ms: self.error_recovery_delay_ms,
+            poll_interval_ms: self.poll_interval_ms,
+        };
 
-    fn on_error(&self, _port: &str, _error: &anyhow::Error) {
-        // Add delay after error
-        log::warn!(
-            "Robust mode: adding {}ms delay after error",
-            self.retry_delay_ms
-        );
-        std::thread::sleep(std::time::Duration::from_millis(self.retry_delay_ms));
-    }
-
-    fn hook_max_retries(&self) -> Option<u32> {
-        Some(self.max_retries)
-    }
-
-    fn hook_retry_delay_ms(&self) -> Option<u64> {
-        Some(self.retry_delay_ms)
+        master::ModbusMaster::new_manual(config)
     }
 }
 
