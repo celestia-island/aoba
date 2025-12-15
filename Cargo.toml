@@ -33,7 +33,7 @@ authors = ["langyo <langyo.china@gmail.com>"]
 description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus RTU."
 repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
-version = "0.0.14"
+version = "0.0.15"
 edition = "2021"
 exclude = [
   "docs/**",
