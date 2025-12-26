@@ -8,10 +8,7 @@ use crate::{
     core::bus::{self, Bus},
     tui::{
         status as types,
-        status::{
-            cursor::Cursor,
-            {read_status, write_status},
-        },
+        status::{cursor::Cursor, read_status, write_status},
     },
     utils::i18n::lang,
 };
