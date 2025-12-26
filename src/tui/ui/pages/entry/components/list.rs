@@ -10,15 +10,12 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
     tui::{
         status as types,
-        {
-            status::{
-                port::{PortData, PortState},
-                read_status,
-            },
-            ui::{
-                components::boxed_paragraph::render_boxed_paragraph,
-                pages::entry::SPECIAL_ITEMS_COUNT,
-            },
+        status::{
+            port::{PortData, PortState},
+            read_status,
+        },
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
         },
     },
     utils::i18n::lang,

@@ -6,10 +6,7 @@ use super::actions::{handle_enter_action, handle_leave_page};
 use crate::{
     tui::{
         status as types,
-        status::{
-            cursor::Cursor,
-            {read_status, write_status},
-        },
+        status::{cursor::Cursor, read_status, write_status},
         utils::bus::{self, Bus, UiToCore},
     },
     utils::i18n::lang,

@@ -12,7 +12,7 @@ use crate::{
                 RegisterMode, StationMode,
             },
             port::{PortState, PortSubprocessInfo, PortSubprocessMode},
-            {read_status, write_status},
+            read_status, write_status,
         },
         ui::components::input_span_handler::handle_input_span,
         utils::bus::{self, Bus, UiToCore},
