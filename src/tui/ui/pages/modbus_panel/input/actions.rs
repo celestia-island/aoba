@@ -6,7 +6,7 @@ use crate::{
         status as types,
         status::{
             port::{PortState, PortSubprocessInfo, PortSubprocessMode},
-            {read_status, write_status},
+            read_status, write_status,
         },
         utils::bus::{self, Bus, UiToCore},
     },
