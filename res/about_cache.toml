@@ -92,7 +92,7 @@ version = "1"
 
 [[dependencies]]
 name = "rand"
-version = "0.9"
+version = "0.10"
 
 [[dependencies]]
 name = "ratatui"
@@ -189,7 +189,7 @@ derive_more = "MIT"
 env_logger = "MIT OR Apache-2.0"
 flume = "Apache-2.0/MIT"
 futures = "MIT OR Apache-2.0"
-interprocess = "MIT OR Apache-2.0"
+interprocess = "0BSD OR Apache-2.0"
 libc = "MIT OR Apache-2.0"
 log = "MIT OR Apache-2.0"
 num_enum = "BSD-3-Clause OR MIT OR Apache-2.0"
