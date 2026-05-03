@@ -193,9 +193,60 @@ cargo run --package api_master -- /tmp/vcom1
 
 ---
 
-## 7. 延伸阅读
+## 7. 手动模式主站（poll_once / 写操作）
+
+在需要精细控制轮询时序的场景（状态机、自适应策略、写操作等），使用 `build_master_manual()`：
+
+```rust
+use anyhow::Result;
+use _main::api::modbus::{ModbusBuilder, RegisterMode};
+
+fn main() -> Result<()> {
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_baud_rate(9600)
+        .with_timeout(5000)
+        .build_master_manual()?;
+
+    // 单次轮询
+    let response = master.poll_once(RegisterMode::Holding, 0x00, 10)?;
+    println!("值: {:?}", response.values);
+
+    // 写入单个保持寄存器 (fc 0x06)
+    master.write_holding(0x00, 0x1234)?;
+
+    // 写入多个保持寄存器 (fc 0x10)
+    master.write_registers(0x00, &[0x1234, 0x5678, 0x9ABC])?;
+
+    // 写入线圈 (fc 0x0F)
+    master.write_coils(0x00, &[true, false, true, true])?;
+
+    Ok(())
+}
+```
+
+### 何时使用手动模式
+
+| 场景 | 推荐模式 |
+|------|---------|
+| 持续监控 / 数据采集 | `build_master()`（自动模式） |
+| 读-改-写控制循环 | `build_master_manual()` |
+| 状态机 / 事件驱动轮询 | `build_master_manual()` |
+| 根据响应延迟自适应轮询 | `build_master_manual()` |
+| 一次性诊断或配置 | `build_master_manual()` |
+
+### 写操作详解
+
+- **`write_holding(address, value)`** — 使用功能码 0x06 写入单个保持寄存器，适合写入单个配置参数。
+- **`write_registers(address, values)`** — 使用功能码 0x10 写入多个连续保持寄存器，适合批量参数写入。
+- **`write_coils(address, values)`** — 使用功能码 0x0F 写入多个线圈。对于 11 线圈写入会自动执行字节交换（特定硬件需要）。
+- 所有写方法会阻塞直到从站确认响应或发生错误。
+
+---
+
+## 8. 延伸阅读
 
 - 从站侧 API 使用示例：`examples/api_slave`；
-- CLI 级别的 Modbus 使用说明：`docs/zh-chs/CLI_MODBUS.md`；
+- CLI 级别的 Modbus 使用说明：`docs/zhs/CLI_MODBUS.md`；
 - HTTP / MQTT / IPC 等数据源对接文档：同目录下 `DATA_SOURCE_*.md`；
 - 若要结合 TUI 做 E2E 测试，请参考 `examples/tui_e2e` 及根目录下 `CLAUDE.md` 中关于 IPC 与状态监控的介绍。
