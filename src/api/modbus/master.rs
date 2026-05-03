@@ -232,6 +232,91 @@ impl ModbusMaster {
         self.port_arc.as_ref()
     }
 
+    /// Write multiple holding registers (function code 0x10) to the slave.
+    ///
+    /// For a single register, consider using `write_holding` instead (fc 0x06).
+    /// Returns Ok(()) if the write was acknowledged successfully.
+    pub fn write_registers(&self, address: u16, values: &[u16]) -> Result<()> {
+        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+        })?;
+
+        use crate::protocol::modbus::generate_pull_set_holdings_bulk_request;
+        use std::io::{Read, Write};
+
+        let (_request, frame) =
+            generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
+
+        let mut port = port_arc.lock().unwrap();
+        port.write_all(&frame)?;
+        port.flush()?;
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut buffer = vec![0u8; 256];
+        let bytes_read = port.read(&mut buffer)?;
+
+        if bytes_read < 8 {
+            return Err(anyhow::anyhow!(
+                "Incomplete write response: {} bytes",
+                bytes_read
+            ));
+        }
+
+        let response = &buffer[..bytes_read];
+        if response[1] == 0x10 {
+            Ok(())
+        } else if response[1] & 0x80 != 0 {
+            Err(anyhow::anyhow!(
+                "Modbus exception: error code 0x{:02X}",
+                response[2]
+            ))
+        } else {
+            Err(anyhow::anyhow!("Unexpected response"))
+        }
+    }
+
+    /// Write a single holding register (function code 0x06) to the slave.
+    ///
+    /// Returns Ok(()) if the write was acknowledged successfully.
+    pub fn write_holding(&self, address: u16, value: u16) -> Result<()> {
+        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+        })?;
+
+        use crate::protocol::modbus::generate_pull_set_holding_request;
+        use std::io::{Read, Write};
+
+        let (_request, frame) =
+            generate_pull_set_holding_request(self.station_id, address, value)?;
+
+        let mut port = port_arc.lock().unwrap();
+        port.write_all(&frame)?;
+        port.flush()?;
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut buffer = vec![0u8; 256];
+        let bytes_read = port.read(&mut buffer)?;
+
+        if bytes_read < 8 {
+            return Err(anyhow::anyhow!(
+                "Incomplete write response: {} bytes",
+                bytes_read
+            ));
+        }
+
+        let response = &buffer[..bytes_read];
+        if response[1] == 0x06 {
+            Ok(())
+        } else if response[1] & 0x80 != 0 {
+            Err(anyhow::anyhow!(
+                "Modbus exception: error code 0x{:02X}",
+                response[2]
+            ))
+        } else {
+            Err(anyhow::anyhow!("Unexpected response"))
+        }
+    }
+
     /// Try to receive without blocking (iterator-like interface)
     pub fn try_recv(&self) -> Option<ModbusResponse> {
         self.receiver.try_recv().ok()
