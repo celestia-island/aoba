@@ -30,7 +30,7 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
         return v.clone();
     }
 
-    const ABOUT_TOML: &str = include_str!("../../../../../res/about_cache.toml");
+    const ABOUT_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/res/about_cache.toml"));
 
     let mut cache = RepoManifest::default();
 
