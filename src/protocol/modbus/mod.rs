@@ -26,6 +26,7 @@ pub use pull_get_holdings::{generate_pull_get_holdings_request, parse_pull_get_h
 pub use pull_get_inputs::{generate_pull_get_inputs_request, parse_pull_get_inputs};
 pub use pull_set_coils::generate_pull_set_coils_request;
 pub use pull_set_holdings::generate_pull_set_holding_request;
+pub use pull_set_holdings::generate_pull_set_holdings_bulk_request;
 use rmodbus::{
     client::ModbusRequest,
     consts::ModbusFunction,
