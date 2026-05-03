@@ -149,7 +149,7 @@ You can pair this with the master example or Aoba CLI/TUI for testing:
 
 ## 7. Related documentation
 
-- Master‑side API: `docs/en-us/API_MODBUS_MASTER.md`;
-- CLI‑level Modbus usage: `docs/en-us/CLI_MODBUS.md`;
+- Master‑side API: `docs/en/API_MODBUS_MASTER.md`;
+- CLI‑level Modbus usage: `docs/en/CLI_MODBUS.md`;
 - Data source / export capabilities (HTTP, MQTT, IPC, etc.): see the `DATA_SOURCE_*.md` documents in this directory;
 - More end‑to‑end examples live under the `examples` directory.

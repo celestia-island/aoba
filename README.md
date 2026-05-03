@@ -123,7 +123,7 @@ async fn main() -> anyhow::Result<()> {
     let master = ModbusBuilder::new_master(1)
         .with_port("/dev/ttyUSB0")
         .with_register(RegisterMode::Holding, 0, 10)
-        .start_master(None, None)?;
+        .build_master()?;
 
     // Receive responses via iterator interface
     while let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
@@ -144,12 +144,40 @@ async fn main() -> anyhow::Result<()> {
     let slave = ModbusBuilder::new_slave(1)
         .with_port("/dev/ttyUSB0")
         .with_register(RegisterMode::Holding, 0, 10)
-        .start_slave(None)?;
+        .build_slave()?;
 
     // Receive request notifications via iterator interface
     while let Some(notification) = slave.recv_timeout(std::time::Duration::from_secs(10)) {
         println!("Processed request: {:?}", notification.values);
     }
+    Ok(())
+}
+```
+
+**Manual Mode (write operations + single-shot polling):**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+fn main() -> anyhow::Result<()> {
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_timeout(5000)
+        .build_master_manual()?;
+
+    // Single-shot poll
+    let resp = master.poll_once(RegisterMode::Holding, 0, 10)?;
+    println!("Values: {:?}", resp.values);
+
+    // Write single holding register (fc 0x06)
+    master.write_holding(0x00, 0x1234)?;
+
+    // Write multiple holding registers (fc 0x10)
+    master.write_registers(0x00, &[0x1234, 0x5678])?;
+
+    // Write coils (fc 0x0F)
+    master.write_coils(0x00, &[true, false, true])?;
+
     Ok(())
 }
 ```

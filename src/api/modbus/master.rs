@@ -286,8 +286,7 @@ impl ModbusMaster {
         use crate::protocol::modbus::generate_pull_set_holding_request;
         use std::io::{Read, Write};
 
-        let (_request, frame) =
-            generate_pull_set_holding_request(self.station_id, address, value)?;
+        let (_request, frame) = generate_pull_set_holding_request(self.station_id, address, value)?;
 
         let mut port = port_arc.lock().unwrap();
         port.write_all(&frame)?;

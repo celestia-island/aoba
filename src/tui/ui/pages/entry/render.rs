@@ -499,9 +499,9 @@ fn render_node(
     // Render all references with proper timeline characters
     if !references.is_empty() {
         let reference_style = Style::default().fg(Color::Green);
-        let mut current_y = area.y + area.height;
-
-        for (idx, reference_text) in references.iter().enumerate() {
+        for (current_y, (idx, reference_text)) in
+            (area.y + area.height..).zip(references.iter().enumerate())
+        {
             // Use └─ for the last reference, ├─ for others
             let timeline_char = if idx == references.len() - 1 {
                 "└"
@@ -522,8 +522,6 @@ fn render_node(
                 .style(reference_style)
                 .alignment(Alignment::Left);
             frame.render_widget(reference_widget, reference_area);
-
-            current_y += 1;
         }
     }
 

@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
     let master = ModbusBuilder::new_master(1)
         .with_port("/dev/ttyUSB0")
         .with_register(RegisterMode::Holding, 0, 10)
-        .start_master(None, None)?;
+        .build_master()?;
 
     // 通过迭代器接口接收响应
     while let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
@@ -146,12 +146,40 @@ async fn main() -> anyhow::Result<()> {
     let slave = ModbusBuilder::new_slave(1)
         .with_port("/dev/ttyUSB0")
         .with_register(RegisterMode::Holding, 0, 10)
-        .start_slave(None)?;
+        .build_slave()?;
 
     // 通过迭代器接口接收请求通知
     while let Some(notification) = slave.recv_timeout(std::time::Duration::from_secs(10)) {
         println!("已处理请求: {:?}", notification.values);
     }
+    Ok(())
+}
+```
+
+**手动模式（写入操作 + 单次轮询）：**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+fn main() -> anyhow::Result<()> {
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_timeout(5000)
+        .build_master_manual()?;
+
+    // 单次轮询
+    let resp = master.poll_once(RegisterMode::Holding, 0, 10)?;
+    println!("值: {:?}", resp.values);
+
+    // 写入单个保持寄存器 (fc 0x06)
+    master.write_holding(0x00, 0x1234)?;
+
+    // 写入多个保持寄存器 (fc 0x10)
+    master.write_registers(0x00, &[0x1234, 0x5678])?;
+
+    // 写入线圈 (fc 0x0F)
+    master.write_coils(0x00, &[true, false, true])?;
+
     Ok(())
 }
 ```

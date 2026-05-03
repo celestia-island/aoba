@@ -152,7 +152,7 @@ cargo run --package api_slave -- /tmp/vcom2
 
 ## 7. 延伸阅读
 
-- 主站侧 API 使用示例：`docs/zh-chs/API_MODBUS_MASTER.md`；
-- CLI 级别 Modbus 使用说明：`docs/zh-chs/CLI_MODBUS.md`；
+- 主站侧 API 使用示例：`docs/zhs/API_MODBUS_MASTER.md`；
+- CLI 级别 Modbus 使用说明：`docs/zhs/CLI_MODBUS.md`；
 - 数据源/数据出口能力（HTTP、MQTT、IPC 等）：同目录下 `DATA_SOURCE_*.md` 文档；
 - 更多综合示例可参考 `examples` 目录中的其他子项目。

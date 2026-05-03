@@ -159,8 +159,59 @@ In a production‑like testbed (such as a hydrogen storage tank bench), you typi
 
 ---
 
-## 7. Next steps
+## 7. Manual-Mode Master (poll_once / write operations)
+
+For scenarios where you need fine-grained control over polling timing (state machines, adaptive strategies, or write operations), use `build_master_manual()`:
+
+```rust
+use anyhow::Result;
+use _main::api::modbus::{ModbusBuilder, RegisterMode};
+
+fn main() -> Result<()> {
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_baud_rate(9600)
+        .with_timeout(5000)
+        .build_master_manual()?;
+
+    // Manual single-shot poll
+    let response = master.poll_once(RegisterMode::Holding, 0x00, 10)?;
+    println!("Values: {:?}", response.values);
+
+    // Write a single holding register (fc 0x06)
+    master.write_holding(0x00, 0x1234)?;
+
+    // Write multiple holding registers (fc 0x10)
+    master.write_registers(0x00, &[0x1234, 0x5678, 0x9ABC])?;
+
+    // Write coils (fc 0x0F)
+    master.write_coils(0x00, &[true, false, true, true])?;
+
+    Ok(())
+}
+```
+
+### When to use manual mode
+
+| Scenario | Recommended Mode |
+|----------|-----------------|
+| Continuous monitoring / data collection | `build_master()` (automatic) |
+| Read-modify-write control loops | `build_master_manual()` |
+| State machine / event-driven polling | `build_master_manual()` |
+| Adaptive polling based on response latency | `build_master_manual()` |
+| One-shot diagnostics or configuration | `build_master_manual()` |
+
+### Write operation details
+
+- **`write_holding(address, value)`** — writes a single holding register using function code 0x06. Best for writing individual configuration parameters.
+- **`write_registers(address, values)`** — writes multiple consecutive holding registers using function code 0x10. Best for batch parameter writes.
+- **`write_coils(address, values)`** — writes multiple coils using function code 0x0F. Includes automatic byte-swap for 11-coil writes (required by certain hardware).
+- All write methods block until the slave acknowledges or an error occurs.
+
+---
+
+## 8. Next steps
 
 - For slave‑side APIs, see `examples/api_slave`.
-- For CLI‑level Modbus usage, see `docs/en-us/CLI_MODBUS.md`.
+- For CLI‑level Modbus usage, see `docs/en/CLI_MODBUS.md`.
 - For data export via HTTP / MQTT / IPC, see the `DATA_SOURCE_*.md` docs in this directory.

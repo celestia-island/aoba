@@ -150,7 +150,7 @@ pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
             log::warn!("📖 To enable tests, create virtual COM port pairs using:");
             log::warn!("   1. Install com0com from https://sourceforge.net/projects/com0com/");
             log::warn!("   2. Run: .\\scripts\\setup_windows_vcom.ps1 (as Administrator)");
-            log::warn!("   3. Or see docs\\zh-chs\\WINDOWS_VIRTUAL_PORTS.md for details");
+            log::warn!("   3. Or see docs\\zhs\\WINDOWS_VIRTUAL_PORTS.md for details");
             return false;
         }
         log::info!("✅ Both ports available, tests will run");
