@@ -9,7 +9,7 @@ use crate::{
             append_state_lock_ack_log, append_state_lock_request_log,
             append_stations_update_failed_log, append_stations_update_logs, append_status_log,
         },
-        status::{self as types},
+        status as types,
     },
 };
 
