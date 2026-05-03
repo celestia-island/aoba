@@ -19,4 +19,4 @@ aoba_tui_config.json
 
 # CI local test results
 ci-results/
-res/about_cache.toml
+
