@@ -33,7 +33,7 @@ authors = ["langyo <langyo.china@gmail.com>"]
 description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus RTU."
 repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
-version = "0.0.16"
+version = "0.1.0"
 edition = "2021"
 exclude = [
   "docs/**",
@@ -109,10 +109,10 @@ serialport = { version = "^4", default-features = false }
 interprocess = "^2"
 ureq = { version = "^3", features = [
   "json",
-  "native-tls",
+  "rustls",
 ], default-features = false }
 rumqttc = { version = "^0.25", default-features = false, features = [
-  "use-native-tls",
+  "use-rustls",
 ] }
 axum = "^0.8"
 
