@@ -453,9 +453,51 @@ pub async fn run_master_loop_with_handler(
         // Check if data source has new data to write
         if let Some(ds) = &data_source {
             match ds.lock().unwrap().next_data() {
-                Ok(Some(_values)) => {
-                    // TODO: Implement write operation based on register mode
-                    // For now, we'll just log it
+                Ok(Some(values)) => {
+                    log::info!(
+                        "Data source provided {} values for write operation (mode={:?})",
+                        values.len(),
+                        config.register_mode,
+                    );
+                    let write_result = match config.register_mode {
+                        RegisterMode::Coils => {
+                            let coil_values: Vec<bool> =
+                                values.iter().map(|&v| v != 0).collect();
+                            crate::api::modbus::core::master_write_coils(
+                                port_arc.clone(),
+                                config.station_id,
+                                config.register_address,
+                                &coil_values,
+                            )?;
+                            Ok(())
+                        }
+                        RegisterMode::Holding => {
+                            use std::io::Write;
+                            let (_request, frame) =
+                                crate::protocol::modbus::generate_pull_set_holdings_bulk_request(
+                                    config.station_id,
+                                    config.register_address,
+                                    &values,
+                                )?;
+                            let mut port = port_arc.lock().unwrap();
+                            port.write_all(&frame)?;
+                            port.flush()?;
+                            Ok(())
+                        }
+                        other => {
+                            log::warn!(
+                                "Write operation not supported for {:?}",
+                                other
+                            );
+                            Ok(())
+                        }
+                    };
+                    if let Err(e) = write_result {
+                        log::warn!("Data source write failed: {e}");
+                        if let Some(h) = &hooks {
+                            h.on_error(&config.port_name, &e);
+                        }
+                    }
                 }
                 Ok(None) => {
                     // No data this cycle
