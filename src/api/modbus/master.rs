@@ -1,8 +1,7 @@
+use std::{sync::Arc, time::Duration};
+
 use anyhow::Result;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use parking_lot::Mutex;
 
 use super::{
     core::{self, master_poll_loop, MasterPollParams},
@@ -195,7 +194,7 @@ impl ModbusMaster {
         }
 
         // Send request
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&frame)?;
         port.flush()?;
 
@@ -247,7 +246,7 @@ impl ModbusMaster {
         let (_request, frame) =
             generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
 
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&frame)?;
         port.flush()?;
 
@@ -288,7 +287,7 @@ impl ModbusMaster {
 
         let (_request, frame) = generate_pull_set_holding_request(self.station_id, address, value)?;
 
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&frame)?;
         port.flush()?;
 
@@ -452,7 +451,7 @@ pub async fn run_master_loop_with_handler(
 
         // Check if data source has new data to write
         if let Some(ds) = &data_source {
-            match ds.lock().unwrap().next_data() {
+            match ds.lock().next_data() {
                 Ok(Some(values)) => {
                     log::info!(
                         "Data source provided {} values for write operation (mode={:?})",
@@ -479,7 +478,7 @@ pub async fn run_master_loop_with_handler(
                                     config.register_address,
                                     &values,
                                 )?;
-                            let mut port = port_arc.lock().unwrap();
+                            let mut port = port_arc.lock();
                             port.write_all(&frame)?;
                             port.flush()?;
                             Ok(())
@@ -706,7 +705,7 @@ async fn run_master_loop(
 
                                         // Send write request and receive confirmation
                                         {
-                                            let mut port = port_arc.lock().unwrap();
+                                            let mut port = port_arc.lock();
                                             if let Err(e) = port.write_all(&request_frame) {
                                                 log::error!("Failed to send write request: {}", e);
                                                 let err = anyhow::anyhow!(
@@ -980,7 +979,7 @@ async fn run_multi_register_master_loop(
 
                                         // Send write request
                                         let write_result = {
-                                            let mut port = port_arc.lock().unwrap();
+                                            let mut port = port_arc.lock();
                                             let write_res = port.write_all(&request_frame);
                                             if write_res.is_ok() {
                                                 port.flush()
@@ -1008,7 +1007,7 @@ async fn run_multi_register_master_loop(
                                             // Read confirmation (acquire lock again)
                                             let mut buffer = vec![0u8; 256];
                                             let read_result = {
-                                                let mut port = port_arc.lock().unwrap();
+                                                let mut port = port_arc.lock();
                                                 port.read(&mut buffer)
                                             };
 

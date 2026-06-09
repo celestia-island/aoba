@@ -14,7 +14,8 @@
 ///
 /// The handler chain stops at the first `Ok`, or returns the last non-NotHandled error.
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 use crate::protocol::status::types::modbus::ModbusResponse;
 
@@ -265,7 +266,7 @@ pub fn execute_data_source_chain(
     }
 
     for (i, source) in sources.iter_mut().enumerate() {
-        let mut src = source.lock().unwrap();
+        let mut src = source.lock();
         match src.next_data() {
             Ok(Some(data)) => {
                 return Ok(Some(data)); // First data source intercepts

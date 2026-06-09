@@ -15,162 +15,11 @@ pub struct IpcConnections {
     pub command_listener: IpcCommandListener,
 }
 
-/// Check if a port is occupied using Windows API (Windows) or file lock checking (Unix)
-/// Returns true if occupied, false if free
+/// Check if a port is occupied by another process.
+///
+/// Delegates to the public library function [`crate::api::utils::is_port_occupied`].
 fn check_port_occupation(port_name: &str) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        use windows::{
-            core::PCWSTR,
-            Win32::{
-                Foundation::{CloseHandle, GetLastError, WIN32_ERROR},
-                Storage::FileSystem::{
-                    CreateFileW, FILE_FLAG_OVERLAPPED, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
-                    FILE_SHARE_NONE, OPEN_EXISTING,
-                },
-            },
-        };
-
-        // Convert COM port name to Windows device path (e.g., "COM3" -> "\\.\\COM3")
-        let device_path = if port_name.starts_with("\\\\.\\\\") {
-            port_name.to_string()
-        } else {
-            format!("\\\\.\\{port_name}")
-        };
-
-        // Convert to UTF-16 for Windows API
-        let wide_path: Vec<u16> = device_path
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
-
-        // Try to open port with exclusive access (FILE_SHARE_NONE)
-        // If another process has it open, this will fail with ERROR_SHARING_VIOLATION
-        unsafe {
-            let handle = CreateFileW(
-                PCWSTR(wide_path.as_ptr()),
-                FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0,
-                FILE_SHARE_NONE,
-                None,
-                OPEN_EXISTING,
-                FILE_FLAG_OVERLAPPED,
-                None,
-            );
-
-            if handle.is_err() {
-                // Failed to open, check error code
-                let error = GetLastError();
-
-                // ERROR_SHARING_VIOLATION (32) means port is occupied by another process
-                // ERROR_ACCESS_DENIED (5) may also indicate occupation
-                let is_occupied = matches!(error, WIN32_ERROR(32) | WIN32_ERROR(5));
-
-                return is_occupied;
-            }
-
-            // Successfully opened, close it and return free
-            let handle = handle.unwrap();
-            let _ = CloseHandle(handle);
-            false
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        use std::fs;
-        use std::os::unix::fs::MetadataExt;
-        use std::path::{Path, PathBuf};
-
-        fn canonical_device_path(port_path: &str) -> Option<PathBuf> {
-            match fs::canonicalize(port_path) {
-                Ok(path) => Some(path),
-                Err(err) => {
-                    log::warn!(
-                        "Unable to canonicalize {}: {} (will attempt raw path)",
-                        port_path,
-                        err
-                    );
-                    let candidate = Path::new(port_path);
-                    if candidate.is_absolute() {
-                        Some(candidate.to_path_buf())
-                    } else {
-                        std::env::current_dir().ok().map(|cwd| cwd.join(candidate))
-                    }
-                }
-            }
-        }
-
-        fn device_rdev(path: &Path) -> Option<u64> {
-            fs::metadata(path).map(|meta| meta.rdev()).ok()
-        }
-
-        let target_path = match canonical_device_path(port_name) {
-            Some(p) => p,
-            None => {
-                log::warn!(
-                    "Cannot resolve device path for {} — assuming free",
-                    port_name
-                );
-                return false;
-            }
-        };
-
-        let target_rdev = match device_rdev(&target_path) {
-            Some(dev) if dev != 0 => dev,
-            _ => {
-                log::warn!(
-                    "Unable to obtain device id for {} — assuming free",
-                    target_path.display()
-                );
-                return false;
-            }
-        };
-
-        let self_pid = std::process::id();
-        if let Ok(proc_entries) = fs::read_dir("/proc") {
-            for entry in proc_entries.flatten() {
-                let file_name = entry.file_name();
-                let pid_str = file_name.to_string_lossy();
-                let pid: u32 = match pid_str.parse() {
-                    Ok(pid) => pid,
-                    Err(_) => continue,
-                };
-
-                if pid == self_pid {
-                    continue;
-                }
-
-                let fd_dir = entry.path().join("fd");
-                let fd_iter = match fs::read_dir(&fd_dir) {
-                    Ok(iter) => iter,
-                    Err(_) => continue,
-                };
-
-                for fd_entry in fd_iter.flatten() {
-                    let fd_path = fd_entry.path();
-
-                    // First try comparing by device id when accessible
-                    if let Ok(meta) = fs::metadata(&fd_path) {
-                        let rdev = meta.rdev();
-                        if rdev == target_rdev {
-                            return true;
-                        }
-                    }
-
-                    // Fallback to comparing canonicalized link targets
-                    if let Ok(link) = fs::read_link(&fd_path) {
-                        if let Ok(canon) = fs::canonicalize(&link) {
-                            if canon == target_path {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        false
-    }
+    crate::api::utils::is_port_occupied(port_name)
 }
 
 /// Helper to establish IPC connections if requested (bidirectional)
@@ -569,14 +418,14 @@ async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> anyhow:
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Initialize storage for all stations
-    let storage = std::sync::Arc::new(std::sync::Mutex::new(
+    let storage = std::sync::Arc::new(parking_lot::Mutex::new(
         rmodbus::server::storage::ModbusStorageSmall::default(),
     ));
 
     // Populate initial values for master stations
     for station in &config.stations {
         if matches!(station.mode, super::config::StationMode::Master) {
-            let mut storage_lock = storage.lock().unwrap();
+            let mut storage_lock = storage.lock();
 
             // Set initial values for coils
             for range in &station.map.coils {
@@ -663,7 +512,7 @@ async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> anyhow:
 /// Process a Modbus frame and generate a response
 fn process_modbus_frame(
     request: &[u8],
-    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &std::sync::Arc<parking_lot::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     stations: &[super::config::StationConfig],
 ) -> Option<Vec<u8>> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
@@ -685,7 +534,7 @@ fn process_modbus_frame(
     }
 
     // Process the request using rmodbus
-    let storage_lock = storage.lock().unwrap();
+    let storage_lock = storage.lock();
 
     // Parse and respond to the request
     let mut response = Vec::new();

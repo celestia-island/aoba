@@ -1,8 +1,6 @@
 use anyhow::Result;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
+use parking_lot::Mutex;
 
 use super::{
     core::{slave_process_one_request, SlaveRequestParams},
@@ -191,7 +189,7 @@ impl ModbusSlaveIterator {
         // Pre-fill storage with mock data (optional, can be customized later)
         {
             use rmodbus::server::context::ModbusContext;
-            let mut storage_lock = storage.lock().unwrap();
+            let mut storage_lock = storage.lock();
 
             for i in 0..register_length {
                 let addr = register_address + i;
@@ -249,7 +247,7 @@ impl ModbusSlaveIterator {
                 Ok(response) => {
                     // Successfully received and parsed request, reset consecutive failure counter
                     {
-                        let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                        let mut counter = self.consecutive_parse_failures.lock();
                         if *counter > 0 {
                             *counter = 0;
                         }
@@ -271,7 +269,7 @@ impl ModbusSlaveIterator {
                     // Special handling: PARSE_FAILED indicates need to detect consecutive failures
                     if err_msg.contains("parse_failed") {
                         // Increment consecutive failure counter
-                        let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                        let mut counter = self.consecutive_parse_failures.lock();
                         *counter += 1;
                         let current_count = *counter;
                         drop(counter); // Release the lock
@@ -287,7 +285,7 @@ impl ModbusSlaveIterator {
 
                             // 1. Clear residual buffer
                             {
-                                let mut residual = self.residual_buffer.lock().unwrap();
+                                let mut residual = self.residual_buffer.lock();
                                 if !residual.is_empty() {
                                     log::warn!(
                                         "🗑️  FORCED: Clearing {} residual bytes",
@@ -303,7 +301,7 @@ impl ModbusSlaveIterator {
 
                             // 3. Reset counter, start completely from scratch
                             {
-                                let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                                let mut counter = self.consecutive_parse_failures.lock();
                                 *counter = 0;
                             }
 
@@ -391,7 +389,7 @@ impl ModbusSlaveIterator {
     /// This allows updating the mock data that will be sent in responses
     pub fn update_registers(&mut self, values: &[u16]) -> Result<()> {
         use rmodbus::server::context::ModbusContext;
-        let mut storage_lock = self.storage.lock().unwrap();
+        let mut storage_lock = self.storage.lock();
 
         for (i, &value) in values.iter().enumerate() {
             if i >= self.register_length as usize {
@@ -438,7 +436,7 @@ impl ModbusSlaveIterator {
     /// ```
     pub fn init_coils(&mut self, start_address: u16, coil_states: &[bool]) -> Result<()> {
         use rmodbus::server::context::ModbusContext;
-        let mut storage_lock = self.storage.lock().unwrap();
+        let mut storage_lock = self.storage.lock();
 
         for (i, &state) in coil_states.iter().enumerate() {
             let addr = start_address + i as u16;

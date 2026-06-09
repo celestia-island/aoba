@@ -6,9 +6,10 @@ use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hasher,
     io::{BufRead, BufReader, Read, Write},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
+use parking_lot::Mutex;
 
 use axum::{extract::State, http::StatusCode, Json, Router};
 use clap::ArgMatches;
@@ -134,7 +135,7 @@ async fn handle_stations_get(
     log::info!("📤 HTTP Server: Received GET request for all station data");
 
     // Get the currently configured stations
-    let configured_stations = state.stations.lock().unwrap().clone();
+    let configured_stations = state.stations.lock().clone();
 
     let stations_snapshot: Vec<ProtocolStationConfig> = if let Some(ref storage) = state.storage {
         // Build snapshots with current values from storage for each configured station
@@ -186,7 +187,7 @@ async fn handle_stations_post(
 
     // Update the tracked stations
     {
-        let mut tracked = state.stations.lock().unwrap();
+        let mut tracked = state.stations.lock();
         *tracked = stations.clone();
     }
 
@@ -356,7 +357,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
     let storage_clone = storage.clone();
     {
-        let mut context = storage.lock().unwrap();
+        let mut context = storage.lock();
         match reg_mode {
             crate::protocol::status::types::modbus::RegisterMode::Holding => {
                 for (i, &val) in values.iter().enumerate() {
@@ -388,7 +389,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
             Ok(stations) => {
                 log::info!("Received HTTP POST with {} stations", stations.len());
                 // Update storage with received data
-                let mut context = storage_clone.lock().unwrap();
+                let mut context = storage_clone.lock();
                 for station in &stations {
                     if station.station_id == station_id {
                         // Update holding registers
@@ -452,7 +453,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         }
 
         let action = {
-            let mut port_lock = port_arc.lock().unwrap();
+            let mut port_lock = port_arc.lock();
             if let Some(port) = port_lock.as_mut() {
                 match port.read(&mut buffer) {
                     Ok(n) if n > 0 => {
@@ -654,7 +655,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     .await?;
     log::info!("Loaded initial values: {initial_values:?}");
     {
-        let mut context = storage.lock().unwrap();
+        let mut context = storage.lock();
         match reg_mode {
             crate::protocol::status::types::modbus::RegisterMode::Holding => {
                 for (i, &val) in initial_values.iter().enumerate() {
@@ -948,7 +949,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         );
 
                         // Apply the station updates to storage
-                        let mut context = storage.lock().unwrap();
+                        let mut context = storage.lock();
                         for station in &stations {
                             log::info!(
                                 "  Applying Station {}: mode={:?}",
@@ -1090,7 +1091,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         let action2 = {
             // First check if the port is virtual without holding the lock across an await.
             let is_virtual = {
-                let port = port_arc.lock().unwrap();
+                let port = port_arc.lock();
                 port.is_none()
             };
 
@@ -1100,7 +1101,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 ReadAction2::NoData
             } else {
-                let mut port = port_arc.lock().unwrap();
+                let mut port = port_arc.lock();
                 let result = match port.as_mut().unwrap().read(&mut buffer) {
                     Ok(n) if n > 0 => {
                         log::info!(
@@ -1282,7 +1283,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         let mut force = false;
                         if let Some((start, qty, _mode)) = parsed_range {
                             let now = Instant::now();
-                            let cr = changed_ranges.lock().unwrap();
+                            let cr = changed_ranges.lock();
                             for (cstart, clen, t) in cr.iter() {
                                 if now.duration_since(*t) > cache_ttl {
                                     continue;
@@ -1382,7 +1383,7 @@ fn respond_to_request(
     log::info!("respond_to_request: Received request from slave: {request:02X?}");
 
     // Parse and respond to request
-    let mut context = storage.lock().unwrap();
+    let mut context = storage.lock();
     let mut response_buf = Vec::new();
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response_buf);
     frame.parse()?;
@@ -1688,7 +1689,7 @@ fn respond_to_request(
     // Send response (only for physical ports, virtual ports don't need serial write)
     let response_frame = response.clone();
     {
-        let mut port_guard = port_arc.lock().unwrap();
+        let mut port_guard = port_arc.lock();
         if let Some(ref mut port) = *port_guard {
             port.write_all(&response)?;
             port.flush()?;
@@ -1853,7 +1854,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     values
                                 );
                                 {
-                                    let mut context = storage.lock().unwrap();
+                                    let mut context = storage.lock();
                                     match reg_mode {
                                         crate::protocol::status::types::modbus::RegisterMode::Holding => {
                                             for (i, &val) in values.iter().enumerate() {
@@ -1881,7 +1882,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 // Record changed range
                                 {
                                     let len = values.len() as u16;
-                                    let mut cr = changed_ranges.lock().unwrap();
+                                    let mut cr = changed_ranges.lock();
                                     cr.push((register_address, len, Instant::now()));
                                     while cr.len() > 1000 {
                                         cr.remove(0);
@@ -1940,7 +1941,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                         values
                                     );
                                     {
-                                        let mut context = storage.lock().unwrap();
+                                        let mut context = storage.lock();
                                         match reg_mode {
                                             crate::protocol::status::types::modbus::RegisterMode::Holding => {
                                                 for (i, &val) in values.iter().enumerate() {
@@ -1968,7 +1969,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     // Record changed range
                                     {
                                         let len = values.len() as u16;
-                                        let mut cr = changed_ranges.lock().unwrap();
+                                        let mut cr = changed_ranges.lock();
                                         cr.push((register_address, len, Instant::now()));
                                         while cr.len() > 1000 {
                                             cr.remove(0);
@@ -2014,7 +2015,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         Ok(values) => {
                             log::info!("✅ IPC: Updating storage with values from IPC: {values:?}");
                             {
-                                let mut context = storage.lock().unwrap();
+                                let mut context = storage.lock();
                                 match reg_mode {
                                             crate::protocol::status::types::modbus::RegisterMode::Holding => {
                                                 for (i, &val) in values.iter().enumerate() {
@@ -2042,7 +2043,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                             // Record changed range
                             {
                                 let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock().unwrap();
+                                let mut cr = changed_ranges.lock();
                                 cr.push((register_address, len, Instant::now()));
                                 while cr.len() > 1000 {
                                     cr.remove(0);
@@ -2108,7 +2109,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 values
                             );
                             {
-                                let mut context = storage.lock().unwrap();
+                                let mut context = storage.lock();
                                 match reg_mode {
                                     crate::protocol::status::types::modbus::RegisterMode::Holding => {
                                         for (i, &val) in values.iter().enumerate() {
@@ -2136,7 +2137,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                             // Record changed range for other thread to detect overlap
                             {
                                 let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock().unwrap();
+                                let mut cr = changed_ranges.lock();
                                 cr.push((register_address, len, Instant::now()));
                                 // Keep size bounded: trim old entries
                                 while cr.len() > 1000 {
@@ -2178,7 +2179,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         Ok(values) => {
                             log::info!("✅ Pipe: Updating storage with values: {values:?}");
                             {
-                                let mut context = storage.lock().unwrap();
+                                let mut context = storage.lock();
                                 match reg_mode {
                                     crate::protocol::status::types::modbus::RegisterMode::Holding => {
                                         for (i, &val) in values.iter().enumerate() {
@@ -2206,7 +2207,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                             // Record changed range for other thread to detect overlap
                             {
                                 let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock().unwrap();
+                                let mut cr = changed_ranges.lock();
                                 cr.push((register_address, len, Instant::now()));
                                 while cr.len() > 1000 {
                                     cr.remove(0);
@@ -2577,7 +2578,7 @@ fn handle_ipc_connection_sync(
 
         // Update storage with new values
         {
-            let mut context = ctx.storage.lock().unwrap();
+            let mut context = ctx.storage.lock();
             match ctx.reg_mode {
                 crate::protocol::status::types::modbus::RegisterMode::Holding => {
                     for (i, &val) in values.iter().enumerate() {
@@ -2604,7 +2605,7 @@ fn handle_ipc_connection_sync(
 
         // Update changed ranges to bypass debounce
         {
-            let mut ranges = ctx.changed_ranges.lock().unwrap();
+            let mut ranges = ctx.changed_ranges.lock();
             let end_addr = ctx.register_address + ctx.register_length;
             ranges.push((ctx.register_address, end_addr, Instant::now()));
         }

@@ -246,14 +246,14 @@ pub(crate) fn extract_values_from_station_configs(
 
 /// Extract values from modbus storage
 pub fn extract_values_from_storage(
-    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &std::sync::Arc<parking_lot::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     start_addr: u16,
     length: u16,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
 ) -> Result<Vec<u16>> {
     use rmodbus::server::context::ModbusContext;
 
-    let storage = storage.lock().unwrap();
+    let storage = storage.lock();
     let mut values = Vec::new();
 
     for i in 0..length {
@@ -291,7 +291,7 @@ pub fn extract_values_from_storage(
 /// This clones the provided `station` and replaces each `RegisterRange`'s
 /// `initial_values` with the values read from `storage` for that range.
 pub fn build_station_snapshot_from_storage(
-    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &std::sync::Arc<parking_lot::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     station: &crate::protocol::status::types::modbus::StationConfig,
 ) -> Result<crate::protocol::status::types::modbus::StationConfig> {
     use crate::protocol::status::types::modbus::RegisterMode;

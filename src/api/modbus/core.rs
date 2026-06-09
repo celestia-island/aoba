@@ -5,11 +5,13 @@
 /// - Master: send requests and parse responses
 ///
 /// These functions are pure and don't depend on specific communication channels.
-use anyhow::{anyhow, Result};
 use std::{
     io::{Read, Write},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
+
+use anyhow::{anyhow, Result};
+use parking_lot::Mutex;
 
 use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode, ResponseRegisterMode};
 
@@ -59,7 +61,7 @@ pub fn slave_process_one_request_with_hooks(
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
 
-    let mut residual = params.residual_buffer.lock().unwrap();
+    let mut residual = params.residual_buffer.lock();
     let residual_len = residual.len();
 
     // Read request from port with retry for complete frame
@@ -75,7 +77,7 @@ pub fn slave_process_one_request_with_hooks(
     }
     drop(residual);
 
-    let mut port = params.port_arc.lock().unwrap();
+    let mut port = params.port_arc.lock();
 
     // First read - get initial data
     let bytes_read = port.read(&mut buffer[total_bytes..])?;
@@ -108,7 +110,7 @@ pub fn slave_process_one_request_with_hooks(
         // Lower threshold to 20 bytes to more aggressively filter short response frames
         if total_bytes > 20 {
             // Clear buffer; do not attempt parsing
-            let mut residual = params.residual_buffer.lock().unwrap();
+            let mut residual = params.residual_buffer.lock();
             residual.clear();
             return Err(anyhow!(
                 "Skipped response frame echo ({} bytes)",
@@ -162,12 +164,12 @@ pub fn slave_process_one_request_with_hooks(
                 if remaining_start < total_bytes {
                     let remaining = original_data[remaining_start..].to_vec();
                     if !remaining.is_empty() {
-                        let mut residual = params.residual_buffer.lock().unwrap();
+                        let mut residual = params.residual_buffer.lock();
                         *residual = remaining.clone();
                     }
                 } else {
                     // No remaining data; ensure residual buffer is empty
-                    let mut residual = params.residual_buffer.lock().unwrap();
+                    let mut residual = params.residual_buffer.lock();
                     residual.clear();
                 }
 
@@ -207,27 +209,27 @@ pub fn slave_process_one_request_with_hooks(
                     RegisterMode::Holding => {
                         crate::protocol::modbus::build_slave_holdings_response(
                             &mut frame,
-                            &mut params.storage.lock().unwrap(),
+                            &mut params.storage.lock(),
                         )?
                     }
                     RegisterMode::Input => crate::protocol::modbus::build_slave_inputs_response(
                         &mut frame,
-                        &mut params.storage.lock().unwrap(),
+                        &mut params.storage.lock(),
                     )?,
                     RegisterMode::Coils => crate::protocol::modbus::build_slave_coils_response(
                         &mut frame,
-                        &mut params.storage.lock().unwrap(),
+                        &mut params.storage.lock(),
                     )?,
                     RegisterMode::DiscreteInputs => {
                         crate::protocol::modbus::build_slave_discrete_inputs_response(
                             &mut frame,
-                            &mut params.storage.lock().unwrap(),
+                            &mut params.storage.lock(),
                         )?
                     }
                 };
 
                 if let Some(resp) = response_bytes {
-                    let mut port = params.port_arc.lock().unwrap();
+                    let mut port = params.port_arc.lock();
                     port.write_all(&resp)?;
                     port.flush()?;
                 }
@@ -272,7 +274,7 @@ pub fn slave_process_one_request_with_hooks(
     // Reason: if data cannot be parsed, residuals accumulate and worsen the issue
     // After clearing, wait (by caller control) to allow buffer stabilization
     {
-        let mut residual = params.residual_buffer.lock().unwrap();
+        let mut residual = params.residual_buffer.lock();
         if !residual.is_empty() {
             log::warn!(
                 "Clearing {} residual bytes (parse failed too many times)",
@@ -381,7 +383,7 @@ pub fn master_write_coils(
 
     // Send request
     {
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&request_frame)?;
         port.flush()?;
     }
@@ -389,7 +391,7 @@ pub fn master_write_coils(
     // Read confirmation response
     let mut buffer = vec![0u8; 256];
     let bytes_read = {
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         std::thread::sleep(std::time::Duration::from_millis(50)); // Wait for slave to process
         port.read(&mut buffer)?
     };
@@ -426,7 +428,7 @@ fn extract_values_from_storage(
 ) -> Result<Vec<u16>> {
     use rmodbus::server::context::ModbusContext;
 
-    let storage = storage.lock().unwrap();
+    let storage = storage.lock();
     let mut values = Vec::new();
 
     for i in 0..length {
@@ -496,7 +498,7 @@ pub(super) fn execute_single_poll_internal(
 
     // Send request
     {
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&request_frame)?;
         port.flush()?;
     }
@@ -515,7 +517,7 @@ pub(super) fn execute_single_poll_internal(
     let mut total_bytes = 0;
 
     {
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         let bytes_read = port.read(&mut buffer[total_bytes..])?;
         if bytes_read == 0 {
             return Err(anyhow!("No response received"));
@@ -525,7 +527,7 @@ pub(super) fn execute_single_poll_internal(
 
     if total_bytes < expected_frame_length {
         std::thread::sleep(std::time::Duration::from_millis(20));
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         let remaining_needed = expected_frame_length - total_bytes;
         if let Ok(additional) =
             port.read(&mut buffer[total_bytes..total_bytes + remaining_needed + 10])
@@ -560,7 +562,7 @@ pub(super) fn execute_single_poll_internal(
 
     if response[1] != expected_func {
         let mut flush_buffer = vec![0u8; 256];
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         if let Ok(n) = port.read(&mut flush_buffer) {
             if n > 0 {
                 log::warn!("Flushed {} residual bytes", n);
@@ -753,7 +755,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 
                 // Send request
                 if let Err(e) = (|| -> Result<()> {
-                    let mut port = params.port_arc.lock().unwrap();
+                    let mut port = params.port_arc.lock();
                     port.write_all(&request_frame)?;
                     port.flush()?;
                     Ok(())
@@ -777,7 +779,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 
                     // First read
                     {
-                        let mut port = params.port_arc.lock().unwrap();
+                        let mut port = params.port_arc.lock();
                         match port.read(&mut buffer[total_bytes..]) {
                             Ok(0) => Err(anyhow!("No response received")),
                             Ok(bytes_read) => {
@@ -792,7 +794,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                     if total_bytes < expected_frame_length {
                         std::thread::sleep(std::time::Duration::from_millis(20));
 
-                        let mut port = params.port_arc.lock().unwrap();
+                        let mut port = params.port_arc.lock();
                         let remaining_needed = expected_frame_length - total_bytes;
                         if let Ok(additional) =
                             port.read(&mut buffer[total_bytes..total_bytes + remaining_needed + 10])
@@ -834,7 +836,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 
                             // Flush RX buffer
                             let mut flush_buffer = vec![0u8; 256];
-                            let mut port = params.port_arc.lock().unwrap();
+                            let mut port = params.port_arc.lock();
                             if let Ok(n) = port.read(&mut flush_buffer) {
                                 if n > 0 {
                                     log::warn!("Flushed {} residual bytes", n);

@@ -4,7 +4,8 @@ pub mod slave;
 pub mod traits;
 
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 // Re-export types from protocol
 #[doc(hidden)]
@@ -273,7 +274,8 @@ impl ModbusBuilder {
     ///
     /// ```no_run
     /// use aoba::api::modbus::{ModbusBuilder, ModbusDataSource};
-    /// use std::sync::{Arc, Mutex};
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
     ///
     /// let master = ModbusBuilder::new_master(1)
     ///     .with_port("COM1")

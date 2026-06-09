@@ -1,9 +1,10 @@
 use anyhow::{anyhow, Result};
 use std::{
     io::Write,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
+use parking_lot::Mutex;
 
 use clap::ArgMatches;
 
@@ -78,14 +79,14 @@ fn run_slave_poll_transaction(
 
         log::info!("run_slave_poll_transaction: Sending request to master: {request_frame:02X?}");
         {
-            let mut port = port_arc.lock().unwrap();
+            let mut port = port_arc.lock();
             port.write_all(&request_frame)?;
             port.flush()?;
         }
 
         let mut buffer = vec![0u8; 256];
         let bytes_read = {
-            let mut port = port_arc.lock().unwrap();
+            let mut port = port_arc.lock();
             port.read(&mut buffer)?
         };
 
@@ -281,10 +282,9 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
         let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
             // Explicitly drop the port and wait for OS to release it
-            if let Ok(mut port) = pa.lock() {
-                // Try to flush any pending data
-                let _ = std::io::Write::flush(&mut **port);
-            }
+            let mut port = pa.lock();
+            let _ = std::io::Write::flush(&mut **port);
+            drop(port);
             drop(pa);
         });
     }
@@ -392,7 +392,7 @@ fn listen_for_one_request(
 
     // Read request from port
     let mut buffer = vec![0u8; 256];
-    let mut port = port_arc.lock().unwrap();
+    let mut port = port_arc.lock();
     let bytes_read = port.read(&mut buffer)?;
     drop(port);
 
@@ -413,32 +413,32 @@ fn listen_for_one_request(
         crate::protocol::status::types::modbus::RegisterMode::Holding => {
             crate::protocol::modbus::build_slave_holdings_response(
                 &mut frame,
-                &mut storage.lock().unwrap(),
+                &mut storage.lock(),
             )?
         }
         crate::protocol::status::types::modbus::RegisterMode::Input => {
             crate::protocol::modbus::build_slave_inputs_response(
                 &mut frame,
-                &mut storage.lock().unwrap(),
+                &mut storage.lock(),
             )?
         }
         crate::protocol::status::types::modbus::RegisterMode::Coils => {
             crate::protocol::modbus::build_slave_coils_response(
                 &mut frame,
-                &mut storage.lock().unwrap(),
+                &mut storage.lock(),
             )?
         }
         crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
             crate::protocol::modbus::build_slave_discrete_inputs_response(
                 &mut frame,
-                &mut storage.lock().unwrap(),
+                &mut storage.lock(),
             )?
         }
     };
 
     if let Some(resp) = response_bytes {
         // Send response
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&resp)?;
         port.flush()?;
         log::info!("Sent response: {resp:02X?}");
@@ -605,10 +605,9 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
             // Explicitly drop the port and wait for OS to release it
-            if let Ok(mut port) = pa.lock() {
-                // Try to flush any pending data
-                let _ = std::io::Write::flush(&mut **port);
-            }
+            let mut port = pa.lock();
+            let _ = std::io::Write::flush(&mut **port);
+            drop(port);
             drop(pa);
         });
     }
@@ -839,7 +838,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
                         // Send request
                         {
-                            let mut port = port_arc.lock().unwrap();
+                            let mut port = port_arc.lock();
                             if let Err(e) = port.write_all(&raw_frame) {
                                 Err(anyhow!("Failed to write request: {e}"))
                             } else if let Err(e) = port.flush() {
@@ -852,7 +851,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                         // Wait for response
                         let mut buffer = vec![0u8; 256];
                         let bytes_read = {
-                            let mut port = port_arc.lock().unwrap();
+                            let mut port = port_arc.lock();
                             port.read(&mut buffer)?
                         };
 
@@ -894,7 +893,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                         } else {
                             log::info!("Generated coil write request frame: {frame:02X?}");
                             {
-                                let mut port = port_arc.lock().unwrap();
+                                let mut port = port_arc.lock();
                                 if let Err(e) = port.write_all(&frame) {
                                     Err(anyhow!("Failed to write request: {e}"))
                                 } else if let Err(e) = port.flush() {
@@ -905,7 +904,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                             }?;
                             let mut buffer = vec![0u8; 256];
                             let bytes_read = {
-                                let mut port = port_arc.lock().unwrap();
+                                let mut port = port_arc.lock();
                                 port.read(&mut buffer)?
                             };
                             if bytes_read == 0 {
@@ -1117,10 +1116,9 @@ pub async fn handle_slave_listen_ipc_channel(
         let pa = port_arc.clone();
         let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
-            if let Ok(mut port) = pa.lock() {
-                let _ = std::io::Write::flush(&mut **port);
-            }
-            drop(pa);
+            let mut port = pa.lock();
+            let _ = std::io::Write::flush(&mut **port);
+            drop(port);
         });
     }
 
