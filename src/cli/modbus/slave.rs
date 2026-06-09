@@ -878,9 +878,56 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                     Err(e) => Err(e),
                 }
             } else if write_type == "coil" {
-                // TODO: Implement coil write using set_coils_bulk
-                log::warn!("⚠️ Coil write not yet implemented, skipping");
-                Ok(()) // Pretend success for now
+                let coil_value = write_value != 0;
+                match crate::protocol::modbus::generate_pull_set_coils_request(
+                    current_station_id,
+                    vec![coil_value],
+                ) {
+                    Ok(mut request) => {
+                        let mut frame = Vec::new();
+                        if let Err(e) = request.generate_set_coils_bulk(
+                            write_addr,
+                            &[coil_value],
+                            &mut frame,
+                        ) {
+                            Err(anyhow!("Failed to generate coil write frame: {e}"))
+                        } else {
+                            log::info!("Generated coil write request frame: {frame:02X?}");
+                            {
+                                let mut port = port_arc.lock().unwrap();
+                                if let Err(e) = port.write_all(&frame) {
+                                    Err(anyhow!("Failed to write request: {e}"))
+                                } else if let Err(e) = port.flush() {
+                                    Err(anyhow!("Failed to flush: {e}"))
+                                } else {
+                                    Ok(())
+                                }
+                            }?;
+                            let mut buffer = vec![0u8; 256];
+                            let bytes_read = {
+                                let mut port = port_arc.lock().unwrap();
+                                port.read(&mut buffer)?
+                            };
+                            if bytes_read == 0 {
+                                Err(anyhow!("No response received for coil write"))
+                            } else {
+                                let response = &buffer[..bytes_read];
+                                log::info!("Received coil write response: {response:02X?}");
+                                match crate::protocol::modbus::parse_pull_set_response(
+                                    &mut request,
+                                    response.to_vec(),
+                                ) {
+                                    Ok(()) => {
+                                        log::info!("✅ Coil write successful for 0x{write_addr:04X} = {write_value}");
+                                        Ok(())
+                                    }
+                                    Err(e) => Err(e),
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
             } else {
                 Err(anyhow!("Unsupported write type: {write_type}"))
             };
