@@ -39,7 +39,6 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 #[doc(hidden)]
 pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
     render_ui(frame)
@@ -133,7 +132,10 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
                 (KeyCode::Char(ch), KeyModifiers::NONE)
             }
             _ if key.len() == 1 => {
-                let ch = key.chars().next().unwrap();
+                let ch = key
+                    .chars()
+                    .next()
+                    .ok_or_else(|| anyhow!("Empty key string"))?;
                 (KeyCode::Char(ch), KeyModifiers::NONE)
             }
             _ => return Err(anyhow!("Unsupported key string: {key}")),
