@@ -218,7 +218,7 @@ pub fn switch_spans<'a>(
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ));
-        } //_ => unreachable!(),
+        }
     }
 
     Ok(out)

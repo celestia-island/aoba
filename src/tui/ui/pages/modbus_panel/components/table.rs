@@ -119,8 +119,6 @@ pub fn render_register_row_line(
             }
 
             if addr >= item_start && addr < item_end {
-                let _reg_index = (addr - item_start) as usize;
-
                 let slot_selected = if let types::cursor::ModbusDashboardCursor::Register {
                     slave_index: si,
                     register_index: ri,

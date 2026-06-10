@@ -52,8 +52,7 @@ async fn main() -> Result<()> {
     // Note: Some one-shot actions (like MQTT-based master-provide) need to run in a blocking context
     // because they use synchronous MQTT clients that create their own tokio runtime.
     // We use spawn_blocking to avoid "runtime within runtime" panics.
-    let matches_clone = matches.clone();
-    if actions::run_one_shot_actions(&matches_clone).await {
+    if actions::run_one_shot_actions(&matches).await {
         std::process::exit(0);
     }
 

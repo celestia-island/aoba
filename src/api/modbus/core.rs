@@ -113,7 +113,6 @@ pub fn slave_process_one_request_with_hooks(
     // A slave should only handle request frames: function codes 0x01/0x03/0x0F/0x10 are request types
     // Response frames have the same function codes but different frame structure; we can quickly filter by frame length
     if total_bytes >= 2 {
-        let _func_code = original_data[1];
         // Response frames are usually longer (>15 bytes) and contain larger payloads
         // Request frames are usually shorter (8-13 bytes)
         // Lower threshold to 20 bytes to more aggressively filter short response frames

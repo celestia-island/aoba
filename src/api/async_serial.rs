@@ -83,11 +83,7 @@ impl AsyncRead for AsyncSerialPort {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
-        // SAFETY: `InnerStream` (tokio_serial::SerialStream) is `Unpin`.
-        // Projecting to the `inner` field cannot violate any pinning
-        // guarantees because the field is not structurally pinned.
-        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
-        inner.poll_read(cx, buf)
+        Pin::new(&mut self.get_mut().inner).poll_read(cx, buf)
     }
 }
 
@@ -97,17 +93,14 @@ impl AsyncWrite for AsyncSerialPort {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
-        inner.poll_write(cx, buf)
+        Pin::new(&mut self.get_mut().inner).poll_write(cx, buf)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
-        inner.poll_flush(cx)
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
-        inner.poll_shutdown(cx)
+        Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
     }
 }

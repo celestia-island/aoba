@@ -645,7 +645,6 @@ async fn run_master_loop(
     } = config;
 
     log::info!("Starting master loop (middleware) for {port_name}");
-    // debug info removed
 
     let port_handle = open_serial_port(&port_name, baud_rate, Duration::from_millis(timeout_ms))?;
     let port_arc = Arc::new(Mutex::new(port_handle));
@@ -662,8 +661,6 @@ async fn run_master_loop(
         if !data_sources.is_empty() {
             match super::traits::execute_data_source_chain(&mut data_sources) {
                 Ok(Some(values)) => {
-                    // debug info removed
-
                     // Execute write operation based on register mode
                     match register_mode {
                         RegisterMode::Coils => {
@@ -695,8 +692,6 @@ async fn run_master_loop(
                                             }
                                         }
 
-                                        // debug info removed
-
                                         // Send write request and receive confirmation
                                         {
                                             let mut port = port_arc.lock();
@@ -715,11 +710,10 @@ async fn run_master_loop(
                                                     std::time::Duration::from_millis(50),
                                                 );
                                                 let mut buffer = [0u8; 256];
-                                                match port.read(&mut buffer) {
-                                                    Ok(bytes_read) if bytes_read >= 8 => {
-                                                        let response = &buffer[..bytes_read];
-                                                        // debug info removed
-                                                        if response[1] == 0x0F {
+                                                    match port.read(&mut buffer) {
+                                                        Ok(bytes_read) if bytes_read >= 8 => {
+                                                            let response = &buffer[..bytes_read];
+                                                            if response[1] == 0x0F {
                                                             log::info!("Successfully wrote {} coils to slave at address 0x{:04X}", coil_values.len(), register_address);
                                                         } else if response[1] & 0x80 != 0 {
                                                             log::error!("Modbus exception: error code 0x{:02X}", response[2]);
@@ -1040,8 +1034,6 @@ async fn run_multi_register_master_loop(
                 poll_config.register_mode,
             ) {
                 Ok(response) => {
-                    // debug info removed
-
                     // Execute hook chain: on_after_response
                     for hook in &hooks {
                         if let Err(e) = hook.on_after_response(&port_name, &response) {

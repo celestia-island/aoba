@@ -50,6 +50,28 @@ fn main() -> Result<()> {
                     out_tbl.insert("package".to_string(), TomlValue::Table(pj));
                 }
             }
+            // Pre-parse workspace dependency versions for fallback resolution
+            let mut workspace_dep_versions: HashMap<String, String> = HashMap::new();
+            if let Some(ws_deps) = v.get("workspace").and_then(|ws| ws.get("dependencies")) {
+                if let Some(ws_table) = ws_deps.as_table() {
+                    for (k, val) in ws_table.iter() {
+                        let ws_ver = if val.is_str() {
+                            val.as_str().unwrap_or("").to_string()
+                        } else if val.is_table() {
+                            val.get("version")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .to_string()
+                        } else {
+                            String::new()
+                        };
+                        if !ws_ver.is_empty() {
+                            workspace_dep_versions.insert(k.clone(), ws_ver);
+                        }
+                    }
+                }
+            }
+
             if let Some(deps) = v.get("dependencies") {
                 if let Some(table) = deps.as_table() {
                     let mut darr = Vec::new();
@@ -67,6 +89,15 @@ fn main() -> Result<()> {
                         } else if val.is_table() {
                             val.get("version")
                                 .and_then(|x| x.as_str())
+                                .or_else(|| {
+                                    // Fallback to workspace dependency version if workspace = true
+                                    val.get("workspace")
+                                        .and_then(|w| w.as_bool())
+                                        .filter(|w| *w)
+                                        .and_then(|_| {
+                                            workspace_dep_versions.get(k).map(String::as_str)
+                                        })
+                                })
                                 .unwrap_or("")
                                 .to_string()
                         } else {

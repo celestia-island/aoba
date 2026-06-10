@@ -275,7 +275,7 @@ pub fn render_kv_lines_with_indicators(
                     ModbusMasterDataSourceValueKind::PortName => {
                         lang().protocol.modbus.data_source_source_port.clone()
                     }
-                    ModbusMasterDataSourceValueKind::None => unreachable!(),
+                    ModbusMasterDataSourceValueKind::None => String::new(),
                 };
 
                 let master_source_value_renderer = || -> Result<Vec<Span<'static>>> {
