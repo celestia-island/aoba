@@ -91,10 +91,15 @@ pub fn slave_process_one_request_with_hooks(
     }
     total_bytes += bytes_read;
 
+    // Release lock before sleeping to avoid blocking other operations
+    drop(port);
+
     // Wait a bit for remaining data (Modbus RTU inter-frame delay)
     // At 57600 baud, 8 bytes takes ~1.4ms, give it up to 10ms
     std::thread::sleep(std::time::Duration::from_millis(10));
 
+    // Re-acquire lock for second read
+    let mut port = params.port_arc.lock();
     // Try to read any remaining bytes
     if let Ok(additional) = port.read(&mut buffer[total_bytes..]) {
         total_bytes += additional;

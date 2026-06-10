@@ -86,6 +86,61 @@ impl OutputSink {
             }
         }
     }
+
+    /// Create a buffered writer that caches the file handle for repeated writes
+    pub fn writer(&self) -> Result<OutputWriter> {
+        match self {
+            Self::Stdout => Ok(OutputWriter {
+                inner: OutputWriterInner::Stdout,
+            }),
+            Self::File { path } => {
+                let file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)?;
+                Ok(OutputWriter {
+                    inner: OutputWriterInner::File(std::io::BufWriter::new(file)),
+                })
+            }
+            Self::Pipe { path } => {
+                let file = std::fs::OpenOptions::new().write(true).open(path)?;
+                Ok(OutputWriter {
+                    inner: OutputWriterInner::Pipe(std::io::BufWriter::new(file)),
+                })
+            }
+        }
+    }
+}
+
+/// Buffered output writer that caches the file handle for repeated writes
+pub enum OutputWriterInner {
+    Stdout,
+    File(std::io::BufWriter<std::fs::File>),
+    Pipe(std::io::BufWriter<std::fs::File>),
+}
+
+pub struct OutputWriter {
+    inner: OutputWriterInner,
+}
+
+impl OutputWriter {
+    pub fn write(&mut self, data: &str) -> Result<()> {
+        use std::io::Write;
+        match &mut self.inner {
+            OutputWriterInner::Stdout => {
+                println!("{data}");
+            }
+            OutputWriterInner::File(writer) => {
+                writeln!(writer, "{data}")?;
+                writer.flush()?;
+            }
+            OutputWriterInner::Pipe(writer) => {
+                writeln!(writer, "{data}")?;
+                writer.flush()?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl CliStatus {

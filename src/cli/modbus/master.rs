@@ -1060,15 +1060,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         }
 
         let action2 = {
-            // First check if the port is virtual without holding the lock across an await.
-            let is_virtual = {
-                let port = port_arc.lock();
-                port.is_none()
-            };
-
-            // For virtual ports, skip serial port reading entirely
             if is_virtual {
-                // Virtual port: just sleep a bit to avoid busy loop
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 ReadAction2::NoData
             } else {

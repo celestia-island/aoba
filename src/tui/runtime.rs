@@ -44,6 +44,35 @@ fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
 // Named constant for initial stations send retries to avoid magic numbers
 const INITIAL_STATIONS_SEND_RETRIES: usize = 3;
 
+async fn send_initial_stations(
+    port_name: &str,
+    subprocess_manager: &mut SubprocessManager,
+) {
+    log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
+    let mut stations_sent = false;
+    for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
+        match subprocess_manager.send_stations_update_for_port(
+            port_name,
+            get_stations_from_status,
+            Some("initial_config"),
+        ) {
+            Ok(()) => {
+                stations_sent = true;
+                break;
+            }
+            Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
+                sleep_1s().await;
+            }
+            Err(err) => {
+                log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
+            }
+        }
+    }
+    if !stations_sent {
+        log::error!("❌ Could not send initial stations configuration to {port_name}");
+    }
+}
+
 pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
@@ -709,29 +738,7 @@ async fn start_runtime(
                             append_subprocess_spawned_log(port_name, &snapshot.mode, snapshot.pid);
                             cli_started = true;
 
-                            log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
-                            let mut stations_sent = false;
-                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
-                                match subprocess_manager.send_stations_update_for_port(
-                                    port_name,
-                                    get_stations_from_status,
-                                    Some("initial_config"),
-                                ) {
-                                    Ok(()) => {
-                                        stations_sent = true;
-                                        break;
-                                    }
-                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
-                                        sleep_1s().await;
-                                    }
-                                    Err(err) => {
-                                        log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
-                                    }
-                                }
-                            }
-                            if !stations_sent {
-                                log::error!("❌ Could not send initial stations configuration to {port_name}");
-                            }
+                            send_initial_stations(port_name, subprocess_manager).await;
                         }
                     }
                     Err(err) => {
@@ -806,29 +813,7 @@ async fn start_runtime(
                             append_subprocess_spawned_log(port_name, &snapshot.mode, snapshot.pid);
                             cli_started = true;
 
-                            log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
-                            let mut stations_sent = false;
-                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
-                                match subprocess_manager.send_stations_update_for_port(
-                                    port_name,
-                                    get_stations_from_status,
-                                    Some("initial_config"),
-                                ) {
-                                    Ok(()) => {
-                                        stations_sent = true;
-                                        break;
-                                    }
-                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
-                                        sleep_1s().await;
-                                    }
-                                    Err(err) => {
-                                        log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
-                                    }
-                                }
-                            }
-                            if !stations_sent {
-                                log::error!("❌ Could not send initial stations configuration to {port_name}");
-                            }
+                            send_initial_stations(port_name, subprocess_manager).await;
                         }
                     }
                     Err(err) => {

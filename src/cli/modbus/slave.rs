@@ -204,6 +204,7 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
         .map(|s| s.parse::<OutputSink>())
         .transpose()?
         .unwrap_or(OutputSink::Stdout);
+    let mut output_writer = output_sink.writer()?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -325,7 +326,7 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
                 if write_this {
                     let json = serde_json::to_string(&response)?;
-                    output_sink.write(&json)?;
+                    output_writer.write(&json)?;
                     last_written_values = Some(response.values.clone());
                 }
             }
@@ -555,6 +556,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         .map(|s| s.parse::<OutputSink>())
         .transpose()?
         .unwrap_or(OutputSink::Stdout);
+    let mut output_writer = output_sink.writer()?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -1000,7 +1002,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
                 if write_this {
                     let json = serde_json::to_string(&response)?;
-                    output_sink.write(&json)?;
+                    output_writer.write(&json)?;
                     last_written_values = Some(response.values.clone());
 
                     if let Some(ref mut ipc_conns) = ipc {
