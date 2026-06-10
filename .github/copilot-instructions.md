@@ -274,7 +274,7 @@ async fn test_tui_master_configuration() -> Result<()> {
 
 ##### 直接读取函数
 
-- `read_tui_status()` - 从 `/tmp/tui_e2e_status.json` 读取当前 TUI 状态
+- `read_tui_status()` - 从 `/tmp/ci_tui_status.json` 读取当前 TUI 状态
 - `read_cli_status(port)` - 从 `/tmp/cli_e2e_{port}.log` 读取当前 CLI 状态
 - `port_exists_in_tui(port_name)` - 检查端口是否存在于 TUI 中
 - `get_port_log_count(port_name)` - 获取端口的日志数量
@@ -703,7 +703,7 @@ Started status dump thread, writing to /tmp/ci_tui_status.json
 - 增加超时值
 - 如果文件 I/O 较慢，则增加重试间隔
 - 检查预期状态是否实际可达
-- 手动检查 `/tmp/tui_e2e_status.json` 以查看当前状态
+- 手动检查 `/tmp/ci_tui_status.json` 以查看当前状态
 
 #### 间歇性菜单导航失败
 

@@ -106,6 +106,7 @@ unicode-width = "^0.2"
 rmodbus = { version = "^0.12", features = ["with_serde"] }
 libc = "^0.2"
 serialport = { version = "^4", default-features = false }
+tokio-serial = { version = "^5", default-features = false }
 interprocess = "^2"
 ureq = { version = "^3", features = [
   "json",
@@ -173,6 +174,12 @@ interprocess.workspace = true
 ureq.workspace = true
 rumqttc.workspace = true
 axum.workspace = true
+
+tokio-serial = { workspace = true, optional = true }
+
+[features]
+default = []
+async-serial = ["dep:tokio-serial"]
 
 [dev-dependencies]
 tokio-test.workspace = true

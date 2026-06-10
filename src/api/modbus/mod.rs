@@ -1,5 +1,6 @@
 pub mod core;
 pub mod master;
+pub mod probe;
 pub mod slave;
 pub mod traits;
 

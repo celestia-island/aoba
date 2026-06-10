@@ -18,72 +18,93 @@ evernight 需要 aoba 提供以下接口，均已实现：
 | `open_serial_port()` | `api::utils::open_serial_port` | 打开串口（带超时、互斥访问） |
 | `VidPidSerial` | `protocol::tty::VidPidSerial` | 端口元信息类型 |
 | `PortExtra` | `protocol::tty::PortExtra` | 额外端口属性 |
+| `PortType` | `api::PortType` | 端口类型枚举（Physical / IPC / HTTP） |
+| `is_virtual_port()` | `api::is_virtual_port` | 虚拟端口判断 |
+| `is_port_occupied()` | `api::utils::is_port_occupied` | 端口占用检测（纯库函数，不依赖 CLI 子进程） |
+| `AsyncSerialPort` | `api::async_serial::AsyncSerialPort`（feature `async-serial`） | 异步串口读写（AsyncRead + AsyncWrite） |
+| `probe_modbus_rtu_baud()` | `api::modbus::probe::probe_modbus_rtu_baud` | Modbus RTU 波特率自动探测 |
 
 ---
 
-## 待补充的接口
+## 实现详情
 
-### 1️⃣ 串口异步读写包装（tokio stream）
+### 1️⃣ 串口异步读写包装（tokio stream）— 已实现 ✅
 
-**现状**：`open_serial_port()` 返回 `Box<dyn serialport::SerialPort>`（同步）。
-**需求**：提供或导出 async read/write 能力，使 evernight `serial` 模块可以在 tokio 运行时中非阻塞读写。
+**实现方案**：选项 A — aoba 封装 `tokio-serial`。
 
-**选项 A**：aoba 直接包装 tokio-serial，提供 `tokio::io::AsyncRead + AsyncWrite` 类型：
+- 新增 `async-serial` feature flag，可选依赖 `tokio-serial ^5`
+- `api::async_serial::AsyncSerialPort` 实现 `tokio::io::AsyncRead + AsyncWrite`
+- 使用 `unsafe` pin projection 委托给底层 `tokio_serial::SerialStream`
+- 在 Unix 上保留 exclusive access 语义
 
 ```rust
-// 期望的 API 示意
-pub fn open_serial_port_async(
-    port: &str,
-    baud_rate: u32,
-    timeout: Duration,
-) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite>;
+// aoba 公开 API
+#[cfg(feature = "async-serial")]
+pub fn open_async(port: &str, baud_rate: u32, timeout: Duration) -> Result<AsyncSerialPort>;
 ```
 
-**选项 B**：aoba 导出 `serialport::SerialPort` trait，由 evernight 自行包装。
+**文件**：`src/api/async_serial.rs`、`Cargo.toml`（feature `async-serial`）
 
-**推荐**：**选项 A**，因为 aoba 已经依赖 serialport，在它之上封装 async 对下游更友好。
+### 2️⃣ 端口占用检测 — 已实现 ✅
 
-### 2️⃣ 端口占用检测
+**实现方案**：从 `cli::actions::check_port_occupation()` 提取纯逻辑至 `api::utils::is_port_occupied()`。
 
-**现状**：`check_ports_occupied()` 通过 spawn 自身 CLI 子进程实现，不适合库调用。
-**需求**：提供纯库函数的端口占用检测，不依赖 CLI 子进程。
+- Windows：`CreateFileW` + `FILE_SHARE_NONE`，检查 `ERROR_SHARING_VIOLATION` / `ERROR_ACCESS_DENIED`
+- Unix：解析 canonical 设备路径 → 获取 `rdev` → 遍历 `/proc/{pid}/fd` 匹配
+- CLI 侧保留薄包装调用公共函数
 
 ```rust
-// 期望的 API 示意
-pub fn is_port_occupied(port: &str) -> Result<bool>;
+pub fn is_port_occupied(port_name: &str) -> bool;
 ```
 
-### 3️⃣ Modbus RTU 波特率扫描（用于协议自动探测）
+**文件**：`src/api/utils.rs`（新函数）、`src/cli/actions.rs`（改为调用公共 API）
 
-**现状**：aoba 已有 Modbus RTU master（`cli/modbus/master.rs`），但嵌入在 CLI 中。
-**需求**：暴露为库函数，供 evernight `protocol::probe` 模块在串口上自动探测 Modbus RTU 设备。
+### 3️⃣ Modbus RTU 波特率扫描 — 已实现 ✅
+
+**实现方案**：新增 `api::modbus::probe` 模块。
+
+- 遍历候选波特率列表，每个波特率打开串口、发送单次 read-holding 请求
+- 复用 `execute_single_poll_internal()` 作为探针核心
+- 第一个成功响应即返回对应波特率
 
 ```rust
-// 期望的 API 示意
 pub fn probe_modbus_rtu_baud(
     port: &str,
+    station_id: u8,
     baud_rates: &[u32],
     timeout: Duration,
 ) -> Result<Option<u32>>;
+
+pub const DEFAULT_BAUD_RATES: &[u32] = &[2400, 4800, 9600, 19200, 38400, 57600, 115200];
 ```
 
-### 4️⃣ 虚拟端口检测能力
+**文件**：`src/api/modbus/probe.rs`
 
-**现状**：`api::utils::open_serial_port()` 内部使用 `PortType::detect(port)` 判断虚拟端口并拒绝打开。
-**需求**：将 `PortType::detect()` 导出为公开函数，使 evernight 可以在打开前预先判断。
+### 4️⃣ 虚拟端口检测能力 — 已实现 ✅
+
+**实现方案**：导出 `PortType` 和 `is_virtual_port()` 至公共 API。
+
+- `api::mod.rs` 中 `pub use PortType` 和 `pub fn is_virtual_port()`
+- CLI 侧的 `is_virtual_port()` 调用不变（现在通过公共路径访问）
 
 ```rust
-// 期望的 API 示意
-pub fn is_virtual_port(port: &str) -> bool;
+pub use crate::protocol::status::types::port::PortType;
+pub fn is_virtual_port(port_name: &str) -> bool;
 ```
+
+**文件**：`src/api/mod.rs`
 
 ---
 
-## 实现优先级
+## evernight 侧集成
 
-| 优先级 | 需求 | 对应 evernight 阶段 |
-|--------|------|---------------------|
-| P0 | 异步读写包装 | 2D.3 |
-| P1 | 端口占用检测 | 2D.1 |
-| P2 | Modbus RTU 扫描 | 2D.5 |
-| P3 | 虚拟端口检测导出 | 2D.1 |
+evernight `src/serial/mod.rs` 已更新，新增以下公共接口：
+
+| evernight API | 底层 aoba API |
+|---------------|---------------|
+| `serial::open_serial_port_async()` | `aoba::api::async_serial::AsyncSerialPort::open()` |
+| `serial::is_port_occupied()` | `aoba::api::utils::is_port_occupied()` |
+| `serial::is_virtual_port()` | `aoba::api::is_virtual_port()` |
+| `serial::probe_modbus_rtu_baud()` | `aoba::api::modbus::probe::probe_modbus_rtu_baud()` |
+
+evernight `Cargo.toml` 已启用 aoba 的 `async-serial` feature，并添加 `tokio-serial` 依赖。
