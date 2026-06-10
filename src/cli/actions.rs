@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use serde::Serialize;
 
 use clap::ArgMatches;
@@ -336,7 +336,7 @@ pub async fn handle_config_mode(matches: &ArgMatches) -> bool {
 }
 
 /// Start the ports defined in the configuration
-async fn start_configuration(config: &super::config::ModbusBootConfig) -> anyhow::Result<()> {
+async fn start_configuration(config: &super::config::ModbusBootConfig) -> Result<()> {
     log::info!(
         "Starting port: {} with {} stations",
         config.port_name,
@@ -400,7 +400,7 @@ async fn start_configuration(config: &super::config::ModbusBootConfig) -> anyhow
 }
 
 /// Run the configuration in an async runtime
-async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> anyhow::Result<()> {
+async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> Result<()> {
     use rmodbus::server::context::ModbusContext;
     use std::io::Write;
     use std::sync::Arc;

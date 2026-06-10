@@ -2,7 +2,7 @@
 ///
 /// This module provides the default implementations that use flume channels for communication.
 /// These are used by the CLI commands and can also be used by external applications.
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -63,7 +63,7 @@ impl ModbusSlaveHandler for FlumeSlaveHandler {
     fn handle_response(&self, response: &ModbusResponse) -> Result<()> {
         self.sender
             .send(response.clone())
-            .map_err(|_| anyhow::anyhow!("Failed to send response: receiver dropped"))
+            .map_err(|_| anyhow!("Failed to send response: receiver dropped"))
     }
 
     fn should_continue(&self) -> bool {
@@ -121,7 +121,7 @@ impl ModbusMasterHandler for FlumeMasterHandler {
     fn handle_response(&self, response: &ModbusResponse) -> Result<()> {
         self.sender
             .send(response.clone())
-            .map_err(|_| anyhow::anyhow!("Failed to send response: receiver dropped"))
+            .map_err(|_| anyhow!("Failed to send response: receiver dropped"))
     }
 
     fn should_continue(&self) -> bool {

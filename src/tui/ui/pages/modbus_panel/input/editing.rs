@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -331,7 +331,7 @@ fn commit_selector_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
                         // evaluate occupancy before taking a mutable borrow of port.config
                         let was_occupied_by_this = matches!(port.state, PortState::OccupiedByThis);
 
@@ -375,7 +375,7 @@ fn commit_selector_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
 
                         let types::port::PortConfig::Modbus { master_source, .. } =
                             &mut port.config;
@@ -424,7 +424,7 @@ fn commit_selector_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
                         let types::port::PortConfig::Modbus {
                             mode,
                             master_source: _,
@@ -507,7 +507,7 @@ fn commit_selector_edit(
                                     .ports
                                     .map
                                     .get_mut(&port_name)
-                                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                    .ok_or_else(|| anyhow!("Port not found"))?;
 
                                 let types::port::PortConfig::Modbus {
                                     master_source,
@@ -614,7 +614,7 @@ fn commit_text_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
 
                         let types::port::PortConfig::Modbus { master_source, .. } =
                             &mut port_data.config;
@@ -715,7 +715,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus {
                                 mode: _,
                                 master_source: _,
@@ -738,7 +738,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus {
                                 mode: _,
                                 master_source: _,
@@ -761,7 +761,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus {
                                 mode: _,
                                 master_source: _,
@@ -800,7 +800,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let owner_info = port.subprocess_info.clone();
 
                             let types::port::PortConfig::Modbus {
@@ -908,7 +908,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             port.serial_config.request_interval_ms = interval_ms;
                             port.config_modified = true; // Mark as modified
                             log::info!("Updated request interval to {interval_ms} ms");
@@ -923,7 +923,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             port.serial_config.timeout_ms = timeout_ms;
                             port.config_modified = true; // Mark as modified
                             log::info!("Updated timeout to {timeout_ms} ms");

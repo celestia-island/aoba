@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures::Future;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -111,7 +111,7 @@ pub fn get_handle_error(port: u16) -> Option<Result<()>> {
                 }
                 Poll::Ready(Err(join_err)) => {
                     log::error!("HTTP server thread panicked: {}", join_err);
-                    return Some(Err(anyhow::anyhow!(
+                    return Some(Err(anyhow!(
                         "HTTP server thread panicked: {}",
                         join_err
                     )));

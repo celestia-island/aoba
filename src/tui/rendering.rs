@@ -46,7 +46,7 @@ pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
 
 pub(crate) fn run_rendering_loop(
     bus: crate::core::bus::Bus,
-    thr_rx: flume::Receiver<anyhow::Result<()>>,
+    thr_rx: flume::Receiver<Result<()>>,
 ) -> Result<()> {
     // Initialize terminal inside rendering thread to avoid cross-thread Terminal usage
     let mut stdout = io::stdout();

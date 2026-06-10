@@ -2,7 +2,7 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 
 
 use crate::{
@@ -81,7 +81,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
         let steps = workflow
             .workflow
             .get(step_name)
-            .ok_or_else(|| anyhow::anyhow!("Step '{step_name}' not found in workflow"))?;
+            .ok_or_else(|| anyhow!("Step '{step_name}' not found in workflow"))?;
 
         execute_step_sequence(ctx, &workflow.manifest.id, steps).await?;
     }
@@ -100,7 +100,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
             let steps = workflow
                 .workflow
                 .get(step_name)
-                .ok_or_else(|| anyhow::anyhow!("Step '{step_name}' not found in workflow"))?;
+                .ok_or_else(|| anyhow!("Step '{step_name}' not found in workflow"))?;
 
             execute_step_sequence(ctx, &workflow.manifest.id, steps).await?;
         }
@@ -191,7 +191,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn TUI process: {e}"))?;
+        .map_err(|e| anyhow!("Failed to spawn TUI process: {e}"))?;
 
     log::info!(
         "✅ TUI process spawned with PID {}",
@@ -266,20 +266,20 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
         let station_id = workflow
             .manifest
             .station_id
-            .ok_or_else(|| anyhow::anyhow!("Missing station_id in manifest"))?;
+            .ok_or_else(|| anyhow!("Missing station_id in manifest"))?;
         let register_type = workflow
             .manifest
             .register_type
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Missing register_type in manifest"))?;
+            .ok_or_else(|| anyhow!("Missing register_type in manifest"))?;
         let start_address = workflow
             .manifest
             .start_address
-            .ok_or_else(|| anyhow::anyhow!("Missing start_address in manifest"))?;
+            .ok_or_else(|| anyhow!("Missing start_address in manifest"))?;
         let register_count = workflow
             .manifest
             .register_count
-            .ok_or_else(|| anyhow::anyhow!("Missing register_count in manifest"))?;
+            .ok_or_else(|| anyhow!("Missing register_count in manifest"))?;
 
         let register_field = match register_type.as_str() {
             "Holding" | "holding" => "holding",
@@ -339,7 +339,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI emulator: {e}"))?;
+        .map_err(|e| anyhow!("Failed to spawn CLI emulator: {e}"))?;
 
     log::info!("✅ CLI emulator spawned successfully");
 
@@ -474,7 +474,7 @@ async fn execute_step_group_with_retry(
             }
 
             return Err(last_error.unwrap_or_else(|| {
-                anyhow::anyhow!("Step group failed after {max_retries} retries")
+                anyhow!("Step group failed after {max_retries} retries")
             }));
         }
     }
@@ -596,7 +596,7 @@ async fn execute_single_step(
         // Verify mock state value
         if let Some(path) = &step.mock_verify_path {
             let expected = step.mock_verify_value.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("mock_verify_path specified but no expected value")
+                anyhow!("mock_verify_path specified but no expected value")
             })?;
             verify_mock_state(path, expected)?;
         }
@@ -790,26 +790,26 @@ async fn execute_match_master_registers_trigger(
 ) -> Result<()> {
     let params = params
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("match_master_registers requires parameters"))?;
+        .ok_or_else(|| anyhow!("match_master_registers requires parameters"))?;
 
     // Parse parameters
     let station_id = params["station_id"]
         .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("station_id parameter required"))?
+        .ok_or_else(|| anyhow!("station_id parameter required"))?
         as u8;
 
     let register_type = params["register_type"]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("register_type parameter required"))?;
+        .ok_or_else(|| anyhow!("register_type parameter required"))?;
 
     let start_address = params["start_address"]
         .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("start_address parameter required"))?
+        .ok_or_else(|| anyhow!("start_address parameter required"))?
         as u16;
 
     let expected_values = params["expected_values"]
         .as_array()
-        .ok_or_else(|| anyhow::anyhow!("expected_values parameter required"))?;
+        .ok_or_else(|| anyhow!("expected_values parameter required"))?;
 
     let register_count = expected_values.len() as u16;
 
@@ -854,7 +854,7 @@ async fn execute_match_master_registers_trigger(
         ])
         .output()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI process: {e}"))?;
+        .map_err(|e| anyhow!("Failed to spawn CLI process: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -880,7 +880,7 @@ async fn execute_match_master_registers_trigger(
     for (i, (actual, expected)) in actual_values.iter().zip(expected_values.iter()).enumerate() {
         let expected_value_u64: u64 = expected
             .as_u64()
-            .ok_or_else(|| anyhow::anyhow!("Expected value at index {i} is not a number"))?;
+            .ok_or_else(|| anyhow!("Expected value at index {i} is not a number"))?;
         let expected_u16 = expected_value_u64 as u16;
 
         if *actual != expected_u16 {

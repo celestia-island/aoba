@@ -1,7 +1,8 @@
+use anyhow::Result;
 use crate::tui::status::write_status;
 
 /// Scroll up in the LogPanel by moving the selected_item up by `amount` items.
-pub fn handle_scroll_up(amount: usize) -> anyhow::Result<()> {
+pub fn handle_scroll_up(amount: usize) -> Result<()> {
     write_status(|status| {
         if let crate::tui::status::Page::LogPanel {
             selected_item,
@@ -39,7 +40,7 @@ pub fn handle_scroll_up(amount: usize) -> anyhow::Result<()> {
 }
 
 /// Scroll down in the LogPanel by moving the selected_item down by `amount` items.
-pub fn handle_scroll_down(amount: usize) -> anyhow::Result<()> {
+pub fn handle_scroll_down(amount: usize) -> Result<()> {
     write_status(|status| {
         if let crate::tui::status::Page::LogPanel {
             selected_item,

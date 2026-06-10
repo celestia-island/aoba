@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use parking_lot::Mutex;
 use std::{sync::Arc, time::Duration};
 
@@ -154,7 +154,7 @@ impl ModbusMaster {
         length: u16,
     ) -> Result<ModbusResponse> {
         let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+            anyhow!("Manual mode not available (created with automatic polling)")
         })?;
 
         core::execute_single_poll_internal(
@@ -174,7 +174,7 @@ impl ModbusMaster {
     /// Apply `swap_coils_byte_order()` before calling this method if needed.
     pub fn write_coils(&self, address: u16, values: &[bool]) -> Result<()> {
         let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+            anyhow!("Manual mode not available (created with automatic polling)")
         })?;
 
         use crate::protocol::modbus::generate_pull_set_coils_request;
@@ -203,7 +203,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow::anyhow!(
+            return Err(anyhow!(
                 "Incomplete write response: {} bytes",
                 bytes_read
             ));
@@ -216,12 +216,12 @@ impl ModbusMaster {
             Ok(())
         } else if response[1] & 0x80 != 0 {
             // Exception
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Modbus exception: error code 0x{:02X}",
                 response[2]
             ))
         } else {
-            Err(anyhow::anyhow!("Unexpected response"))
+            Err(anyhow!("Unexpected response"))
         }
     }
 
@@ -236,7 +236,7 @@ impl ModbusMaster {
     /// Returns Ok(()) if the write was acknowledged successfully.
     pub fn write_registers(&self, address: u16, values: &[u16]) -> Result<()> {
         let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+            anyhow!("Manual mode not available (created with automatic polling)")
         })?;
 
         use crate::protocol::modbus::generate_pull_set_holdings_bulk_request;
@@ -254,7 +254,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow::anyhow!(
+            return Err(anyhow!(
                 "Incomplete write response: {} bytes",
                 bytes_read
             ));
@@ -264,12 +264,12 @@ impl ModbusMaster {
         if response[1] == 0x10 {
             Ok(())
         } else if response[1] & 0x80 != 0 {
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Modbus exception: error code 0x{:02X}",
                 response[2]
             ))
         } else {
-            Err(anyhow::anyhow!("Unexpected response"))
+            Err(anyhow!("Unexpected response"))
         }
     }
 
@@ -278,7 +278,7 @@ impl ModbusMaster {
     /// Returns Ok(()) if the write was acknowledged successfully.
     pub fn write_holding(&self, address: u16, value: u16) -> Result<()> {
         let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
+            anyhow!("Manual mode not available (created with automatic polling)")
         })?;
 
         use crate::protocol::modbus::generate_pull_set_holding_request;
@@ -295,7 +295,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow::anyhow!(
+            return Err(anyhow!(
                 "Incomplete write response: {} bytes",
                 bytes_read
             ));
@@ -305,12 +305,12 @@ impl ModbusMaster {
         if response[1] == 0x06 {
             Ok(())
         } else if response[1] & 0x80 != 0 {
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Modbus exception: error code 0x{:02X}",
                 response[2]
             ))
         } else {
-            Err(anyhow::anyhow!("Unexpected response"))
+            Err(anyhow!("Unexpected response"))
         }
     }
 
@@ -339,10 +339,10 @@ impl ModbusMaster {
     pub fn send_control(&self, command: &str) -> Result<()> {
         if let Some(tx) = &self.control_sender {
             tx.send(command.to_string())
-                .map_err(|e| anyhow::anyhow!("Failed to send control command: {}", e))?;
+                .map_err(|e| anyhow!("Failed to send control command: {}", e))?;
             Ok(())
         } else {
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Control channel not available (created with legacy API)"
             ))
         }
@@ -703,7 +703,7 @@ async fn run_master_loop(
                                             let mut port = port_arc.lock();
                                             if let Err(e) = port.write_all(&request_frame) {
                                                 log::error!("Failed to send write request: {}", e);
-                                                let err = anyhow::anyhow!(
+                                                let err = anyhow!(
                                                     "Failed to send write request: {}",
                                                     e
                                                 );
@@ -988,7 +988,7 @@ async fn run_multi_register_master_loop(
                                                 "Failed to send/flush write request: {}",
                                                 e
                                             );
-                                            let err = anyhow::anyhow!(
+                                            let err = anyhow!(
                                                 "Failed to send write request: {}",
                                                 e
                                             );
