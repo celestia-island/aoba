@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -457,7 +457,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             } = &port.config;
             if mode.is_master() {
                 if let Err(validation_error) = validate_data_source(master_source) {
-                    let err_msg = validation_error.clone();
+                    let err_msg = format!("{validation_error}");
                     write_status(|status| {
                         status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                             message: err_msg.clone(),
@@ -758,8 +758,7 @@ fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
 }
 
 /// Validate data source configuration
-/// Returns Ok(()) if valid, Err(message) if invalid
-fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Result<(), String> {
+fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Result<()> {
     match source {
         types::modbus::ModbusMasterDataSource::Manual => Ok(()),
         types::modbus::ModbusMasterDataSource::MqttServer { url } => {
@@ -769,9 +768,8 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             validate_url(url, "mqtt")
         }
         types::modbus::ModbusMasterDataSource::HttpServer { port } => {
-            // Validate port number range (1-65535)
             if *port == 0 {
-                return Err("Port number must be between 1 and 65535".to_string());
+                bail!("Port number must be between 1 and 65535");
             }
             Ok(())
         }
@@ -779,35 +777,25 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             if path.is_empty() {
                 return Ok(()); // Allow empty path, will use placeholder
             }
-            // For IPC, we don't validate the path exists yet
-            // It will be created or connected when starting
             Ok(())
         }
         types::modbus::ModbusMasterDataSource::PortForwarding { source_port } => {
             if source_port.is_empty() {
                 return Ok(()); // Allow empty port, will use placeholder
             }
-            // Validate that source_port is not the same as current port
-            // This will be done at runtime validation
             Ok(())
         }
     }
 }
 
 /// Validate URL format
-fn validate_url(url: &str, expected_scheme: &str) -> Result<(), String> {
-    // Basic URL validation - check if it looks like a valid URL
-    if let Ok(parsed) = url::Url::parse(url) {
-        // Check if scheme matches expected
-        if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{}s", expected_scheme)
-        {
-            Ok(())
-        } else {
-            let err_msg = lang().protocol.modbus.err_invalid_url.replace("{}", url);
-            Err(err_msg)
-        }
+fn validate_url(url: &str, expected_scheme: &str) -> Result<()> {
+    let parsed = url::Url::parse(url).map_err(|_| {
+        anyhow!(lang().protocol.modbus.err_invalid_url.replace("{}", url))
+    })?;
+    if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{}s", expected_scheme) {
+        Ok(())
     } else {
-        let err_msg = lang().protocol.modbus.err_invalid_url.replace("{}", url);
-        Err(err_msg)
+        Err(anyhow!(lang().protocol.modbus.err_invalid_url.replace("{}", url)))
     }
 }
