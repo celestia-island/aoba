@@ -2,8 +2,8 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
-use anyhow::{bail, Result};
-use std::fmt;
+use anyhow::{bail, Context, Result};
+
 
 use crate::{
     mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
@@ -635,89 +635,69 @@ async fn execute_single_step(
             step.verify.as_ref().unwrap().clone()
         };
 
-        let verification_result: Result<(), VerificationFailure> =
-            if let Some(mut line_num) = step.at_line {
-                // For slave tests in the modbus panel, adjust line numbers for group 2+ content
-                // Group 2+ starts after the separator, which is at line 2 in master mode
-                // In slave mode, we add RequestInterval and Timeout fields, so group 2+ starts at line 4
-                // Therefore, for any line_num >= 2 checking station content, we add 2
-                if ctx.is_slave_test && ctx.in_modbus_panel && line_num >= 2 {
-                    line_num += 2;
-                }
+        if let Some(mut line_num) = step.at_line {
+            // For slave tests in the modbus panel, adjust line numbers for group 2+ content
+            // Group 2+ starts after the separator, which is at line 2 in master mode
+            // In slave mode, we add RequestInterval and Timeout fields, so group 2+ starts at line 4
+            // Therefore, for any line_num >= 2 checking station content, we add 2
+            if ctx.is_slave_test && ctx.in_modbus_panel && line_num >= 2 {
+                line_num += 2;
+            }
 
-                let lines: Vec<&str> = screen_content.lines().collect();
-                if line_num >= lines.len() {
-                    Err(VerificationFailure::new(
-                        expected_text.clone(),
-                        Some(format!(
-                            "line {} out of bounds (screen has {} lines)",
-                            line_num,
-                            lines.len()
-                        )),
-                    ))
-                } else {
-                    let actual_line = lines[line_num];
-                    let matches = if use_regex {
-                        let re = regex::Regex::new(&expected_text).map_err(|e| {
-                            VerificationFailure::new(
-                                expected_text.clone(),
-                                Some(format!("invalid regex pattern: {}", e)),
-                            )
-                        })?;
-                        re.is_match(actual_line)
-                    } else {
-                        actual_line.contains(&expected_text)
-                    };
+            let lines: Vec<&str> = screen_content.lines().collect();
+            if line_num >= lines.len() {
+                bail!(
+                    "Screen verification failed for '{}': line {} out of bounds (screen has {} lines)",
+                    expected_text,
+                    line_num,
+                    lines.len()
+                );
+            }
 
-                    if matches {
-                        Ok(())
-                    } else {
-                        Err(VerificationFailure::new(
-                            expected_text.clone(),
-                            Some(format!(
-                                "line {} mismatch: '{}'",
-                                line_num,
-                                actual_line.trim_end()
-                            )),
-                        ))
-                    }
-                }
+            let actual_line = lines[line_num];
+            let matches = if use_regex {
+                let re = regex::Regex::new(&expected_text)
+                    .with_context(|| format!("invalid regex pattern: '{}'", expected_text))?;
+                re.is_match(actual_line)
             } else {
-                let matches = if use_regex {
-                    let re = regex::Regex::new(&expected_text).map_err(|e| {
-                        VerificationFailure::new(
-                            expected_text.clone(),
-                            Some(format!("invalid regex pattern: {}", e)),
-                        )
-                    })?;
-                    re.is_match(&screen_content)
-                } else {
-                    screen_content.contains(&expected_text)
-                };
-
-                if matches {
-                    Ok(())
-                } else {
-                    // Log the actual screen content for debugging
-                    log::error!(
-                        "❌ Verification failed. Expected text not found: '{}'",
-                        expected_text
-                    );
-                    log::error!("📺 Actual screen content:\n{}", screen_content);
-                    log::error!(
-                        "📏 Screen size: {} lines, {} chars total",
-                        screen_content.lines().count(),
-                        screen_content.len()
-                    );
-
-                    Err(VerificationFailure::new(
-                        expected_text.clone(),
-                        Some("expected text not present on screen".to_string()),
-                    ))
-                }
+                actual_line.contains(&expected_text)
             };
 
-        verification_result.map_err(anyhow::Error::from)?;
+            if !matches {
+                bail!(
+                    "Screen verification failed for '{}': line {} mismatch: '{}'",
+                    expected_text,
+                    line_num,
+                    actual_line.trim_end()
+                );
+            }
+        } else {
+            let matches = if use_regex {
+                let re = regex::Regex::new(&expected_text)
+                    .with_context(|| format!("invalid regex pattern: '{}'", expected_text))?;
+                re.is_match(&screen_content)
+            } else {
+                screen_content.contains(&expected_text)
+            };
+
+            if !matches {
+                log::error!(
+                    "❌ Verification failed. Expected text not found: '{}'",
+                    expected_text
+                );
+                log::error!("📺 Actual screen content:\n{}", screen_content);
+                log::error!(
+                    "📏 Screen size: {} lines, {} chars total",
+                    screen_content.lines().count(),
+                    screen_content.len()
+                );
+
+                bail!(
+                    "Screen verification failed for '{}': expected text not present on screen",
+                    expected_text
+                );
+            }
+        }
     }
 
     // Handle triggers - custom actions
@@ -970,29 +950,4 @@ fn parse_cli_register_output(
     Ok(values)
 }
 
-#[derive(Debug)]
-struct VerificationFailure {
-    expected: String,
-    context: Option<String>,
-}
 
-impl VerificationFailure {
-    fn new(expected: String, context: Option<String>) -> Self {
-        Self { expected, context }
-    }
-}
-
-impl fmt::Display for VerificationFailure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.context {
-            Some(context) => write!(
-                f,
-                "Screen verification failed for '{}': {}",
-                self.expected, context
-            ),
-            None => write!(f, "Screen verification failed for '{}'", self.expected),
-        }
-    }
-}
-
-impl std::error::Error for VerificationFailure {}
