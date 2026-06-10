@@ -78,7 +78,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
         enable_debug_dump();
 
         let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let dump_path = PathBuf::from("/tmp/ci_tui_status.json");
+        let dump_path = std::env::temp_dir().join("ci_tui_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
         start_status_dump_thread(

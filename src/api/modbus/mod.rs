@@ -138,11 +138,14 @@ impl ModbusBuilder {
     }
 
     /// Use a virtual serial port with a randomly generated name.
-    /// On Unix, this will be `/tmp/vcom_{uuid}`.
+    /// On Unix, this will be in the system temp directory as `vcom_{uuid}`.
     pub fn with_virtual_port(mut self) -> Self {
         let uuid = uuid::Uuid::new_v4();
         #[cfg(unix)]
-        let port_name = format!("/tmp/vcom_{}", uuid);
+        let port_name = std::env::temp_dir()
+            .join(format!("vcom_{}", uuid))
+            .to_string_lossy()
+            .to_string();
         #[cfg(windows)]
         let port_name = format!("\\\\.\\CNCA{}", uuid.as_u128() % 100); // Fallback/Mock for Windows
 

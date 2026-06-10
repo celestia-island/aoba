@@ -125,8 +125,8 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
         }
     }
 
-    // Fallback for non-sudo environments: dynamically generated temp links (e.g. /tmp/aoba_vcom1.*)
-    if let Ok(entries) = fs::read_dir("/tmp") {
+    // Fallback for non-sudo environments: dynamically generated temp links (e.g. aoba_vcom1.*)
+    if let Ok(entries) = fs::read_dir(std::env::temp_dir()) {
         for entry in entries.flatten() {
             let path = entry.path();
             if let Some(name) = path.file_name().and_then(|s| s.to_str()) {

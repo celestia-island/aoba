@@ -66,14 +66,6 @@ jobs:
             ${{ matrix.os }}-${{ matrix.rust }}-cargo-
             ${{ matrix.os }}-cargo-
 
-      - name: Check compilation
-        id: check
-        run: cargo check --all-targets --all-features
-
-      - name: Clippy lints
-        id: clippy_check
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
       - name: Ensure Python3 present
         if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
         uses: actions/setup-python@v4
@@ -94,6 +86,14 @@ jobs:
       - name: Check formatting
         id: fmt_check
         run: cargo fmt --all -- --check
+
+      - name: Check compilation
+        id: check
+        run: cargo check --all-targets --all-features
+
+      - name: Clippy lints
+        id: clippy_check
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run unit tests
         run: cargo test --lib

@@ -81,7 +81,7 @@ jobs:
       - name: Run TUI E2E module (rendering mode)
         run: ./scripts/run_ci_locally.sh --workflow tui-rendering --module ${{ matrix.module }}
 
-  # Drill-down mode tests (full integration) - 20 modules
+  # Drill-down mode tests (full integration) - 22 modules
   tui-e2e-drilldown:
     name: TUI E2E Drill-down - ${{ matrix.module }}
     runs-on: ubuntu-latest
@@ -116,6 +116,9 @@ jobs:
           - data_source_virtual_port_slave
           - data_source_virtual_port_ipc_master
           - data_source_virtual_port_http_master
+          # Write single station slave
+          - write_single_station_slave_coils
+          - write_single_station_slave_holding
 
     steps:
       - uses: actions/checkout@v5

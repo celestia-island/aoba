@@ -167,7 +167,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build release binary (native)
         if: matrix.platform.os != 'ubuntu-24.04-arm'

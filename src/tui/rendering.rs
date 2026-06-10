@@ -151,7 +151,7 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
     let app = Arc::new(RwLock::new(Status::default()));
     crate::tui::status::init_status(app.clone())?;
 
-    let status_path = std::path::Path::new("/tmp/status.json");
+    let status_path = std::env::temp_dir().join("status.json");
     if status_path.exists() {
         log::info!(
             "📄 Loading status from {path}",

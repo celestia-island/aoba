@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 type Cleanup = Box<dyn FnOnce() + Send + 'static>;
 
@@ -36,14 +37,14 @@ fn global_registry() -> Arc<Mutex<CleanupRegistry>> {
 /// Register a cleanup closure to be run when `run_cleanups` is invoked.
 pub fn register_cleanup(f: impl FnOnce() + Send + 'static) {
     let reg = global_registry();
-    let mut guard = reg.lock().expect("cleanup registry lock");
+    let mut guard = reg.lock();
     guard.register(Box::new(f));
 }
 
 /// Run all registered cleanup closures. Safe to call multiple times.
 pub fn run_cleanups() {
     let reg = global_registry();
-    let mut guard = reg.lock().expect("cleanup registry lock");
+    let mut guard = reg.lock();
     let _count = guard.items.len();
 
     guard.run_all();

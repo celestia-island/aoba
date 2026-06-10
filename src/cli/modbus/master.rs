@@ -358,7 +358,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
     let storage_clone = storage.clone();
     {
         use crate::cli::modbus::set_registers_in_storage;
-        set_registers_in_storage(&*storage, reg_mode, register_address, &values)?;
+        set_registers_in_storage(&storage, reg_mode, register_address, &values)?;
     }
 
     // If HTTP server mode, check for incoming data before serial port opens
@@ -535,7 +535,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             .and_then(|n| n.to_str())
             .unwrap_or(port);
         let dump_path =
-            std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
+            std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(
@@ -635,7 +635,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     log::info!("Loaded initial values: {initial_values:?}");
     {
         use crate::cli::modbus::set_registers_in_storage;
-        set_registers_in_storage(&*storage, reg_mode, register_address, &initial_values)?;
+        set_registers_in_storage(&storage, reg_mode, register_address, &initial_values)?;
     }
 
     // Start a background thread to update storage with new values from data source
@@ -1816,7 +1816,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                         record_changed_range, set_registers_in_storage,
                                     };
                                     set_registers_in_storage(
-                                        &*storage,
+                                        &storage,
                                         reg_mode,
                                         register_address,
                                         &values,
@@ -1881,7 +1881,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                             record_changed_range, set_registers_in_storage,
                                         };
                                         set_registers_in_storage(
-                                            &*storage,
+                                            &storage,
                                             reg_mode,
                                             register_address,
                                             &values,
@@ -1937,7 +1937,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     record_changed_range, set_registers_in_storage,
                                 };
                                 set_registers_in_storage(
-                                    &*storage,
+                                    &storage,
                                     reg_mode,
                                     register_address,
                                     &values,
@@ -2009,7 +2009,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     record_changed_range, set_registers_in_storage,
                                 };
                                 set_registers_in_storage(
-                                    &*storage,
+                                    &storage,
                                     reg_mode,
                                     register_address,
                                     &values,
@@ -2056,7 +2056,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     record_changed_range, set_registers_in_storage,
                                 };
                                 set_registers_in_storage(
-                                    &*storage,
+                                    &storage,
                                     reg_mode,
                                     register_address,
                                     &values,
