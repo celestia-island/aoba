@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use parking_lot::Mutex;
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::{
@@ -9,7 +10,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use parking_lot::Mutex;
 
 use axum::{extract::State, http::StatusCode, Json, Router};
 use clap::ArgMatches;

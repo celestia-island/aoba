@@ -1,6 +1,6 @@
 use anyhow::Result;
-use std::{sync::Arc, time::Duration};
 use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 
 use super::{
     core::{slave_process_one_request, SlaveRequestParams},

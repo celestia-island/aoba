@@ -1,11 +1,9 @@
+#[cfg(feature = "async-serial")]
+pub mod async_serial;
 pub mod modbus;
 pub mod utils;
 
-#[cfg(feature = "async-serial")]
-pub mod async_serial;
-
-pub use crate::protocol::status::types::modbus::RegisterMode;
-pub use crate::protocol::status::types::port::PortType;
+pub use crate::protocol::status::types::{modbus::RegisterMode, port::PortType};
 
 /// Check whether a port name refers to a virtual (non-physical) endpoint.
 ///

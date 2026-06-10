@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use parking_lot::RwLock;
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, thread, time::Duration};
+use std::{fs, path::PathBuf, sync::Arc, thread, time::Duration};
 
 use crate::{
     cli::config::StationConfig,
@@ -365,14 +365,14 @@ pub async fn run_core_thread(
 
         let dead_processes = subprocess_manager.reap_dead_processes();
         if !dead_processes.is_empty() {
-            let mut cleanup_paths: HashMap<String, Option<String>> = HashMap::new();
+            let mut cleanup_paths: Vec<(String, Option<String>)> = Vec::new();
             crate::tui::status::write_status(|status| {
                 for (port_name, exit_status) in &dead_processes {
                     if let Some(port) = status.ports.map.get_mut(port_name) {
                         if port.state.is_occupied_by_this() {
                             if let Some(info) = &port.subprocess_info {
                                 cleanup_paths
-                                    .insert(port_name.clone(), info.data_source_path.clone());
+                                    .push((port_name.clone(), info.data_source_path.clone()));
                             }
                             port.state = PortState::Free;
                             port.subprocess_info = None;
@@ -415,8 +415,14 @@ pub async fn run_core_thread(
             })?;
 
             for (port_name, exit_status) in dead_processes {
-                if let Some(Some(path)) = cleanup_paths.remove(&port_name) {
-                    if let Err(_err) = fs::remove_file(&path) {}
+                if let Some(pos) = cleanup_paths
+                    .iter()
+                    .position(|(name, _)| name == &port_name)
+                {
+                    let (_, path) = cleanup_paths.swap_remove(pos);
+                    if let Some(path) = path {
+                        if let Err(_err) = fs::remove_file(&path) {}
+                    }
                 }
                 append_subprocess_exited_log(&port_name, exit_status);
                 if let Err(err) = core_tx.send(CoreToUi::Refreshed) {

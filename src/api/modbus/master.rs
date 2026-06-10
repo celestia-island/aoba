@@ -1,7 +1,6 @@
-use std::{sync::Arc, time::Duration};
-
 use anyhow::Result;
 use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 
 use super::{
     core::{self, master_poll_loop, MasterPollParams},
@@ -460,8 +459,7 @@ pub async fn run_master_loop_with_handler(
                     );
                     let write_result = match config.register_mode {
                         RegisterMode::Coils => {
-                            let coil_values: Vec<bool> =
-                                values.iter().map(|&v| v != 0).collect();
+                            let coil_values: Vec<bool> = values.iter().map(|&v| v != 0).collect();
                             crate::api::modbus::core::master_write_coils(
                                 port_arc.clone(),
                                 config.station_id,
@@ -484,10 +482,7 @@ pub async fn run_master_loop_with_handler(
                             Ok(())
                         }
                         other => {
-                            log::warn!(
-                                "Write operation not supported for {:?}",
-                                other
-                            );
+                            log::warn!("Write operation not supported for {:?}", other);
                             Ok(())
                         }
                     };

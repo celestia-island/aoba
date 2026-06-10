@@ -1,9 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
-
 use anyhow::Result;
 use futures::Future;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use std::{collections::HashMap, sync::Arc};
 
 use flume::Sender;
 

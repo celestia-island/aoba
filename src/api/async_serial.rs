@@ -23,10 +23,11 @@
 //! }
 //! ```
 
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
 use anyhow::{anyhow, Result};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 pub use tokio_serial::SerialStream as InnerStream;
@@ -59,8 +60,8 @@ impl AsyncSerialPort {
 
         let builder = tokio_serial::new(port, baud_rate).timeout(timeout);
 
-        let stream =
-            tokio_serial::SerialStream::open(&builder).map_err(|e| anyhow!("tokio-serial open: {e}"))?;
+        let stream = tokio_serial::SerialStream::open(&builder)
+            .map_err(|e| anyhow!("tokio-serial open: {e}"))?;
 
         Ok(Self { inner: stream })
     }

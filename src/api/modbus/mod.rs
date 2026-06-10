@@ -5,8 +5,8 @@ pub mod slave;
 pub mod traits;
 
 use anyhow::{anyhow, Result};
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 // Re-export types from protocol
 #[doc(hidden)]

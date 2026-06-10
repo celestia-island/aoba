@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
+use parking_lot::Mutex;
 use std::{
     io::Write,
     sync::Arc,
     time::{Duration, Instant},
 };
-use parking_lot::Mutex;
 
 use clap::ArgMatches;
 
@@ -411,22 +411,13 @@ fn listen_for_one_request(
     // Generate response based on register mode
     let response_bytes = match reg_mode {
         crate::protocol::status::types::modbus::RegisterMode::Holding => {
-            crate::protocol::modbus::build_slave_holdings_response(
-                &mut frame,
-                &mut storage.lock(),
-            )?
+            crate::protocol::modbus::build_slave_holdings_response(&mut frame, &mut storage.lock())?
         }
         crate::protocol::status::types::modbus::RegisterMode::Input => {
-            crate::protocol::modbus::build_slave_inputs_response(
-                &mut frame,
-                &mut storage.lock(),
-            )?
+            crate::protocol::modbus::build_slave_inputs_response(&mut frame, &mut storage.lock())?
         }
         crate::protocol::status::types::modbus::RegisterMode::Coils => {
-            crate::protocol::modbus::build_slave_coils_response(
-                &mut frame,
-                &mut storage.lock(),
-            )?
+            crate::protocol::modbus::build_slave_coils_response(&mut frame, &mut storage.lock())?
         }
         crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
             crate::protocol::modbus::build_slave_discrete_inputs_response(
@@ -884,11 +875,9 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 ) {
                     Ok(mut request) => {
                         let mut frame = Vec::new();
-                        if let Err(e) = request.generate_set_coils_bulk(
-                            write_addr,
-                            &[coil_value],
-                            &mut frame,
-                        ) {
+                        if let Err(e) =
+                            request.generate_set_coils_bulk(write_addr, &[coil_value], &mut frame)
+                        {
                             Err(anyhow!("Failed to generate coil write frame: {e}"))
                         } else {
                             log::info!("Generated coil write request frame: {frame:02X?}");

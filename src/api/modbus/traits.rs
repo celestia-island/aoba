@@ -14,8 +14,8 @@
 ///
 /// The handler chain stops at the first `Ok`, or returns the last non-NotHandled error.
 use anyhow::{anyhow, Result};
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 use crate::protocol::status::types::modbus::ModbusResponse;
 

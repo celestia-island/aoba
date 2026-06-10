@@ -5,14 +5,11 @@
 //! request at each rate and returning the first baud rate that elicits a
 //! valid response.
 
-use std::sync::Arc;
-use std::time::Duration;
-
 use anyhow::{anyhow, Result};
 use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 
-use crate::api::utils::open_serial_port;
-use crate::protocol::status::types::modbus::RegisterMode;
+use crate::{api::utils::open_serial_port, protocol::status::types::modbus::RegisterMode};
 
 /// Default candidate baud rates for Modbus RTU probes.
 pub const DEFAULT_BAUD_RATES: &[u32] = &[2400, 4800, 9600, 19200, 38400, 57600, 115200];
@@ -63,12 +60,7 @@ pub fn probe_modbus_rtu_baud(
 }
 
 /// Send one read-holding request at `baud` and check for a valid response.
-fn try_probe_at_baud(
-    port: &str,
-    station_id: u8,
-    baud: u32,
-    timeout: Duration,
-) -> Result<bool> {
+fn try_probe_at_baud(port: &str, station_id: u8, baud: u32, timeout: Duration) -> Result<bool> {
     let sync_port = open_serial_port(port, baud, timeout)?;
     let port_arc = Arc::new(Mutex::new(sync_port));
 
