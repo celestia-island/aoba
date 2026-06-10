@@ -62,7 +62,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             })?;
 
             log::info!("🔵 Sending refresh");
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             log::info!("🔵 Refresh sent");
         }
         types::cursor::ModbusDashboardCursor::ModbusMode => {
@@ -87,7 +87,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_mode);
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::MasterSourceKind => {
             let current_index = read_status(|status| {
@@ -110,7 +110,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_index);
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::MasterSourceValue => {
             // Check if it's PortForwarding - use Index selector, otherwise use text input
@@ -164,7 +164,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(current_index);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -207,7 +207,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 Ok(())
             })?;
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
             // Get the current register mode value from port config
@@ -238,7 +238,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_value);
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::StationId { .. }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { .. }
@@ -252,7 +252,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::Register {
             slave_index,
@@ -505,7 +505,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     }
                                 }
                             }
-                            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                            bus::request_refresh(&bus.ui_tx)?;
                         }
                         types::modbus::RegisterMode::Holding
                         | types::modbus::RegisterMode::Input => {
@@ -519,7 +519,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     };
                                 Ok(())
                             })?;
-                            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                            bus::request_refresh(&bus.ui_tx)?;
                         }
                     }
                 }
@@ -642,7 +642,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         };
         Ok(())
     })?;
-    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx)?;
     Ok(())
 }
 

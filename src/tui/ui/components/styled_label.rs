@@ -85,14 +85,16 @@ pub fn input_spans_with_placeholder<'a>(
     state: TextState,
 ) -> Result<Vec<Span<'a>>> {
     let value_str = current_value.to_string();
-    let show_placeholder = value_str.is_empty() && placeholder.is_some();
+    let placeholder_text = placeholder.as_ref().map(|p| p.to_string());
 
     let mut out: Vec<Span> = Vec::new();
+    let show_placeholder = value_str.is_empty() && placeholder_text.is_some();
+
     match state {
         TextState::Normal => {
-            if show_placeholder {
+            if let Some(ref text) = placeholder_text {
                 out.push(Span::styled(
-                    placeholder.unwrap().to_string(),
+                    text.clone(),
                     Style::default()
                         .fg(Color::DarkGray)
                         .add_modifier(Modifier::ITALIC),
@@ -102,9 +104,9 @@ pub fn input_spans_with_placeholder<'a>(
             }
         }
         TextState::Selected => {
-            if show_placeholder {
+            if let Some(ref text) = placeholder_text {
                 out.push(Span::styled(
-                    placeholder.unwrap().to_string(),
+                    text.clone(),
                     Style::default()
                         .fg(Color::Gray)
                         .add_modifier(Modifier::ITALIC),

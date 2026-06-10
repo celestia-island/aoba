@@ -74,7 +74,7 @@ where
                 Ok(())
             })?;
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         crossterm::event::KeyCode::Char(c) => {
@@ -108,7 +108,7 @@ where
                     Ok(())
                 })?;
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
             }
 
             Ok(())
@@ -130,7 +130,7 @@ where
                 }
             }
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         crossterm::event::KeyCode::Esc => {
@@ -138,7 +138,7 @@ where
                 status.temporarily.input_raw_buffer.clear();
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         crossterm::event::KeyCode::Backspace | crossterm::event::KeyCode::Delete => {
@@ -146,7 +146,7 @@ where
                 status.temporarily.input_raw_buffer.pop();
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         _ => Ok(()),

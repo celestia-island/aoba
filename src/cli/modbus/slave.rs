@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
 use std::{
     io::Write,
@@ -184,12 +184,18 @@ fn run_slave_poll_transaction(
 
 /// Handle slave listen persist (continuous JSONL output)
 pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+    let station_id = *matches.get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches.get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches.get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches.get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches.get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let output_sink = matches
         .get_one::<String>("output")
@@ -329,11 +335,16 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
 /// Handle a single slave listen (one-shot JSON output)
 pub async fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let station_id = *matches.get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches.get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches.get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches.get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches.get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
 
     let output_sink = matches
         .get_one::<String>("output")
@@ -450,12 +461,18 @@ fn listen_for_one_request(
 
 /// Handle slave poll (act as Modbus Master/Client - send request and wait for response)
 pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+    let station_id = *matches.get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches.get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches.get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches.get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches.get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -496,13 +513,20 @@ pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 
 /// Handle slave poll persist (continuous polling mode)
 pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let request_interval_ms = *matches.get_one::<u32>("request-interval-ms").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+    let station_id = *matches.get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches.get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches.get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches.get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches.get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let request_interval_ms = *matches.get_one::<u32>("request-interval-ms")
+        .context("Missing argument: request-interval-ms")?;
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let output_sink = matches
         .get_one::<String>("output")
@@ -1053,12 +1077,18 @@ pub async fn handle_slave_listen_ipc_channel(
 ) -> Result<()> {
     use interprocess::local_socket::{prelude::*, ListenerOptions};
 
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+    let station_id = *matches.get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches.get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches.get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches.get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches.get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 

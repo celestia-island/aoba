@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -299,11 +299,16 @@ async fn run_http_server_daemon(
 
 /// Handle master provide (temporary: output once and exit)
 pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let station_id = *matches.get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches.get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches.get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches.get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches.get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
     let data_source_str = matches
         .get_one::<String>("data-source")
         .ok_or_else(|| anyhow!("--data-source is required for master mode"))?;
@@ -498,11 +503,16 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
 /// Handle master provide persist (continuous JSONL output)
 /// Master mode acts as Modbus Slave/Server - listens for requests and responds with data
 pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let station_id = *matches.get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches.get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches.get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches.get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches.get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
     let data_source_str = matches
         .get_one::<String>("data-source")
         .ok_or_else(|| anyhow!("--data-source is required for master mode"))?;
@@ -1059,8 +1069,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 ReadAction2::NoData
             } else {
-                let mut port = port_arc.lock();
-                let result = match port.as_mut().unwrap().read(&mut buffer) {
+                let mut port_guard = port_arc.lock();
+                let port_ref = port_guard.as_mut()
+                    .ok_or_else(|| anyhow!("Serial port not initialized in master loop"))?;
+                let result = match port_ref.read(&mut buffer) {
                     Ok(n) if n > 0 => {
                         log::info!(
                             "CLI Master: Read {n} bytes from port: {:02X?}",

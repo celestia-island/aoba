@@ -68,7 +68,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -110,7 +110,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Left | KeyCode::Char('h') => {
@@ -151,7 +151,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Right | KeyCode::Char('l') => {
@@ -227,7 +227,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Up | KeyCode::Char('k') => {
@@ -304,7 +304,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
@@ -393,7 +393,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Enter => {
@@ -445,7 +445,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                     });
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -465,7 +465,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                         });
                         Ok(())
                     })?;
-                    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                    bus::request_refresh(&bus.ui_tx)?;
                     return Ok(());
                 }
             }
@@ -500,20 +500,20 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             })?;
 
             // Trigger immediate UI refresh to show status change
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
 
             if !is_enabled {
                 // Enable the port if not already enabled
                 log::info!("Port not enabled, triggering enable via ToggleRuntime");
                 bus.ui_tx
                     .send(UiToCore::ToggleRuntime(port_name.clone()))
-                    .map_err(|err| anyhow!(err))?;
+                    ?;
             } else if needs_restart {
                 // Port already enabled, just restart it with new config
                 log::info!("Port already enabled, restarting with new config");
                 bus.ui_tx
                     .send(UiToCore::RestartRuntime(port_name))
-                    .map_err(|err| anyhow!(err))?;
+                    ?;
             } else {
                 log::info!("Port already enabled and runtime up-to-date; skipping restart");
             }

@@ -67,12 +67,12 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Ok(())
             })?;
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
 
             if let Some(port_name) = maybe_restart {
                 bus.ui_tx
                     .send(UiToCore::RestartRuntime(port_name))
-                    .map_err(|err| anyhow!(err))?;
+                    ?;
             }
             Ok(())
         }
@@ -89,7 +89,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -130,12 +130,12 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
 
                 if let Some(port_name) = maybe_restart {
                     bus.ui_tx
                         .send(UiToCore::RestartRuntime(port_name))
-                        .map_err(|err| anyhow!(err))?;
+                        ?;
                 }
             } else {
                 // No pending data, just clear buffer and refresh
@@ -144,7 +144,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
             }
 
             Ok(())
@@ -207,7 +207,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }
@@ -282,7 +282,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }
@@ -705,7 +705,7 @@ fn commit_text_edit(
 
                         bus.ui_tx
                             .send(UiToCore::RestartRuntime(port_name.clone()))
-                            .map_err(|err| anyhow!(err))?;
+                            ?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::StationId { index } => {

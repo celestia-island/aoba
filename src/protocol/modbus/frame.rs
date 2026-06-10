@@ -136,7 +136,14 @@ pub async fn read_modbus_frame(
         sleep_1s().await;
         guessed_len_opt = determine_length(&mut collected);
     }
-    let guessed_len = guessed_len_opt.unwrap();
+    let Some(guessed_len) = guessed_len_opt else {
+        log::warn!("Could not determine frame length after loop exit");
+        if collected.is_empty() {
+            return Ok(None);
+        } else {
+            return Ok(Some(Bytes::from(collected)));
+        }
+    };
     // Modbus RTU maximum 256 bytes
     if !(4..=256).contains(&guessed_len) {
         log::warn!("Guessed invalid frame length: {guessed_len}");

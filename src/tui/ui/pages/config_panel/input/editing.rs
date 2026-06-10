@@ -118,7 +118,7 @@ fn handle_editing_input(
                     }
                 }
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 Ok(())
             },
         )?;
@@ -176,7 +176,7 @@ fn handle_editing_input(
                     }
                 }
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 Ok(())
             },
         )?;
@@ -211,7 +211,7 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -230,7 +230,7 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
@@ -257,7 +257,7 @@ fn handle_navigation_input(
 
             sanitize_configpanel_cursor()?;
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => Ok(()),
@@ -299,7 +299,7 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         _ => Ok(()),
@@ -339,7 +339,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                         });
                         Ok(())
                     })?;
-                    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                    bus::request_refresh(&bus.ui_tx)?;
                     return Ok(());
                 }
 
@@ -347,7 +347,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx
                     .send(crate::core::bus::UiToCore::ToggleRuntime(port_name.clone()))
-                    .map_err(|err| anyhow!(err))?;
+                    ?;
                 log::info!("✅ ToggleRuntime({port_name}) message sent successfully");
             } else {
                 log::warn!("port_name is None");
@@ -366,7 +366,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
@@ -380,7 +380,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         types::cursor::ConfigPanelCursor::BaudRate

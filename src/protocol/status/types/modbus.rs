@@ -452,19 +452,19 @@ impl StationConfig {
     pub fn register_mode(&self) -> RegisterMode {
         self.first_range()
             .map(|(mode, _)| mode)
-            .expect("StationConfig must contain at least one register range")
+            .unwrap_or(RegisterMode::Holding)
     }
 
     pub fn start_address(&self) -> u16 {
         self.first_range()
             .map(|(_, range)| range.address_start)
-            .expect("StationConfig must contain at least one register range")
+            .unwrap_or(0)
     }
 
     pub fn register_count(&self) -> u16 {
         self.first_range()
             .map(|(_, range)| range.length)
-            .expect("StationConfig must contain at least one register range")
+            .unwrap_or(0)
     }
 
     pub fn register_values(&self) -> Option<&[u16]> {
@@ -503,10 +503,9 @@ impl StationConfig {
     }
 
     pub fn set_register_values(&mut self, values: Option<Vec<u16>>) {
-        let (_, range) = self
-            .first_range_mut()
-            .expect("StationConfig must contain at least one register range");
-        range.initial_values = values.unwrap_or_default();
+        if let Some((_, range)) = self.first_range_mut() {
+            range.initial_values = values.unwrap_or_default();
+        }
     }
 
     pub fn set_single_range(

@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use anyhow::Result;
 use flume::{Receiver, Sender};
 
 static REFRESH_PENDING: AtomicBool = AtomicBool::new(false);
@@ -59,7 +60,7 @@ impl Bus {
 
 /// Try to enqueue a refresh message unless one is already pending.
 /// Returns `Ok(true)` when a message was sent, `Ok(false)` when it was coalesced.
-pub fn request_refresh(sender: &Sender<UiToCore>) -> Result<bool, flume::SendError<UiToCore>> {
+pub fn request_refresh(sender: &Sender<UiToCore>) -> Result<bool> {
     // Only one Refresh should be outstanding to avoid starving the writer thread.
     if REFRESH_PENDING
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -68,7 +69,7 @@ pub fn request_refresh(sender: &Sender<UiToCore>) -> Result<bool, flume::SendErr
         return Ok(false);
     }
 
-    sender.send(UiToCore::Refresh).map(|_| true)
+    Ok(sender.send(UiToCore::Refresh).map(|_| true)?)
 }
 
 /// Mark the refresh flag as cleared so the next request can be queued.

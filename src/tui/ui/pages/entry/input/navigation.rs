@@ -16,7 +16,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Quit the application
             bus.ui_tx
                 .send(crate::core::bus::UiToCore::Quit)
-                .map_err(|err| anyhow!(err))?;
+                ?;
         }
         KeyCode::PageUp => {
             // Jump to first cursor position
@@ -34,7 +34,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::PageDown => {
             // Jump to last cursor position (About)
@@ -48,7 +48,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::Left | KeyCode::Char('h') => {
             // Check if we're in new port creation mode
@@ -71,7 +71,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     }
                 })?)?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::Right | KeyCode::Char('l') => {
             // Check if we're in new port creation mode
@@ -111,7 +111,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
             }
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for About (A key)
         KeyCode::Char('a') | KeyCode::Char('A') => {
@@ -119,7 +119,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 status.page = Page::About { view_offset: 0 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for New (N key) - activate port creation mode
         KeyCode::Char('n') | KeyCode::Char('N') => {
@@ -135,7 +135,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for Delete (D key) - placeholder for port deletion
         KeyCode::Char('d') | KeyCode::Char('D') => {
@@ -149,7 +149,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 });
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::Enter => {
             // Check if we're in new port creation mode
@@ -221,7 +221,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -332,7 +332,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         _ => {}
     }

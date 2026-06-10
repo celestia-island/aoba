@@ -59,7 +59,7 @@ pub fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
             ) && key_is_ctrl_c(&key)
             {
                 log::info!("Global quit: Ctrl+C detected in input thread (pre-handler)");
-                bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
+                bus.ui_tx.send(UiToCore::Quit)?;
                 return Ok(());
             }
 
@@ -93,7 +93,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Handle global quit with Ctrl + C
     if key_is_ctrl_c(&key) {
         log::info!("Global quit: Ctrl+C detected in handle_key_event");
-        bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
+        bus.ui_tx.send(UiToCore::Quit)?;
         return Ok(());
     }
 
@@ -134,7 +134,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     if !has_ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
         log::info!("Global quit: q/Q detected (no modifiers)");
-        bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
+        bus.ui_tx.send(UiToCore::Quit)?;
         return Ok(());
     }
 
@@ -161,7 +161,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer.push(c);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
         }
