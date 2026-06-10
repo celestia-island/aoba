@@ -15,7 +15,7 @@ env:
 jobs:
   build:
     name: Build
-    runs-on: ${{ startsWith(matrix.platform.os, 'windows') && matrix.platform.os || startsWith(matrix.platform.os, 'macos') && matrix.platform.os || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       matrix:
         platform:
@@ -45,7 +45,7 @@ jobs:
             kind: cross
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Install openssl on macOS
         if: matrix.platform.os == 'macos-latest' || matrix.platform.os == 'macos-13'

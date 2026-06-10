@@ -11,11 +11,16 @@ use toml::value::{Table, Value as TomlValue};
 use semver::Version;
 
 fn main() -> Result<()> {
-    // Build a TOML table as cache
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=build.rs");
+
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
+    let cargo_toml_path = Path::new(&manifest_dir).join("Cargo.toml");
+
     let mut out_tbl: Table = Table::new();
 
     // Try to read Cargo.toml package and dependencies
-    if let Ok(s) = fs::read_to_string("Cargo.toml") {
+    if let Ok(s) = fs::read_to_string(&cargo_toml_path) {
         if let Ok(v) = toml::from_str::<toml::Value>(&s) {
             if let Some(pkg) = v.get("package") {
                 if let Some(t) = pkg.as_table() {
@@ -50,7 +55,7 @@ fn main() -> Result<()> {
                     let mut darr = Vec::new();
                     // collect first-level dependency package names (handle rename via `package` key)
                     let mut direct_dep_names: Vec<String> = Vec::new();
-                    for (k, val) in table.iter().take(500) {
+                    for (k, val) in table.iter() {
                         // Skip local / path dependencies (they are workspace crates and not relevant for external license summary)
                         if val.is_table() && val.get("path").is_some() {
                             // skip this dependency entirely
@@ -198,8 +203,11 @@ fn main() -> Result<()> {
 
         // Also write to source tree when possible (for local development convenience)
         let _ = (|| -> std::io::Result<()> {
-            fs::create_dir_all("res")?;
-            fs::write("res/about_cache.toml", &content)?;
+            fs::create_dir_all(Path::new(&manifest_dir).join("res"))?;
+            fs::write(
+                Path::new(&manifest_dir).join("res/about_cache.toml"),
+                &content,
+            )?;
             Ok(())
         })();
     }
