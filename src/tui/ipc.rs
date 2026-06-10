@@ -162,7 +162,7 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                 pending_indices.len()
                                             );
                                             // Calculate offset: incoming range may start at different address than station
-                                            let offset = (range.address_start - modbus_stations[idx].register_address) as usize;
+                                            let offset = range.address_start.saturating_sub(modbus_stations[idx].register_address) as usize;
                                             for (incoming_idx, &value) in range.initial_values.iter().enumerate() {
                                                 // Convert to station's last_values index
                                                 let station_idx = offset + incoming_idx;
@@ -292,6 +292,13 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                     // Find the station and register to update
                     for station in stations.iter_mut() {
                         if station.station_id == station_id {
+                            if register_address < station.register_address {
+                                log::warn!(
+                                    "Register address 0x{register_address:04X} < station start 0x{:04X}, skipping",
+                                    station.register_address
+                                );
+                                continue;
+                            }
                             let register_index =
                                 (register_address - station.register_address) as usize;
 

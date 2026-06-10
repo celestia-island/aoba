@@ -270,7 +270,7 @@ fn handle_navigation_input(
         KeyCode::Esc => {
             // Return to entry page
             // First, get the selected_port and ports_count outside the write lock
-            let (selected_port_opt, _ports_count) = read_status(|status| {
+            let (selected_port_opt, _) = read_status(|status| {
                 let selected_port =
                     if let crate::tui::status::Page::ConfigPanel { selected_port, .. } =
                         &status.page

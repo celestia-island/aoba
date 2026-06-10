@@ -10,6 +10,8 @@ use crate::{
     protocol::status::types::port::PortStatusIndicator, tui::status::read_status, utils::i18n::lang,
 };
 
+const SPINNER_FRAMES: [char; 6] = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
+
 fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {
         read_status(|status| {
@@ -167,8 +169,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Spinning animation for "starting" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_starting.clone(),
@@ -185,8 +186,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Yellow spinning animation for "restarting" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_restarting.clone(),
@@ -198,8 +198,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Green spinning animation for "saving" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_saving.clone(),
@@ -211,8 +210,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Yellow spinning animation for "syncing" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_syncing.clone(),

@@ -289,7 +289,7 @@ impl Cursor for ModbusDashboardCursor {
 
         let cur_pos = flat.iter().position(|c| *c == self).unwrap_or(0);
         if cur_pos == 0 {
-            flat[0]
+            *flat.last().unwrap_or(&Self::AddLine)
         } else {
             flat[cur_pos - 1]
         }
@@ -331,7 +331,7 @@ impl Cursor for ModbusDashboardCursor {
 
         let cur_pos = flat.iter().position(|c| *c == self).unwrap_or(0);
         if cur_pos + 1 >= flat.len() {
-            flat[flat.len() - 1]
+            flat[0]
         } else {
             flat[cur_pos + 1]
         }

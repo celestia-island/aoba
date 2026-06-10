@@ -228,10 +228,9 @@ pub async fn run_core_thread(
 ) -> Result<()> {
     let mut polling_enabled = true;
     let scan_interval = Duration::from_secs(30);
-    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap();
+    let mut last_scan = std::time::Instant::now() - scan_interval;
     let mut scan_in_progress = false;
 
-    let _last_modbus_run = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(1)).unwrap();
     let mut subprocess_manager = SubprocessManager::new();
     loop {
         let msg_count_before = ui_rx.len();

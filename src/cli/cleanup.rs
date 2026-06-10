@@ -45,7 +45,5 @@ pub fn register_cleanup(f: impl FnOnce() + Send + 'static) {
 pub fn run_cleanups() {
     let reg = global_registry();
     let mut guard = reg.lock();
-    let _count = guard.items.len();
-
     guard.run_all();
 }

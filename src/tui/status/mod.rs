@@ -31,7 +31,6 @@ pub mod serializable {
     };
     use std::{
         collections::{HashMap, HashSet},
-        convert::TryFrom,
         time::Instant,
     };
 

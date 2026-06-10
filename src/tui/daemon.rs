@@ -199,7 +199,7 @@ pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
 }
 
 /// Load port configurations from a JSON file
-fn load_config_from_file(path: &PathBuf) -> Result<HashMap<String, PortConfig>> {
+fn load_config_from_file(path: &std::path::Path) -> Result<HashMap<String, PortConfig>> {
     use crate::core::persistence::{PersistedPortConfig, SerializablePortConfig};
     use crate::protocol::status::types::modbus::{
         ModbusConnectionMode, ModbusMasterDataSource, ModbusRegisterItem, RegisterMode,
@@ -236,7 +236,9 @@ fn load_config_from_file(path: &PathBuf) -> Result<HashMap<String, PortConfig>> 
                                     url: value.unwrap_or_default(),
                                 }),
                                 "http" => Some(ModbusMasterDataSource::HttpServer {
-                                    port: value.and_then(|v| v.parse().ok()).unwrap_or(8080),
+                                    port: value
+                                        .and_then(|v| v.parse::<u16>().ok())
+                                        .unwrap_or(8080),
                                 }),
                                 "ipc" => Some(ModbusMasterDataSource::IpcPipe {
                                     path: value.unwrap_or_default(),

@@ -144,7 +144,6 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     .unwrap_or(None);
 
     if let Some(port) = port_opt {
-        let _pn = port.port_name.clone();
         let st = port.state.clone();
         let cfg = &port.serial_config;
 

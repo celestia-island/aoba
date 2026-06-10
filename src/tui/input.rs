@@ -87,13 +87,6 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         key.kind,
         crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
     ) {
-        return Ok(()); // Ignore key release events
-    }
-
-    // Handle global quit with Ctrl + C
-    if key_is_ctrl_c(&key) {
-        log::info!("Global quit: Ctrl+C detected in handle_key_event");
-        bus.ui_tx.send(UiToCore::Quit)?;
         return Ok(());
     }
 
