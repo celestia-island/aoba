@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use chrono::Duration;
 use std::sync::Arc;
@@ -186,10 +186,7 @@ pub async fn read_modbus_frame(
             u16::from(collected[data_no_crc_len]) | (u16::from(collected[data_no_crc_len + 1]) << 8);
         if calc != frame_crc {
             log::warn!("CRC mismatch: calc=0x{calc:04X} frame=0x{frame_crc:04X}");
-            if collected.is_empty() {
-                return Ok(None);
-            }
-            return Ok(Some(Bytes::from(collected)));
+            return Err(anyhow!("CRC mismatch: calc=0x{calc:04X} frame=0x{frame_crc:04X}"));
         }
     }
 

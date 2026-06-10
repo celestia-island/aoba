@@ -311,7 +311,10 @@ impl IpcServer {
                 Ok(0) => Ok(None),
                 Ok(n) => {
                     let data = &buf[..n];
-                    let line_end = data.iter().position(|&b| b == b'\n').unwrap_or(n);
+                    let line_end = match data.iter().position(|&b| b == b'\n') {
+                        Some(pos) => pos,
+                        None => return Err(anyhow!("IPC message missing newline terminator")),
+                    };
                     let trimmed = std::str::from_utf8(&data[..line_end])
                         .map_err(|e| anyhow!("Invalid UTF-8 in IPC message: {e}"))?
                         .trim();

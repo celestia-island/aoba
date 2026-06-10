@@ -18,7 +18,7 @@ use crate::{
     },
     cli::{actions, cleanup},
     protocol::status::types::cli::OutputSink,
-    utils::sleep::{sleep_1s, sleep_3s},
+    utils::sleep::sleep_1s,
 };
 
 /// Outcome of a slave polling transaction.
@@ -1038,11 +1038,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 last_failure_log = None;
 
                 // Wait configured request interval after successful poll
-                if request_interval_ms < 1000 {
-                    sleep_1s().await;
-                } else {
-                    sleep_3s().await;
-                }
+                tokio::time::sleep(Duration::from_millis(request_interval_ms as u64)).await;
             }
             SlavePollTransaction::Failure {
                 request_frame,
@@ -1077,11 +1073,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 }
 
                 // Wait configured timeout duration after failure
-                if timeout_ms < 1000 {
-                    sleep_1s().await;
-                } else {
-                    sleep_3s().await;
-                }
+                tokio::time::sleep(Duration::from_millis(timeout_ms as u64)).await;
             }
         }
     }

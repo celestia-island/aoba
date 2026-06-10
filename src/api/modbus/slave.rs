@@ -672,7 +672,7 @@ async fn run_slave_loop(
             register_length,
             reg_mode: register_mode,
             storage: storage.clone(),
-            hooks: &[], // Temporarily use empty hooks array
+            hooks: &hooks,
             port_name: port_name.clone(),
             residual_buffer: residual_buffer.clone(),
         };

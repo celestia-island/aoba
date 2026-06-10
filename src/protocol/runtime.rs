@@ -376,6 +376,7 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> 
     let mut frames = Vec::new();
     finalize_residual(buf, &mut frames);
     if frames.is_empty() {
+        return Ok(());
     } else {
         for frame in frames {
             if log::log_enabled!(log::Level::Info) {

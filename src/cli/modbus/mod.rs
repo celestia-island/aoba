@@ -282,7 +282,7 @@ pub fn record_changed_range(
     let mut cr = changed_ranges.lock();
     cr.push((address, length, Instant::now()));
     while cr.len() > 1000 {
-        cr.remove(0);
+        cr.swap_remove(0);
     }
 }
 
