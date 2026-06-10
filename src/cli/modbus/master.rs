@@ -1812,39 +1812,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     values
                                 );
                                 {
-                                    let mut context = storage.lock();
-                                    match reg_mode {
-                                        crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_holding(register_address + i as u16, val)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_coil(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_discrete(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_input(register_address + i as u16, val)?;
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Record changed range
-                                {
+                                    use crate::cli::modbus::{
+                                        record_changed_range, set_registers_in_storage,
+                                    };
+                                    set_registers_in_storage(
+                                        &*storage,
+                                        reg_mode,
+                                        register_address,
+                                        &values,
+                                    )?;
                                     let len = values.len() as u16;
-                                    let mut cr = changed_ranges.lock();
-                                    cr.push((register_address, len, Instant::now()));
-                                    while cr.len() > 1000 {
-                                        cr.remove(0);
-                                    }
+                                    record_changed_range(&changed_ranges, register_address, len);
                                 }
                             } else {
                                 log::warn!("Failed to parse MQTT message data");
@@ -1899,10 +1877,21 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                         values
                                     );
                                     {
-                                        use crate::cli::modbus::{record_changed_range, set_registers_in_storage};
-                                        set_registers_in_storage(&*storage, reg_mode, register_address, &values)?;
+                                        use crate::cli::modbus::{
+                                            record_changed_range, set_registers_in_storage,
+                                        };
+                                        set_registers_in_storage(
+                                            &*storage,
+                                            reg_mode,
+                                            register_address,
+                                            &values,
+                                        )?;
                                         let len = values.len() as u16;
-                                        record_changed_range(&changed_ranges, register_address, len);
+                                        record_changed_range(
+                                            &changed_ranges,
+                                            register_address,
+                                            len,
+                                        );
                                     }
                                 }
                                 Err(e) => {
@@ -1944,39 +1933,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         Ok(values) => {
                             log::info!("✅ IPC: Updating storage with values from IPC: {values:?}");
                             {
-                                let mut context = storage.lock();
-                                match reg_mode {
-                                            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_holding(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_coil(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_discrete(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_input(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                        }
-                            }
-
-                            // Record changed range
-                            {
+                                use crate::cli::modbus::{
+                                    record_changed_range, set_registers_in_storage,
+                                };
+                                set_registers_in_storage(
+                                    &*storage,
+                                    reg_mode,
+                                    register_address,
+                                    &values,
+                                )?;
                                 let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock();
-                                cr.push((register_address, len, Instant::now()));
-                                while cr.len() > 1000 {
-                                    cr.remove(0);
-                                }
+                                record_changed_range(&changed_ranges, register_address, len);
                             }
 
                             sleep_1s().await;
@@ -2038,40 +2005,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 values
                             );
                             {
-                                let mut context = storage.lock();
-                                match reg_mode {
-                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_holding(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_coil(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_discrete(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_input(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Record changed range for other thread to detect overlap
-                            {
+                                use crate::cli::modbus::{
+                                    record_changed_range, set_registers_in_storage,
+                                };
+                                set_registers_in_storage(
+                                    &*storage,
+                                    reg_mode,
+                                    register_address,
+                                    &values,
+                                )?;
                                 let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock();
-                                cr.push((register_address, len, Instant::now()));
-                                // Keep size bounded: trim old entries
-                                while cr.len() > 1000 {
-                                    cr.remove(0);
-                                }
+                                record_changed_range(&changed_ranges, register_address, len);
                             }
 
                             // Wait a bit before next update to avoid overwhelming
@@ -2108,39 +2052,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         Ok(values) => {
                             log::info!("✅ Pipe: Updating storage with values: {values:?}");
                             {
-                                let mut context = storage.lock();
-                                match reg_mode {
-                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_holding(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_coil(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_discrete(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_input(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Record changed range for other thread to detect overlap
-                            {
+                                use crate::cli::modbus::{
+                                    record_changed_range, set_registers_in_storage,
+                                };
+                                set_registers_in_storage(
+                                    &*storage,
+                                    reg_mode,
+                                    register_address,
+                                    &values,
+                                )?;
                                 let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock();
-                                cr.push((register_address, len, Instant::now()));
-                                while cr.len() > 1000 {
-                                    cr.remove(0);
-                                }
+                                record_changed_range(&changed_ranges, register_address, len);
                             }
 
                             // Wait a bit before next update
@@ -2507,29 +2429,8 @@ fn handle_ipc_connection_sync(
 
         // Update storage with new values
         {
-            let mut context = ctx.storage.lock();
-            match ctx.reg_mode {
-                crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_holding(ctx.register_address + i as u16, val)?;
-                    }
-                }
-                crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_coil(ctx.register_address + i as u16, val != 0)?;
-                    }
-                }
-                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_discrete(ctx.register_address + i as u16, val != 0)?;
-                    }
-                }
-                crate::protocol::status::types::modbus::RegisterMode::Input => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_input(ctx.register_address + i as u16, val)?;
-                    }
-                }
-            }
+            use crate::cli::modbus::set_registers_in_storage;
+            set_registers_in_storage(&ctx.storage, ctx.reg_mode, ctx.register_address, &values)?;
         }
 
         // Update changed ranges to bypass debounce

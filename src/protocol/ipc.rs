@@ -3,7 +3,7 @@
 /// to allow the TUI to manage CLI subprocesses and receive status updates.
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 
 use interprocess::local_socket::{prelude::*, Stream};
 
@@ -256,8 +256,7 @@ impl IpcMessage {
 /// IPC Server (runs in CLI subprocess)
 pub struct IpcServer {
     socket_name: String,
-    writer: Option<Stream>,
-    reader: Option<BufReader<Stream>>,
+    stream: Option<Stream>,
 }
 
 impl IpcServer {
@@ -268,26 +267,23 @@ impl IpcServer {
             .clone()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let stream = Stream::connect(name)?;
+        stream.set_nonblocking(true)?;
 
         log::info!("IPC: Successfully connected to socket: {socket_name}");
 
-        // We'll use the same stream for both reading and writing
-        // by wrapping it appropriately
         Ok(Self {
             socket_name,
-            writer: Some(stream),
-            reader: None,
+            stream: Some(stream),
         })
     }
 
     /// Send a message to the parent TUI process
     pub fn send(&mut self, msg: &IpcMessage) -> Result<()> {
-        if let Some(ref mut stream) = self.writer {
+        if let Some(ref mut stream) = self.stream {
             let json = msg.to_json()?;
             writeln!(stream, "{json}")?;
             stream.flush()?;
-            if matches!(msg, IpcMessage::Heartbeat { .. }) {
-            } else {
+            if !matches!(msg, IpcMessage::Heartbeat { .. }) {
                 log::info!("IPC: Sent message: {msg:?}");
             }
             Ok(())
@@ -297,25 +293,41 @@ impl IpcServer {
     }
 
     /// Try to receive a message from the parent TUI process (non-blocking)
-    /// Note: This is a simplified implementation that doesn't actually support non-blocking reads
-    /// The CLI subprocess should poll this periodically
     pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
-        // For now, return None to indicate no message available
-        // In a real implementation, we'd need to set the stream to non-blocking mode
-        // or use a timeout-based approach
-        // Since we can't easily do non-blocking with interprocess streams,
-        // we'll skip this for now and handle messages in the main loop differently
-        Ok(None)
+        if let Some(ref mut stream) = self.stream {
+            let mut buf = [0u8; 4096];
+            match stream.read(&mut buf) {
+                Ok(0) => Ok(None),
+                Ok(n) => {
+                    let data = &buf[..n];
+                    let line_end = data.iter().position(|&b| b == b'\n').unwrap_or(n);
+                    let trimmed = std::str::from_utf8(&data[..line_end])
+                        .map_err(|e| anyhow!("Invalid UTF-8 in IPC message: {e}"))?
+                        .trim();
+                    if trimmed.is_empty() {
+                        return Ok(None);
+                    }
+                    let msg = IpcMessage::from_json(trimmed)?;
+                    if !matches!(&msg, IpcMessage::Heartbeat { .. }) {
+                        log::info!("IPC: Received message: {msg:?}");
+                    }
+                    Ok(Some(msg))
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+                Err(e) => Err(anyhow!("IPC read error: {e}")),
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     /// Close the IPC connection
     pub fn close(&mut self) {
-        if self.writer.is_some() {
+        if self.stream.is_some() {
             let _socket_name = self.socket_name.clone();
 
             let _ = self.send(&IpcMessage::shutdown());
-            self.writer = None;
-            self.reader = None;
+            self.stream = None;
         }
     }
 }

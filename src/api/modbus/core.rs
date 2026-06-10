@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use parking_lot::Mutex;
+
 /// Core Modbus communication logic - Pure functions without channel dependencies
 ///
 /// This module provides the fundamental Modbus protocol operations:

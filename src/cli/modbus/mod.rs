@@ -2,15 +2,16 @@ pub mod handlers;
 pub mod master;
 pub mod slave;
 
-use std::time::Instant;
-
 use anyhow::{anyhow, Result};
 use parking_lot::Mutex as ParkingMutex;
-use rmodbus::{server::context::ModbusContext, server::storage::ModbusStorageSmall};
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use clap::ArgMatches;
+use rmodbus::server::{context::ModbusContext, storage::ModbusStorageSmall};
 
 use crate::{
     api::modbus::{ModbusHook, ModbusResponse},
