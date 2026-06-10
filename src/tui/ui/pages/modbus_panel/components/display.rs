@@ -410,7 +410,7 @@ pub fn render_kv_lines_with_indicators(
                             else {
                                 unreachable!("editing state requires string buffer");
                             };
-                            let custom_value = String::from_utf8_lossy(bytes).to_string();
+                            let custom_value = String::from_utf8_lossy(bytes).into_owned();
                             let placeholder = get_data_source_placeholder(master_source.kind());
                             return input_spans_with_placeholder(custom_value, placeholder, state);
                         }
@@ -444,7 +444,7 @@ pub fn render_kv_lines_with_indicators(
                             else {
                                 unreachable!("editing state requires string buffer");
                             };
-                            let custom_value = String::from_utf8_lossy(bytes).to_string();
+                            let custom_value = String::from_utf8_lossy(bytes).into_owned();
                             let placeholder = get_data_source_placeholder(master_source.kind());
                             return input_spans_with_placeholder(custom_value, placeholder, state);
                         }

@@ -205,7 +205,7 @@ impl ModbusMaster {
 
         // Read confirmation
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
@@ -255,7 +255,7 @@ impl ModbusMaster {
         port.flush()?;
 
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
@@ -294,7 +294,7 @@ impl ModbusMaster {
         port.flush()?;
 
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
@@ -714,7 +714,7 @@ async fn run_master_loop(
                                                 std::thread::sleep(
                                                     std::time::Duration::from_millis(50),
                                                 );
-                                                let mut buffer = vec![0u8; 256];
+                                                let mut buffer = [0u8; 256];
                                                 match port.read(&mut buffer) {
                                                     Ok(bytes_read) if bytes_read >= 8 => {
                                                         let response = &buffer[..bytes_read];
@@ -984,7 +984,7 @@ async fn run_multi_register_master_loop(
                                             tokio::time::sleep(Duration::from_millis(50)).await;
 
                                             // Read confirmation (acquire lock again)
-                                            let mut buffer = vec![0u8; 256];
+                                            let mut buffer = [0u8; 256];
                                             let read_result = {
                                                 let mut port = port_arc.lock();
                                                 port.read(&mut buffer)

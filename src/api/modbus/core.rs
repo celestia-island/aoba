@@ -66,7 +66,7 @@ pub fn slave_process_one_request_with_hooks(
 
     // Read request from port with retry for complete frame
     // Modbus RTU frames are typically 8+ bytes, but may arrive in fragments
-    let mut buffer = vec![0u8; 256];
+    let mut buffer = [0u8; 256];
     let mut total_bytes = 0;
 
     if residual_len > 0 {
@@ -380,10 +380,10 @@ pub fn master_write_coils(
     }
 
     // Read confirmation response
-    let mut buffer = vec![0u8; 256];
+    let mut buffer = [0u8; 256];
+    std::thread::sleep(std::time::Duration::from_millis(50));
     let bytes_read = {
         let mut port = port_arc.lock();
-        std::thread::sleep(std::time::Duration::from_millis(50)); // Wait for slave to process
         port.read(&mut buffer)?
     };
 
@@ -495,7 +495,7 @@ pub(super) fn execute_single_poll_internal(
     let expected_frame_length = 3 + expected_data_bytes + 2;
 
     // Read response
-    let mut buffer = vec![0u8; 256];
+    let mut buffer = [0u8; 256];
     let mut total_bytes = 0;
 
     {
@@ -543,7 +543,7 @@ pub(super) fn execute_single_poll_internal(
     };
 
     if response[1] != expected_func {
-        let mut flush_buffer = vec![0u8; 256];
+        let mut flush_buffer = [0u8; 256];
         let mut port = port_arc.lock();
         if let Ok(n) = port.read(&mut flush_buffer) {
             if n > 0 {
@@ -758,7 +758,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                     let expected_frame_length = 3 + expected_data_bytes + 2;
 
                     // Read response
-                    let mut buffer = vec![0u8; 256];
+                    let mut buffer = [0u8; 256];
                     let mut total_bytes = 0;
 
                     // First read
@@ -865,7 +865,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                             );
 
                             // Flush RX buffer
-                            let mut flush_buffer = vec![0u8; 256];
+                            let mut flush_buffer = [0u8; 256];
                             let mut port = params.port_arc.lock();
                             if let Ok(n) = port.read(&mut flush_buffer) {
                                 if n > 0 {

@@ -53,7 +53,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
                 }
                 types::ui::InputRawBuffer::String { bytes, .. } => {
-                    let value = String::from_utf8_lossy(bytes).to_string();
+                    let value = String::from_utf8_lossy(bytes).into_owned();
                     log::info!("🟡 Committing text edit, value='{value}'");
                     commit_text_edit(current_cursor, value, bus)?;
                 }
@@ -116,7 +116,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
                     }
                     types::ui::InputRawBuffer::String { bytes, .. } => {
-                        let value = String::from_utf8_lossy(bytes).to_string();
+                        let value = String::from_utf8_lossy(bytes).into_owned();
                         log::info!("💾 Committing text edit on Esc, value='{value}'");
                         commit_text_edit(current_cursor, value, bus)?;
                     }

@@ -844,6 +844,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
     log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
+    // Flags to track IPC connection and configuration state
+    let command_accepted = std::sync::atomic::AtomicBool::new(false);
+    let first_config_received = std::sync::atomic::AtomicBool::new(false);
+
     loop {
         // Check if HTTP server thread has panicked or errored
         if let Some(port) = http_server_thread {
@@ -855,17 +859,11 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         // Accept command connection if not yet connected
         if let Some(ref mut ipc_conns) = ipc_connections {
             // Try to accept command connection - retry on each loop iteration until successful
-            static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
-                std::sync::atomic::AtomicBool::new(false);
-            // Track if we've received the first StationsUpdate (initial configuration)
-            static FIRST_CONFIG_RECEIVED: std::sync::atomic::AtomicBool =
-                std::sync::atomic::AtomicBool::new(false);
-
-            if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+            if !command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
                 match ipc_conns.command_listener.accept() {
                     Ok(()) => {
                         log::info!("Command channel accepted");
-                        COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        command_accepted.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     Err(_e) => {
                         // Don't log every attempt to avoid spam, just keep trying
@@ -874,7 +872,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             }
 
             // Check for incoming commands
-            if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+            if command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Ok(Some(crate::protocol::ipc::IpcMessage::StationsUpdate {
                     stations_data,
                     update_reason,
@@ -882,8 +880,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 })) = ipc_conns.command_listener.try_recv()
                 {
                     let is_first_config =
-                        !FIRST_CONFIG_RECEIVED.load(std::sync::atomic::Ordering::Relaxed);
-                    FIRST_CONFIG_RECEIVED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        !first_config_received.load(std::sync::atomic::Ordering::Relaxed);
+                    first_config_received.store(true, std::sync::atomic::Ordering::Relaxed);
 
                     log::info!(
                         "Received stations update ({} bytes, is_first={}, reason={:?})",
@@ -1753,7 +1751,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     for notification in connection.iter() {
                         match notification {
                             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
-                                let payload = String::from_utf8_lossy(&publish.payload).to_string();
+                                let payload = String::from_utf8_lossy(&publish.payload).into_owned();
 
                                 // Send to async loop
                                 if mqtt_tx.send(payload).is_err() {

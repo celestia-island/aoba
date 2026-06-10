@@ -709,7 +709,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     last_values: vec![0],
                     req_success: 0,
                     req_total: 0,
-                    next_poll_at: std::time::Instant::now().checked_sub(std::time::Duration::from_secs(1)).unwrap(), // Start immediately
+                    next_poll_at: std::time::Instant::now(),
                     last_request_time: None,
                     last_response_time: None,
                     pending_requests: Vec::new(),

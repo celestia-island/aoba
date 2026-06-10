@@ -82,7 +82,7 @@ pub async fn run_core_thread<C: CoreContext>(
 ) -> Result<()> {
     let mut polling_enabled = config.polling_enabled;
     let scan_interval = config.scan_interval;
-    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap();
+    let mut last_scan = std::time::Instant::now() - scan_interval;
 
     let mut subprocess_manager = SubprocessManager::new();
 

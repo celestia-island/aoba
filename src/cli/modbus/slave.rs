@@ -84,7 +84,7 @@ fn run_slave_poll_transaction(
             port.flush()?;
         }
 
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = {
             let mut port = port_arc.lock();
             port.read(&mut buffer)?
@@ -408,7 +408,7 @@ fn listen_for_one_request(
     use rmodbus::{server::ModbusFrame, ModbusProto};
 
     // Read request from port
-    let mut buffer = vec![0u8; 256];
+    let mut buffer = [0u8; 256];
     let mut port = port_arc.lock();
     let bytes_read = port.read(&mut buffer)?;
     drop(port);
@@ -646,8 +646,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
     }
 
     // Flag to track whether command channel has been accepted
-    static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
+    let command_accepted = std::sync::atomic::AtomicBool::new(false);
 
     // Continuously poll
     // Keep track of last written values to avoid consecutive duplicate outputs
@@ -667,11 +666,11 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
     loop {
         // Try to accept incoming command channel connection (non-blocking)
         if let Some(ref mut ipc_conns) = ipc {
-            if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+            if !command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
                 match ipc_conns.command_listener.accept() {
                     Ok(()) => {
                         log::info!("Command channel accepted");
-                        COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        command_accepted.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     Err(_e) => {
                         // Don't log every attempt to avoid spam, just keep trying
@@ -681,7 +680,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         }
 
         // Check for incoming StationsUpdate commands for multi-station support
-        if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+        if command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
             if let Some(ref mut ipc_conns) = ipc {
                 if let Ok(Some(crate::protocol::ipc::IpcMessage::StationsUpdate {
                     stations_data,
@@ -879,7 +878,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                         }?;
 
                         // Wait for response
-                        let mut buffer = vec![0u8; 256];
+                        let mut buffer = [0u8; 256];
                         let bytes_read = {
                             let mut port = port_arc.lock();
                             port.read(&mut buffer)?
@@ -930,7 +929,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     Ok(())
                                 }
                             }?;
-                            let mut buffer = vec![0u8; 256];
+                            let mut buffer = [0u8; 256];
                             let bytes_read = {
                                 let mut port = port_arc.lock();
                                 port.read(&mut buffer)?

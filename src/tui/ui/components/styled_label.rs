@@ -118,7 +118,7 @@ pub fn input_spans_with_placeholder<'a>(
                     if let InputRawBuffer::String { bytes, offset } =
                         &status.temporarily.input_raw_buffer
                     {
-                        Some((String::from_utf8_lossy(bytes).to_string(), *offset))
+                        Some((String::from_utf8_lossy(bytes).into_owned(), *offset))
                     } else {
                         None
                     },

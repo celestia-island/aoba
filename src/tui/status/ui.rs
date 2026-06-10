@@ -59,7 +59,7 @@ impl InputRawBuffer {
     pub fn push(&mut self, c: char) {
         if let Self::String { bytes, offset } = self {
             // Insert char at current cursor offset (character index semantics)
-            let mut s = String::from_utf8_lossy(bytes).to_string();
+            let mut s = String::from_utf8_lossy(bytes).into_owned();
             let len_chars = s.chars().count() as isize;
             // compute insertion position
             let mut pos = if *offset >= 0 {
@@ -153,7 +153,7 @@ impl InputRawBuffer {
     /// Move cursor offset by delta (can be negative). Clamped to valid range.
     pub fn move_offset(&mut self, delta: isize) {
         if let Self::String { bytes, offset } = self {
-            let s = String::from_utf8_lossy(bytes).to_string();
+            let s = String::from_utf8_lossy(bytes).into_owned();
             let len_chars = s.chars().count() as isize;
             let mut new = *offset + delta;
             // clamp: allow negative values down to -len_chars
