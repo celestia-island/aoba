@@ -206,7 +206,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.new_port_creation.port_type_index = 0;
 
                     // Set cursor to the newly created port (last in the list)
-                    let new_port_index = status.ports.order.len() - 1;
+                    let new_port_index = status.ports.order.len().saturating_sub(1);
                     status.page = Page::Entry {
                         cursor: Some(types::cursor::EntryCursor::Com {
                             index: new_port_index,

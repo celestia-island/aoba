@@ -22,8 +22,10 @@ pub fn parse_pull_get_discrete_inputs(
 ) -> Result<Vec<bool>> {
     request.parse_ok(&response)?;
 
-    // Modbus pack: first discrete/coils correspond to LSB (bit0) of first data byte.
-    // Iterate bits LSB->MSB per byte and then take the first `count` bits.
+    if response.len() < 5 {
+        return Err(anyhow::anyhow!("Response too short for discrete inputs: {} bytes", response.len()));
+    }
+
     let mut values = response[3..response.len() - 2]
         .iter()
         .flat_map(|byte| (0..8).map(move |i| (byte & (1 << i)) != 0))

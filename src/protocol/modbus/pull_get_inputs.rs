@@ -18,6 +18,10 @@ pub fn generate_pull_get_inputs_request(
 pub fn parse_pull_get_inputs(request: &mut ModbusRequest, response: Vec<u8>) -> Result<Vec<u16>> {
     request.parse_ok(&response)?;
 
+    if response.len() < 5 {
+        return Err(anyhow::anyhow!("Response too short for inputs: {} bytes", response.len()));
+    }
+
     let values = response[3..response.len() - 2]
         .chunks_exact(2)
         .map(|c| u16::from_be_bytes([c[0], c[1]]))
