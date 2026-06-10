@@ -335,11 +335,15 @@ impl IpcServer {
     /// Close the IPC connection
     pub fn close(&mut self) {
         if self.stream.is_some() {
-            let _socket_name = self.socket_name.clone();
-
             let _ = self.send(&IpcMessage::shutdown());
             self.stream = None;
         }
+    }
+
+    /// Get the socket name
+    #[must_use]
+    pub fn socket_name(&self) -> &str {
+        &self.socket_name
     }
 }
 
@@ -383,7 +387,6 @@ impl IpcClient {
 
         Ok(IpcConnection {
             reader: BufReader::new(stream),
-            _writer: None,
         })
     }
 
@@ -396,7 +399,6 @@ impl IpcClient {
 /// An active IPC connection from a CLI subprocess
 pub struct IpcConnection {
     reader: BufReader<Stream>,
-    _writer: Option<Stream>,
 }
 
 impl IpcConnection {
@@ -415,8 +417,7 @@ impl IpcConnection {
             }
             Ok(_) => {
                 let msg = IpcMessage::from_json(line.trim())?;
-                if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-                } else {
+                if !matches!(&msg, IpcMessage::Heartbeat { .. }) {
                     log::info!("IPC: Received message: {msg:?}");
                 }
                 Ok(Some(msg))
@@ -436,8 +437,7 @@ impl IpcConnection {
         }
 
         let msg = IpcMessage::from_json(line.trim())?;
-        if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-        } else {
+        if !matches!(&msg, IpcMessage::Heartbeat { .. }) {
             log::info!("IPC: Received message: {msg:?}");
         }
         Ok(msg)
@@ -457,7 +457,6 @@ impl IpcConnection {
 /// IPC Command Client (runs in TUI to send commands to CLI subprocess)
 /// This is the reverse channel: TUI → CLI
 pub struct IpcCommandClient {
-    _socket_name: String,
     stream: Option<Stream>,
 }
 
@@ -472,7 +471,6 @@ impl IpcCommandClient {
         log::info!("IPC CMD: Successfully connected to command channel: {command_channel_name}");
 
         Ok(Self {
-            _socket_name: command_channel_name,
             stream: Some(stream),
         })
     }
@@ -493,6 +491,7 @@ impl IpcCommandClient {
     /// Close the command connection
     pub fn close(&mut self) {
         if self.stream.is_some() {
+            let _ = self.send(&IpcMessage::shutdown());
             self.stream = None;
         }
     }
@@ -507,7 +506,6 @@ impl Drop for IpcCommandClient {
 /// IPC Command Listener (runs in CLI subprocess to receive commands from TUI)
 /// This listens on the reverse channel: TUI → CLI
 pub struct IpcCommandListener {
-    _socket_name: String,
     listener: Option<interprocess::local_socket::Listener>,
     connection: Option<IpcCommandConnection>,
 }
@@ -528,7 +526,6 @@ impl IpcCommandListener {
         log::info!("IPC CMD: Listening for commands on: {command_channel_name} (non-blocking)");
 
         Ok(Self {
-            _socket_name: command_channel_name,
             listener: Some(listener),
             connection: None,
         })

@@ -67,14 +67,14 @@ pub async fn shutdown_and_join(port: u16) -> Result<()> {
 }
 
 /// Shutdown all registered HTTP daemons and join them.
-pub fn shutdown_all_and_join() {
+pub async fn shutdown_all_and_join() {
     let ports: Vec<u16> = {
         let reg = HTTP_REGISTRY.lock();
         reg.map.keys().copied().collect()
     };
 
     for p in ports {
-        std::mem::drop(shutdown_and_join(p));
+        let _ = shutdown_and_join(p).await;
     }
 }
 

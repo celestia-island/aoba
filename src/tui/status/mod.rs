@@ -309,57 +309,47 @@ pub mod serializable {
             state = PortState::OccupiedByThis;
         }
 
-        // Build station list
         let mut stations = Vec::new();
-        if !port.modbus_slaves.is_empty() && port.modbus_masters.is_empty() {
+        let is_slave = !port.modbus_slaves.is_empty();
+        let is_master = !port.modbus_masters.is_empty();
+
+        if is_slave {
             for station in &port.modbus_slaves {
                 stations.push(convert_station(station)?);
             }
-            let config = PortConfig::Modbus {
-                mode: ModbusConnectionMode::default_slave(),
-                master_source: Default::default(),
-                stations,
-            };
-            let status_indicator = match &state {
-                PortState::OccupiedByThis => PortStatusIndicator::Running,
-                _ => PortStatusIndicator::NotStarted,
-            };
-
-            let data = PortData {
-                port_name: port.name.clone(),
-                port_type: port.port_type,
-                state,
-                status_indicator,
-                config,
-                ..PortData::default()
-            };
-
-            Ok(data)
-        } else {
+        }
+        if is_master {
             for station in &port.modbus_masters {
                 stations.push(convert_station(station)?);
             }
-            let config = PortConfig::Modbus {
-                mode: ModbusConnectionMode::default_master(),
-                master_source: port.master_source.clone(),
-                stations,
-            };
-            let status_indicator = match &state {
-                PortState::OccupiedByThis => PortStatusIndicator::Running,
-                _ => PortStatusIndicator::NotStarted,
-            };
-
-            let data = PortData {
-                port_name: port.name.clone(),
-                port_type: port.port_type,
-                state,
-                status_indicator,
-                config,
-                ..PortData::default()
-            };
-
-            Ok(data)
         }
+
+        let mode = if is_slave && !is_master {
+            ModbusConnectionMode::default_slave()
+        } else {
+            ModbusConnectionMode::default_master()
+        };
+
+        let config = PortConfig::Modbus {
+            mode,
+            master_source: port.master_source.clone(),
+            stations,
+        };
+        let status_indicator = match &state {
+            PortState::OccupiedByThis => PortStatusIndicator::Running,
+            _ => PortStatusIndicator::NotStarted,
+        };
+
+        let data = PortData {
+            port_name: port.name.clone(),
+            port_type: port.port_type,
+            state,
+            status_indicator,
+            config,
+            ..PortData::default()
+        };
+
+        Ok(data)
     }
 
     fn convert_station(station: &TuiModbusStation) -> Result<ModbusRegisterItem> {

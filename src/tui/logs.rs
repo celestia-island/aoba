@@ -266,15 +266,7 @@ pub(crate) fn append_modbus_log(
     let register_end = register_start
         .and_then(|start| register_quantity.map(|len| start.saturating_add(len.saturating_sub(1))));
 
-    let full_payload_hex = if payload.is_empty() {
-        String::new()
-    } else {
-        payload
-            .iter()
-            .map(|byte| format!("{byte:02X}"))
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
+    let full_payload_hex = crate::utils::format_hex_bytes(&payload);
 
     if failure_reason.is_none() {
         failure_reason = parse_error.clone();

@@ -198,10 +198,8 @@ pub async fn run_core_thread<C: CoreContext>(
                         .send(CoreToUi::Refreshed)
                         .map_err(|err| anyhow!("Failed to send Refreshed: {err}"))?;
                 }
-                UiToCore::SendRegisterUpdate { port_name, .. } => {
-                    log::info!("SendRegisterUpdate requested for {port_name}");
-                    // Context should handle sending the update via the subprocess manager
-                    // We just notify the context through the normal flow
+                UiToCore::SendRegisterUpdate { port_name, station_id, start_address, .. } => {
+                    log::info!("SendRegisterUpdate for {port_name} (station={station_id}, addr={start_address}) skipped in daemon mode: UI register writes are only handled in TUI mode");
                 }
             }
         }

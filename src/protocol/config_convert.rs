@@ -19,78 +19,30 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
     let mut items = Vec::new();
 
     for station in stations {
-        // Convert each register range in the station to a ModbusRegisterItem
+        let ranges: [(RegisterMode, &[RegisterRange]); 4] = [
+            (RegisterMode::Coils, &station.map.coils),
+            (RegisterMode::DiscreteInputs, &station.map.discrete_inputs),
+            (RegisterMode::Holding, &station.map.holding),
+            (RegisterMode::Input, &station.map.input),
+        ];
 
-        // Coils
-        for range in &station.map.coils {
-            items.push(ModbusRegisterItem {
-                station_id: station.station_id,
-                register_mode: RegisterMode::Coils,
-                register_address: range.address_start,
-                register_length: range.length,
-                last_values: range.initial_values.clone(),
-                req_success: 0,
-                req_total: 0,
-                next_poll_at: Instant::now(),
-                last_request_time: None,
-                last_response_time: None,
-                pending_requests: Vec::new(),
-                pending_writes: std::collections::HashMap::new(),
-            });
-        }
-
-        // Discrete Inputs
-        for range in &station.map.discrete_inputs {
-            items.push(ModbusRegisterItem {
-                station_id: station.station_id,
-                register_mode: RegisterMode::DiscreteInputs,
-                register_address: range.address_start,
-                register_length: range.length,
-                last_values: range.initial_values.clone(),
-                req_success: 0,
-                req_total: 0,
-                next_poll_at: Instant::now(),
-                last_request_time: None,
-                last_response_time: None,
-                pending_requests: Vec::new(),
-                pending_writes: std::collections::HashMap::new(),
-            });
-        }
-
-        // Holding Registers
-        for range in &station.map.holding {
-            items.push(ModbusRegisterItem {
-                station_id: station.station_id,
-                register_mode: RegisterMode::Holding,
-                register_address: range.address_start,
-                register_length: range.length,
-                last_values: range.initial_values.clone(),
-                req_success: 0,
-                req_total: 0,
-                next_poll_at: Instant::now(),
-                last_request_time: None,
-                last_response_time: None,
-                pending_requests: Vec::new(),
-                pending_writes: std::collections::HashMap::new(),
-            });
-        }
-
-        // Input Registers
-        for range in &station.map.input {
-            items.push(ModbusRegisterItem {
-                station_id: station.station_id,
-                register_mode: RegisterMode::Input,
-                register_address: range.address_start,
-                register_length: range.length,
-                last_values: range.initial_values.clone(),
-                req_success: 0,
-                req_total: 0,
-                next_poll_at: Instant::now(),
-                last_request_time: None,
-                last_response_time: None,
-                pending_requests: Vec::new(),
-                pending_writes: std::collections::HashMap::new(),
-            });
+        for (register_mode, ranges) in ranges {
+            for range in ranges {
+                items.push(ModbusRegisterItem {
+                    station_id: station.station_id,
+                    register_mode,
+                    register_address: range.address_start,
+                    register_length: range.length,
+                    last_values: range.initial_values.clone(),
+                    req_success: 0,
+                    req_total: 0,
+                    next_poll_at: Instant::now(),
+                    last_request_time: None,
+                    last_response_time: None,
+                    pending_requests: Vec::new(),
+                    pending_writes: std::collections::HashMap::new(),
+                });
+            }
         }
     }
 

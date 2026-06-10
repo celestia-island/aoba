@@ -60,14 +60,7 @@ pub(crate) fn emit_modbus_ipc_log(
 
 /// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
 pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
-    if bytes.is_empty() {
-        return String::new();
-    }
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02X}"))
-        .collect::<Vec<_>>()
-        .join(" ")
+    crate::utils::format_hex_bytes(bytes)
 }
 
 pub struct CliModbusHook {

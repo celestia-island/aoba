@@ -17,3 +17,16 @@ pub use ipc::{IpcReceiver, IpcSender};
 pub use ipc_messages::*;
 pub use ports::*;
 pub use sleep::*;
+
+/// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
+#[must_use]
+pub fn format_hex_bytes(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    bytes
+        .iter()
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}

@@ -304,7 +304,10 @@ impl RegisterMode {
             2 => Self::DiscreteInputs,
             3 => Self::Holding,
             4 => Self::Input,
-            _ => unimplemented!("Invalid RegisterMode value: {v}"),
+            _ => {
+                log::warn!("Invalid RegisterMode value: {v}, defaulting to Holding");
+                Self::Holding
+            }
         }
     }
 
@@ -627,7 +630,6 @@ impl std::fmt::Display for DataBitsOption {
 }
 
 // Custom conversion helpers removed. Use direct casts and `FromRepr::from_repr` as needed.
-impl DataBitsOption {}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, FromRepr)]
