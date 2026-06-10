@@ -444,13 +444,15 @@ impl IpcConnection {
     }
 
     /// Send a message to the CLI subprocess
-    /// Note: Bidirectional communication with interprocess streams is complex
-    /// For now, this is not implemented. Consider using a separate connection
-    /// from TUI to CLI for sending messages.
-    pub fn send(&mut self, _msg: &IpcMessage) -> Result<()> {
-        Err(anyhow!(
-            "IPC Connection send not implemented - use separate channel"
-        ))
+    pub fn send(&mut self, msg: &IpcMessage) -> Result<()> {
+        let stream: &mut Stream = self.reader.get_mut();
+        let json = msg.to_json()?;
+        writeln!(stream, "{json}")?;
+        stream.flush()?;
+        if !matches!(msg, IpcMessage::Heartbeat { .. }) {
+            log::info!("IPC: Sent message: {msg:?}");
+        }
+        Ok(())
     }
 }
 

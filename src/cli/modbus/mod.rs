@@ -45,7 +45,7 @@ pub(crate) fn emit_modbus_ipc_log(
             .send(&crate::protocol::ipc::IpcMessage::ModbusData {
                 port_name: payload.port.to_string(),
                 direction: payload.direction.to_string(),
-                data: format_hex_bytes(payload.frame),
+                data: crate::utils::format_hex_bytes(payload.frame),
                 timestamp: None,
                 station_id: payload.station_id,
                 register_mode: payload.register_mode.map(|m| format!("{m:?}")),
@@ -56,11 +56,6 @@ pub(crate) fn emit_modbus_ipc_log(
                 config_index: payload.config_index,
             });
     }
-}
-
-/// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
-pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
-    crate::utils::format_hex_bytes(bytes)
 }
 
 pub struct CliModbusHook {
@@ -250,25 +245,7 @@ pub fn extract_values_from_storage(
     length: u16,
     reg_mode: RegisterMode,
 ) -> Result<Vec<u16>> {
-    let storage = storage.lock();
-    let mut values = Vec::new();
-
-    for i in 0..length {
-        let addr = start_addr + i;
-        let value = match reg_mode {
-            RegisterMode::Holding => storage.get_holding(addr)?,
-            RegisterMode::Input => storage.get_input(addr)?,
-            RegisterMode::Coils => {
-                u16::from(storage.get_coil(addr)?)
-            }
-            RegisterMode::DiscreteInputs => {
-                u16::from(storage.get_discrete(addr)?)
-            }
-        };
-        values.push(value);
-    }
-
-    Ok(values)
+    crate::api::modbus::core::extract_values_from_storage(storage, start_addr, length, reg_mode)
 }
 
 /// Write values to Modbus storage based on register mode.

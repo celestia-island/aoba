@@ -414,7 +414,7 @@ pub fn master_write_coils(
     Ok(request_frame)
 }
 
-fn extract_values_from_storage(
+pub(crate) fn extract_values_from_storage(
     storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     start_addr: u16,
     length: u16,
