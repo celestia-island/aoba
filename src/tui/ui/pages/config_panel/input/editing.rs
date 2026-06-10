@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use strum::IntoEnumIterator;
 
 use crossterm::event::{KeyCode, KeyEvent};
