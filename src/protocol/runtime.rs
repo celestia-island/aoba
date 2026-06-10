@@ -1,9 +1,11 @@
 use anyhow::Result;
 use std::{
     io::{Read, Write},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
+
+use parking_lot::Mutex;
 
 use flume::{Receiver, Sender};
 use serialport::{DataBits, Parity, SerialPort, StopBits};
@@ -191,10 +193,9 @@ async fn boot_serial_loop(
                 }
                 RuntimeCommand::Write(bytes) => {
                     let mut ok = false;
-                    if let Ok(mut serial) = serial.lock() {
-                        if serial.write_all(&bytes).is_ok() && serial.flush().is_ok() {
-                            ok = true;
-                        }
+                    let mut serial = serial.lock();
+                    if serial.write_all(&bytes).is_ok() && serial.flush().is_ok() {
+                        ok = true;
                     }
                     if ok {
                         evt_tx.send(RuntimeEvent::FrameSent(bytes.into()))?;
@@ -214,9 +215,9 @@ async fn boot_serial_loop(
             }
         }
         // Try to read from serial port
-        let mut data_received = false;
         read_attempts += 1;
-        if let Ok(mut g) = serial.lock() {
+        let data_received = {
+            let mut g = serial.lock();
             let mut buf = [0u8; READ_BUF_SIZE];
             match g.read(&mut buf) {
                 Ok(n) if n > 0 => {
@@ -229,27 +230,22 @@ async fn boot_serial_loop(
                     );
                     assembling.extend_from_slice(&buf[..n]);
                     last_byte = Some(Instant::now());
-                    data_received = true;
                     if assembling.len() > MAX_ASSEMBLING_LEN {
                         finalize_buffer(&mut assembling, &evt_tx)?;
                         assembling.clear();
                         last_byte = None;
                     }
+                    true
                 }
-                Ok(_) => {
-                    // Read returned 0 bytes, continue
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => {
-                    // Timeout is expected, continue
-                }
+                Ok(_) => false,
+                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => false,
                 Err(err) => {
                     log::warn!("⚠️  Runtime {port_name}: Serial read error: {err}");
                     evt_tx.send(RuntimeEvent::Error(format!("read error: {err}")))?;
+                    false
                 }
             }
-        } else {
-            log::warn!("⚠️  Runtime {port_name}: Failed to lock serial port");
-        }
+        };
 
         // Only sleep if no data was received to avoid excessive CPU usage
         // When data is flowing, continue immediately to read more
@@ -434,8 +430,6 @@ fn reopen_serial(
     let builder = serialport::new(port, cfg.baud).timeout(Duration::from_millis(200));
     let builder = cfg.apply_builder(builder);
     let new_handle = builder.open()?;
-    if let Ok(mut handle) = shared.lock() {
-        *handle = new_handle;
-    }
+    *shared.lock() = new_handle;
     Ok(())
 }
