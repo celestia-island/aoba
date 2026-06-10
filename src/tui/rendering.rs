@@ -80,7 +80,9 @@ pub(crate) fn run_rendering_loop(
             }
 
             terminal.draw(|frame| {
-                render_ui(frame).expect("Render failed");
+                if let Err(e) = render_ui(frame) {
+                    log::error!("Render error: {e}");
+                }
             })?;
         }
 

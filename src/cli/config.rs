@@ -1,3 +1,4 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -114,19 +115,19 @@ impl Default for CommunicationParams {
 
 impl ModbusBootConfig {
     /// Parse configuration from a JSON string
-    pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json_str)
+    pub fn from_json(json_str: &str) -> Result<Self> {
+        Ok(serde_json::from_str(json_str)?)
     }
 
     /// Read configuration from a file
-    pub fn from_file(file_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file(file_path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(file_path)?;
-        Self::from_json(&content).map_err(|e| e.into())
+        Self::from_json(&content)
     }
 
     /// Convert to a JSON string
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+    pub fn to_json(&self) -> Result<String> {
+        Ok(serde_json::to_string_pretty(self)?)
     }
 }
 

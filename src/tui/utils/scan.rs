@@ -118,9 +118,9 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 .ports
                 .order
                 .iter()
-                .map(|name| {
-                    let p = status.ports.map.get(name).unwrap();
-                    crate::utils::ports::PreviousPort {
+                .filter_map(|name| {
+                    let p = status.ports.map.get(name)?;
+                    Some(crate::utils::ports::PreviousPort {
                         name: name.clone(),
                         occupied_by_this: p.state.is_occupied_by_this(),
                         has_config: match &p.config {
@@ -129,7 +129,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                             }
                         },
                         log_count: p.logs.len(),
-                    }
+                    })
                 })
                 .collect::<Vec<_>>())
         })?;

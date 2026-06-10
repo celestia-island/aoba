@@ -94,14 +94,16 @@ pub fn is_port_occupied(port_name: &str) -> bool {
                 None,
             );
 
-            if handle.is_err() {
-                let error = GetLastError();
-                return matches!(error, WIN32_ERROR(32) | WIN32_ERROR(5));
+            match handle {
+                Ok(h) => {
+                    let _ = CloseHandle(h);
+                    false
+                }
+                Err(_) => {
+                    let error = GetLastError();
+                    matches!(error, WIN32_ERROR(32) | WIN32_ERROR(5))
+                }
             }
-
-            let handle = handle.unwrap();
-            let _ = CloseHandle(handle);
-            false
         }
     }
 
