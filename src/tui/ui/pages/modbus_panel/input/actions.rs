@@ -440,10 +440,10 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                     );
 
                                                     if should_queue {
-                                                        let coil_value = if new_value_flag {
-                                                            0xFF00
+                                                    let coil_value = if new_value_flag {
+                                                            crate::api::modbus::core::MODBUS_COIL_ON
                                                         } else {
-                                                            0x0000
+                                                            crate::api::modbus::core::MODBUS_COIL_OFF
                                                         };
 
                                                         if let Ok((_request, raw_frame)) =

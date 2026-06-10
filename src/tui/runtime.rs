@@ -27,6 +27,8 @@ use crate::{
     utils::{i18n::lang, sleep::sleep_1s},
 };
 
+const MAX_STDERR_LOGS_PER_PORT: usize = 100;
+
 /// Helper function to get stations configuration from TUI status
 fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
     crate::tui::status::read_status(|status| {
@@ -454,8 +456,8 @@ pub async fn run_core_thread(
                         }
 
                         // Keep only the most recent 100 stderr logs per port
-                        if port.cli_stderr_logs.len() > 100 {
-                            let start = port.cli_stderr_logs.len() - 100;
+                        if port.cli_stderr_logs.len() > MAX_STDERR_LOGS_PER_PORT {
+                            let start = port.cli_stderr_logs.len() - MAX_STDERR_LOGS_PER_PORT;
                             port.cli_stderr_logs.drain(0..start);
                         }
                     }

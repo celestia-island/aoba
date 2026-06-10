@@ -13,6 +13,10 @@ use std::{
     sync::Arc,
 };
 
+pub(crate) const MODBUS_RTU_MIN_RESPONSE_SIZE: usize = 8;
+pub(crate) const MODBUS_COIL_ON: u16 = 0xFF00;
+pub(crate) const MODBUS_COIL_OFF: u16 = 0x0000;
+
 use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode, ResponseRegisterMode};
 
 /// Listen for one Modbus request and respond (Slave/Server logic)
@@ -108,7 +112,7 @@ pub fn slave_process_one_request_with_hooks(
         // Response frames are usually longer (>15 bytes) and contain larger payloads
         // Request frames are usually shorter (8-13 bytes)
         // Lower threshold to 20 bytes to more aggressively filter short response frames
-        if total_bytes > 20 {
+        if total_bytes > MODBUS_RTU_MIN_RESPONSE_SIZE * 2 + 4 {
             // Clear buffer; do not attempt parsing
             let mut residual = params.residual_buffer.lock();
             residual.clear();
@@ -124,7 +128,7 @@ pub fn slave_process_one_request_with_hooks(
 
     for start_offset in 0..total_bytes {
         // Minimum Modbus RTU frame is 8 bytes (addr 1 + func 1 + data N>=2 + CRC 2)
-        if total_bytes - start_offset < 8 {
+        if total_bytes - start_offset < MODBUS_RTU_MIN_RESPONSE_SIZE {
             break;
         }
 
@@ -387,7 +391,7 @@ pub fn master_write_coils(
         port.read(&mut buffer)?
     };
 
-    if bytes_read < 8 {
+    if bytes_read < MODBUS_RTU_MIN_RESPONSE_SIZE {
         return Err(anyhow!(
             "Invalid write response (too short: {bytes_read} bytes)"
         ));

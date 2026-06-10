@@ -258,13 +258,15 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
-                    let _ = ipc_conns
+                    if let Err(e) = ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        });
+                        }) {
+                        log::warn!("IPC send failed: {e}");
+                    }
                 }
                 return Err(err);
             }
@@ -274,19 +276,20 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc {
-        let _ = ipc_conns
+        if let Err(e) = ipc_conns
             .status
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            });
+            }) {
+            log::warn!("IPC send failed: {e}");
+        }
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
             // Explicitly drop the port and wait for OS to release it
             let mut port = pa.lock();
@@ -607,13 +610,15 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
-                    let _ = ipc_conns
+                    if let Err(e) = ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        });
+                        }) {
+                        log::warn!("IPC send failed: {e}");
+                    }
                 }
                 return Err(err);
             }
@@ -623,19 +628,20 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc {
-        let _ = ipc_conns
+        if let Err(e) = ipc_conns
             .status
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            });
+            }) {
+            log::warn!("IPC send failed: {e}");
+        }
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
             // Explicitly drop the port and wait for OS to release it
             let mut port = pa.lock();
@@ -1125,13 +1131,15 @@ pub async fn handle_slave_listen_ipc_channel(
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
-                    let _ = ipc_conns
+                    if let Err(e) = ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        });
+                        }) {
+                        log::warn!("IPC send failed: {e}");
+                    }
                 }
                 return Err(err);
             }
@@ -1141,19 +1149,20 @@ pub async fn handle_slave_listen_ipc_channel(
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc {
-        let _ = ipc_conns
+        if let Err(e) = ipc_conns
             .status
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            });
+            }) {
+            log::warn!("IPC send failed: {e}");
+        }
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
             let mut port = pa.lock();
             let _ = std::io::Write::flush(&mut **port);

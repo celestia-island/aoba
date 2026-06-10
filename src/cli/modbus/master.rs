@@ -582,12 +582,14 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
         // Notify IPC that virtual port is ready
         if let Some(ref mut ipc_conns) = ipc_connections {
-            let _ = ipc_conns
+            if let Err(e) = ipc_conns
                 .status
                 .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                     port_name: port.to_string(),
                     timestamp: None,
-                });
+                }) {
+                log::warn!("IPC send failed: {e}");
+            }
             log::info!("IPC: Sent PortOpened message for virtual port {port}");
         }
 
@@ -614,12 +616,14 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
         // Notify IPC that port was opened successfully
         if let Some(ref mut ipc_conns) = ipc_connections {
-            let _ = ipc_conns
+            if let Err(e) = ipc_conns
                 .status
                 .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                     port_name: port.to_string(),
                     timestamp: None,
-                });
+                }) {
+                log::warn!("IPC send failed: {e}");
+            }
             log::info!("IPC: Sent PortOpened message for physical port {port}");
         }
 
