@@ -13,7 +13,7 @@
 /// - Return `Err(other)` for actual errors (stops processing with error)
 ///
 /// The handler chain stops at the first `Ok`, or returns the last non-NotHandled error.
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Error};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -171,7 +171,7 @@ pub fn execute_slave_handler_chain(
         return Err(anyhow!("No handlers configured"));
     }
 
-    let mut last_error: Option<anyhow::Error> = None;
+    let mut last_error: Option<Error> = None;
 
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {
@@ -210,7 +210,7 @@ pub fn execute_master_handler_chain(
         return Err(anyhow!("No handlers configured"));
     }
 
-    let mut last_error: Option<anyhow::Error> = None;
+    let mut last_error: Option<Error> = None;
 
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {

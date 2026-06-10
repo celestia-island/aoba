@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Error};
 use parking_lot::Mutex;
 
 /// Core Modbus communication logic - Pure functions without channel dependencies
@@ -121,7 +121,7 @@ pub fn slave_process_one_request_with_hooks(
 
     // Sliding-window parsing: try parsing starting from each possible offset
     // This handles cases where data may not start at buffer[0]
-    let mut last_parse_error: Option<anyhow::Error> = None;
+    let mut last_parse_error: Option<Error> = None;
 
     for start_offset in 0..total_bytes {
         // Minimum Modbus RTU frame is 8 bytes (addr 1 + func 1 + data N>=2 + CRC 2)

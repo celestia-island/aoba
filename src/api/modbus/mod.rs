@@ -4,7 +4,7 @@ pub mod probe;
 pub mod slave;
 pub mod traits;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Error};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -471,7 +471,7 @@ pub trait ModbusHook: Send + Sync {
     fn on_after_response(&self, _port: &str, _response: &ModbusResponse) -> Result<()> {
         Ok(())
     }
-    fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
+    fn on_error(&self, _port: &str, _error: &Error) {}
 
     /// Called before writing data to Modbus (Master writing to Slave)
     ///

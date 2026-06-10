@@ -2,7 +2,7 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result, Error};
 
 
 use crate::{
@@ -392,7 +392,7 @@ async fn execute_step_group_with_retry(
     let mut retry_count = 0;
     let max_retries = group.max_retries;
     let mut first_failure_screenshot: Option<String> = None;
-    let mut last_error: Option<anyhow::Error> = None;
+    let mut last_error: Option<Error> = None;
 
     loop {
         if retry_count > 0 {

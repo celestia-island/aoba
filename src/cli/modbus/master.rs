@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use parking_lot::Mutex;
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -41,7 +41,7 @@ pub enum DataSource {
 }
 
 impl std::str::FromStr for DataSource {
-    type Err = anyhow::Error;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "manual" {
@@ -1799,7 +1799,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     }
 
                     log::warn!("MQTT connection closed");
-                    Ok::<(), anyhow::Error>(())
+                    Ok::<(), Error>(())
                 });
 
                 // Receive MQTT messages and update storage

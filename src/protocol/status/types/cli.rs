@@ -3,7 +3,7 @@
 /// These types originated in `src/cli/status/serializable.rs` but are now
 /// part of the shared protocol layer so both CLI and test utilities can
 /// reuse them without duplicating definitions.
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error, Result};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 
@@ -40,7 +40,7 @@ pub enum OutputSink {
 }
 
 impl std::str::FromStr for OutputSink {
-    type Err = anyhow::Error;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(path) = s.strip_prefix("file:") {

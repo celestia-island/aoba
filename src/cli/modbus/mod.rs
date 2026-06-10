@@ -2,7 +2,7 @@ pub mod handlers;
 pub mod master;
 pub mod slave;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Error};
 use parking_lot::Mutex as ParkingMutex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -108,7 +108,7 @@ impl ModbusHook for CliModbusHook {
         Ok(())
     }
 
-    fn on_error(&self, port: &str, error: &anyhow::Error) {
+    fn on_error(&self, port: &str, error: &Error) {
         // Log error via IPC?
         if let Ok(mut ipc) = self.ipc.lock() {
             if let Some(ref mut ipc_conn) = *ipc {

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use parking_lot::Mutex;
 use std::{
     io::Write,
@@ -27,7 +27,7 @@ enum SlavePollTransaction {
         response: ModbusResponse,
     },
     Failure {
-        error: anyhow::Error,
+        error: Error,
         request_frame: Vec<u8>,
     },
 }
