@@ -144,12 +144,11 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     .unwrap_or(None);
 
     if let Some(port) = port_opt {
-        let st = port.state.clone();
         let cfg = &port.serial_config;
 
         let mut lines: Vec<Line<'static>> = Vec::new();
 
-        let enabled = matches!(st, types::port::PortState::OccupiedByThis);
+        let enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
         let val_enabled = lang().protocol.common.port_enabled.clone();
         let val_disabled = lang().protocol.common.port_disabled.clone();
         let enable_text = if enabled { val_enabled } else { val_disabled };

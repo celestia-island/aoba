@@ -136,7 +136,7 @@ pub fn render_kv_lines_with_indicators(
         let mut rendered_value_spans: Vec<Span> = Vec::new();
         if let Some(ref port) = port_data {
             let types::port::PortConfig::Modbus { mode, .. } = &port.config;
-            let (current_mode, mode_obj) = (mode.to_index(), mode.clone());
+            let current_mode = mode.to_index();
 
             let selected = matches!(
                 current_selection,
@@ -165,7 +165,7 @@ pub fn render_kv_lines_with_indicators(
             };
 
             let variants = ModbusConnectionMode::all_variants();
-            let current_text = format!("{mode_obj}");
+            let current_text = format!("{mode}");
 
             match state {
                 TextState::Normal => {

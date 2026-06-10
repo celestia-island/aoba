@@ -81,6 +81,25 @@ use crate::{
 
 const SERIAL_PORT_OPEN_RETRIES: usize = 3;
 
+fn parse_request_range(
+    assembling: &[u8],
+) -> Option<(u16, u16, crate::protocol::status::types::modbus::RegisterMode)> {
+    use crate::protocol::status::types::modbus::RegisterMode;
+    if assembling.len() < 8 {
+        return None;
+    }
+    let func = assembling[1];
+    let start = u16::from_be_bytes([assembling[2], assembling[3]]);
+    let qty = u16::from_be_bytes([assembling[4], assembling[5]]);
+    match func {
+        0x01 => Some((start, qty, RegisterMode::Coils)),
+        0x02 => Some((start, qty, RegisterMode::DiscreteInputs)),
+        0x03 => Some((start, qty, RegisterMode::Holding)),
+        0x04 => Some((start, qty, RegisterMode::Input)),
+        _ => None,
+    }
+}
+
 async fn open_serial_port_with_retry(
     port: &str,
     baud_rate: u32,
@@ -1083,60 +1102,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             ReadAction2::NoData
                         } else if let Some(last_time) = last_byte_time {
                             if last_time.elapsed() >= frame_gap {
-                                // Determine parsed_range without holding lock
-                                let request_preview = assembling.clone();
-                                let parsed_range = if request_preview.len() >= 8 {
-                                    let func = request_preview[1];
-                                    match func {
-                                        0x01 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                        }
-                                        0x02 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                        }
-                                        0x03 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                        }
-                                        0x04 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                        }
-                                        _ => None,
-                                    }
-                                } else {
-                                    None
-                                };
+                                let parsed_range = parse_request_range(&assembling);
                                 ReadAction2::FrameReady(parsed_range)
                             } else {
                                 ReadAction2::NoData
@@ -1150,59 +1116,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             ReadAction2::Timeout
                         } else if let Some(last_time) = last_byte_time {
                             if last_time.elapsed() >= frame_gap {
-                                let request_preview = assembling.clone();
-                                let parsed_range = if request_preview.len() >= 8 {
-                                    let func = request_preview[1];
-                                    match func {
-                                        0x01 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                        }
-                                        0x02 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                        }
-                                        0x03 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                        }
-                                        0x04 => {
-                                            let start = u16::from_be_bytes([
-                                                request_preview[2],
-                                                request_preview[3],
-                                            ]);
-                                            let qty = u16::from_be_bytes([
-                                                request_preview[4],
-                                                request_preview[5],
-                                            ]);
-                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                        }
-                                        _ => None,
-                                    }
-                                } else {
-                                    None
-                                };
+                                let parsed_range = parse_request_range(&assembling);
                                 ReadAction2::FrameReady(parsed_range)
                             } else {
                                 ReadAction2::Timeout
@@ -1224,8 +1138,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                     "CLI Master: Frame complete ({} bytes), processing request",
                     assembling.len()
                 );
-                let request = assembling.clone();
-                assembling.clear();
+                let request = std::mem::take(&mut assembling);
                 last_byte_time = None;
 
                 match respond_to_request(

@@ -81,11 +81,10 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             };
             let spacer = " ".repeat(pad);
 
-            let input_buffer = status.temporarily.input_raw_buffer.clone();
             let mut prefix_style = Style::default();
             if i == selection {
                 use crate::tui::status::ui::InputRawBuffer;
-                if matches!(input_buffer, InputRawBuffer::None) {
+                if matches!(&status.temporarily.input_raw_buffer, InputRawBuffer::None) {
                     prefix_style = Style::default().fg(Color::Green);
                 } else {
                     prefix_style = Style::default().fg(Color::Yellow);

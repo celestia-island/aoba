@@ -10,6 +10,13 @@ use super::parse_modbus_header;
 use crate::protocol::runtime::crc16_modbus;
 use crate::utils::sleep::sleep_1s;
 
+const MODBUS_HEADER_TIMEOUT_SECS: i64 = 2;
+const MODBUS_BODY_TIMEOUT_SECS: i64 = 3;
+const MODBUS_MIN_FRAME_LEN: usize = 5;
+const MODBUS_MAX_FRAME_LEN: usize = 256;
+const MODBUS_HEADER_LEN: usize = 6;
+const MODBUS_RTU_OVERHEAD: usize = 2;
+
 /// Read a Modbus RTU frame from the provided serial port wrapper.
 /// Returns Ok(Some(Bytes)) when a full frame is read, Ok(None) for timeout / no data,
 /// or Err for unexpected I / O / locking errors.
@@ -51,7 +58,7 @@ pub async fn read_modbus_frame(
     }
 
     let start = chrono::Utc::now();
-    let mut collected: Vec<u8> = Vec::with_capacity(256);
+    let mut collected: Vec<u8> = Vec::with_capacity(MODBUS_MAX_FRAME_LEN);
 
     // Acquire serial lock once for the duration of this read operation. This avoids
     // interleaved lock/unlock cycles which can split incoming data across reads
@@ -64,7 +71,7 @@ pub async fn read_modbus_frame(
         if collected.len() >= 2 {
             break;
         }
-        if chrono::Utc::now() - start > Duration::seconds(2) {
+        if chrono::Utc::now() - start > Duration::seconds(MODBUS_HEADER_TIMEOUT_SECS) {
             return Ok(None);
         }
         // yield briefly while keeping the lock (running in dedicated thread)
@@ -114,13 +121,12 @@ pub async fn read_modbus_frame(
     };
 
     // Try to read up to 6 bytes quickly so parse_modbus_header can run for response-style frames.
-    // Try to read up to 6 bytes quickly so parse_modbus_header can run for response-style frames.
-    read_until(&mut **guard, &mut collected, 6)?;
+    read_until(&mut **guard, &mut collected, MODBUS_HEADER_LEN)?;
 
     // Try to determine the full expected frame length now; if not determined, wait until deadline
     let mut guessed_len_opt = determine_length(&mut collected);
     while guessed_len_opt.is_none() {
-        if chrono::Utc::now() - start > Duration::seconds(2) {
+        if chrono::Utc::now() - start > Duration::seconds(MODBUS_HEADER_TIMEOUT_SECS) {
             if collected.is_empty() {
                 return Ok(None);
             }
@@ -141,8 +147,7 @@ pub async fn read_modbus_frame(
         }
         return Ok(Some(Bytes::from(collected)));
     };
-    // Modbus RTU maximum 256 bytes
-    if !(4..=256).contains(&guessed_len) {
+    if !(MODBUS_MIN_FRAME_LEN..=MODBUS_MAX_FRAME_LEN).contains(&guessed_len) {
         log::warn!("Guessed invalid frame length: {guessed_len}");
         if collected.is_empty() {
             return Ok(None);
@@ -150,7 +155,7 @@ pub async fn read_modbus_frame(
         return Ok(Some(Bytes::from(collected)));
     }
     // Read the remaining bytes with a 3 s additional deadline
-    let body_deadline = chrono::Utc::now() + Duration::seconds(3);
+    let body_deadline = chrono::Utc::now() + Duration::seconds(MODBUS_BODY_TIMEOUT_SECS);
     while collected.len() < guessed_len {
         // guessed_len includes header
         read_until(&mut **guard, &mut collected, guessed_len)?;
@@ -179,8 +184,8 @@ pub async fn read_modbus_frame(
     }
 
     // CRC check (little endian stored: low then high)
-    if guessed_len >= 4 {
-        let data_no_crc_len = guessed_len - 2;
+    if guessed_len >= MODBUS_MIN_FRAME_LEN {
+        let data_no_crc_len = guessed_len - MODBUS_RTU_OVERHEAD;
         let calc = crc16_modbus(&collected[..data_no_crc_len]);
         let frame_crc =
             u16::from(collected[data_no_crc_len]) | (u16::from(collected[data_no_crc_len + 1]) << 8);

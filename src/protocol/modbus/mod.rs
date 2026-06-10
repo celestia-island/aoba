@@ -61,7 +61,7 @@ pub fn boot_modbus_slave_service(
             0x01..=0x04 => {}
             _ => return Err(anyhow!("Unsupported function code: 0x{func:02X}")),
         }
-        let original = frame.clone();
+        let original_len = frame.len();
         let (byte_count_index, data_start) = (2usize, 3usize);
         if frame.len() < data_start + 1 + 2 {
             return Err(anyhow!("Frame too short: need at least one data byte plus CRC"));
@@ -99,10 +99,7 @@ pub fn boot_modbus_slave_service(
         frame.push((crc & 0xFF) as u8);
         frame.push((crc >> 8) as u8);
         log::warn!(
-            "Trimmed duplicated Modbus payload (func=0x{:02X}, mult={}): old_len={} new_len={}",
-            func,
-            mult,
-            original.len(),
+            "Trimmed duplicated Modbus payload (func=0x{func:02X}, mult={mult}): old_len={original_len} new_len={}",
             frame.len()
         );
         Ok(())

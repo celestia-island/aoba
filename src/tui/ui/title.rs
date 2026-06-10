@@ -15,11 +15,11 @@ const SPINNER_FRAMES: [char; 6] = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
 fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {
         read_status(|status| {
-            let name = status.ports.order[selected_port].clone();
+            let name = &status.ports.order[selected_port];
             Ok(status
                 .ports
                 .map
-                .get(&name).map_or_else(|| format!("COM{selected_port}"), |port| port.port_name.clone()))
+                .get(name).map_or_else(|| format!("COM{selected_port}"), |port| port.port_name.clone()))
         })?
     } else {
         format!("COM{selected_port}")
@@ -30,9 +30,8 @@ fn get_port_name(selected_port: usize) -> Result<String> {
 /// Get the status indicator for the currently selected port
 fn get_port_status_indicator(selected_port: usize) -> Result<Option<PortStatusIndicator>> {
     read_status(|status| {
-        let port_name_opt = status.ports.order.get(selected_port).cloned();
-        if let Some(port_name) = port_name_opt {
-            if let Some(port) = status.ports.map.get(&port_name) {
+        if let Some(port_name) = status.ports.order.get(selected_port) {
+            if let Some(port) = status.ports.map.get(port_name) {
                 return Ok(Some(port.status_indicator.clone()));
             }
         }

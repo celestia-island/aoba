@@ -136,10 +136,9 @@ pub fn slave_process_one_request_with_hooks(
             break;
         }
 
-        let request_data = original_data[start_offset..].to_vec();
+        let mut hooked_data = original_data[start_offset..].to_vec();
 
         // Apply hooks for each candidate frame
-        let mut hooked_data = request_data.clone();
         for hook in params.hooks {
             if let Err(_e) = hook.on_after_receive_request(&params.port_name, &mut hooked_data) {}
         }
