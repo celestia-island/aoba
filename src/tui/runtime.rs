@@ -557,7 +557,7 @@ async fn restart_runtime(
             Ok(())
         })?;
 
-        append_subprocess_stopped_log(port_name, Some("重启中 - 停止旧进程".to_string()));
+        append_subprocess_stopped_log(port_name, Some(crate::utils::i18n::lang().tabs.log.runtime_restart_stopping_old_process.clone()));
     }
 
     // Start the new subprocess

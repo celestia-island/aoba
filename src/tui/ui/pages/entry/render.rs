@@ -384,21 +384,12 @@ fn render_node(
         use crate::protocol::status::types::port::PortType;
         let port_type_label = match port_type {
             PortType::HTTP => {
-                if lang().index.title.contains("中") {
-                    "HTTP 服务器"
-                } else {
-                    "HTTP Server"
-                }
+                lang().index.port_type_http_server_label.as_str()
             }
             PortType::IPC => {
-                if lang().index.title.contains("中") {
-                    "IPC 管道"
-                } else {
-                    "IPC Pipe"
-                }
+                lang().index.port_type_ipc_pipe_label.as_str()
             }
             PortType::Physical | PortType::Unknown => {
-                // Default to serial port
                 lang().index.port_suffix.as_str()
             }
         };
@@ -567,12 +558,8 @@ fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) ->
             .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD);
 
-        // Line 1: "新建" label
-        let new_label = if lang().index.title.contains("中") {
-            "新建"
-        } else {
-            "New"
-        };
+        // Line 1: "New" label
+        let new_label = lang().index.new_port_label.as_str();
         let new_area = Rect {
             x: inner.x,
             y: inner.y,
