@@ -20,24 +20,15 @@ use std::sync::Arc;
 use crate::protocol::status::types::modbus::ModbusResponse;
 
 /// Error types for middleware-style handlers
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum HandlerError {
     /// This handler cannot process the request - pass to next handler in chain
+    #[error("Not handled: {0}")]
     NotHandled(String),
     /// Actual processing error - stop the chain
+    #[error("Processing error: {0}")]
     ProcessingError(String),
 }
-
-impl std::fmt::Display for HandlerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HandlerError::NotHandled(msg) => write!(f, "Not handled: {}", msg),
-            HandlerError::ProcessingError(msg) => write!(f, "Processing error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for HandlerError {}
 
 /// Trait for handling Modbus slave responses (middleware pattern)
 ///
@@ -194,13 +185,12 @@ pub fn execute_slave_handler_chain(
 
                             // Continue to next handler
                         }
-                        HandlerError::ProcessingError(msg) => {
-                            log::error!("Handler {} processing error: {}", i, msg);
-                            return Err(anyhow!(msg.clone()));
+                        HandlerError::ProcessingError(_) => {
+                            log::error!("Handler {} error: {}", i, e);
+                            return Err(e);
                         }
                     }
                 } else {
-                    // Other error types are treated as processing errors
                     log::error!("Handler {} error: {}", i, e);
                     last_error = Some(e);
                 }
@@ -208,7 +198,6 @@ pub fn execute_slave_handler_chain(
         }
     }
 
-    // All handlers passed through
     Err(last_error.unwrap_or_else(|| anyhow!("All handlers passed through (NotHandled)")))
 }
 
@@ -231,13 +220,13 @@ pub fn execute_master_handler_chain(
             Err(e) => {
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
-                        HandlerError::NotHandled(_msg) => {
+                        HandlerError::NotHandled(_) => {
 
                             // Continue to next handler
                         }
-                        HandlerError::ProcessingError(msg) => {
-                            log::error!("Handler {} processing error: {}", i, msg);
-                            return Err(anyhow!(msg.clone()));
+                        HandlerError::ProcessingError(_) => {
+                            log::error!("Handler {} error: {}", i, e);
+                            return Err(e);
                         }
                     }
                 } else {
@@ -282,9 +271,9 @@ pub fn execute_data_source_chain(
 
                             // Continue to next source
                         }
-                        HandlerError::ProcessingError(msg) => {
-                            log::error!("Data source {} processing error: {}", i, msg);
-                            return Err(anyhow!(msg.clone()));
+                        HandlerError::ProcessingError(_) => {
+                            log::error!("Data source {} error: {}", i, e);
+                            return Err(e);
                         }
                     }
                 } else {

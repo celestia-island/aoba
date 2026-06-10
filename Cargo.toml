@@ -54,6 +54,7 @@ panic = "abort"
 [workspace.dependencies]
 anyhow = { version = "^1", features = ["backtrace"] }
 async-trait = "^0.1"
+thiserror = "^2"
 cfg-if = "^1"
 derive_more = { version = "^2", features = ["full"] }
 num_enum = "^0.7"
@@ -126,6 +127,7 @@ ctrlc = "^3"
 anyhow.workspace = true
 async-trait.workspace = true
 cfg-if.workspace = true
+thiserror.workspace = true
 derive_more.workspace = true
 num_enum.workspace = true
 once_cell.workspace = true
