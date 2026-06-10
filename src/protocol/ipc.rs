@@ -84,10 +84,10 @@ pub enum IpcMessage {
         /// Serialized stations data using postcard
         stations_data: Vec<u8>,
         /// Reason for this update to help distinguish user intent from system operations
-        /// - "user_edit": User explicitly edited register values (should write even if 0)
-        /// - "initial_config": Initial configuration from TUI (skip writes, use defaults)
+        /// - "`user_edit"`: User explicitly edited register values (should write even if 0)
+        /// - "`initial_config"`: Initial configuration from TUI (skip writes, use defaults)
         /// - "sync": Periodic sync/heartbeat (skip 0 values, likely uninitialized)
-        /// - "read_response": Update from actual modbus read (always apply)
+        /// - "`read_response"`: Update from actual modbus read (always apply)
         #[serde(default)]
         update_reason: Option<String>,
         #[serde(default)]
@@ -142,7 +142,8 @@ impl IpcMessage {
             .as_secs() as i64
     }
 
-    /// Create a PortOpened message with current timestamp
+    /// Create a `PortOpened` message with current timestamp
+    #[must_use]
     pub fn port_opened(port_name: String) -> Self {
         Self::PortOpened {
             port_name,
@@ -150,7 +151,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a PortError message with current timestamp
+    /// Create a `PortError` message with current timestamp
+    #[must_use]
     pub fn port_error(port_name: String, error: String) -> Self {
         Self::PortError {
             port_name,
@@ -160,6 +162,7 @@ impl IpcMessage {
     }
 
     /// Create a Shutdown message with current timestamp
+    #[must_use]
     pub fn shutdown() -> Self {
         Self::Shutdown {
             timestamp: Some(Self::timestamp()),
@@ -167,6 +170,7 @@ impl IpcMessage {
     }
 
     /// Create a Heartbeat message with current timestamp
+    #[must_use]
     pub fn heartbeat() -> Self {
         Self::Heartbeat {
             timestamp: Some(Self::timestamp()),
@@ -174,6 +178,7 @@ impl IpcMessage {
     }
 
     /// Create a Status message with current timestamp
+    #[must_use]
     pub fn status(port_name: String, status: String, details: Option<String>) -> Self {
         Self::Status {
             port_name,
@@ -184,6 +189,7 @@ impl IpcMessage {
     }
 
     /// Create a Log message with current timestamp
+    #[must_use]
     pub fn log(level: String, message: String) -> Self {
         Self::Log {
             level,
@@ -192,11 +198,12 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StationsUpdate message with current timestamp
+    /// Create a `StationsUpdate` message with current timestamp
     ///
     /// # Parameters
     /// - `stations_data`: Serialized station configuration
-    /// - `update_reason`: Optional reason for update ("user_edit", "initial_config", "sync", "read_response")
+    /// - `update_reason`: Optional reason for update ("`user_edit`", "`initial_config`", "sync", "`read_response`")
+    #[must_use]
     pub fn stations_update(stations_data: Vec<u8>) -> Self {
         Self::StationsUpdate {
             stations_data,
@@ -205,7 +212,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StationsUpdate message with specific update reason
+    /// Create a `StationsUpdate` message with specific update reason
+    #[must_use]
     pub fn stations_update_with_reason(stations_data: Vec<u8>, reason: &str) -> Self {
         Self::StationsUpdate {
             stations_data,
@@ -214,7 +222,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StateLockRequest message with current timestamp
+    /// Create a `StateLockRequest` message with current timestamp
+    #[must_use]
     pub fn state_lock_request(requester: String) -> Self {
         Self::StateLockRequest {
             requester,
@@ -222,7 +231,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StateLockAck message with current timestamp
+    /// Create a `StateLockAck` message with current timestamp
+    #[must_use]
     pub fn state_lock_ack(locked: bool) -> Self {
         Self::StateLockAck {
             locked,
@@ -230,7 +240,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a RegisterWriteComplete message with current timestamp
+    /// Create a `RegisterWriteComplete` message with current timestamp
+    #[must_use]
     pub fn register_write_complete(
         port_name: String,
         station_id: u8,
@@ -572,6 +583,7 @@ impl IpcCommandConnection {
 }
 
 /// Generate a unique IPC socket name using UUID
+#[must_use]
 pub fn generate_socket_name() -> String {
     let uuid = uuid::Uuid::new_v4();
     // Use a simple name that works on both Unix and Windows
@@ -580,6 +592,7 @@ pub fn generate_socket_name() -> String {
 
 /// Generate the command channel name from the status channel name
 /// Command channel is used for TUI → CLI communication (reverse direction)
+#[must_use]
 pub fn get_command_channel_name(status_channel: &str) -> String {
     format!("{status_channel}-cmd")
 }

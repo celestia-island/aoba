@@ -6,7 +6,7 @@
 //! on UI-specific types.
 
 /// Set editing flag to true.
-pub fn begin_edit(editing: &mut bool) {
+pub const fn begin_edit(editing: &mut bool) {
     *editing = true;
 }
 

@@ -84,7 +84,7 @@ pub fn is_handle_finished(port: u16) -> Option<bool> {
     let reg = HTTP_REGISTRY.lock();
     if let Some(entry) = reg.map.get(&port) {
         let guard = entry.handle.lock();
-        return Some(guard.as_ref().map(|h| h.is_finished()).unwrap_or(true));
+        return Some(guard.as_ref().is_none_or(tokio::task::JoinHandle::is_finished));
     }
     None
 }
@@ -106,12 +106,12 @@ pub fn get_handle_error(port: u16) -> Option<Result<()>> {
             match std::pin::Pin::new(handle).poll(&mut cx) {
                 Poll::Ready(Ok(Ok(()))) => return Some(Ok(())),
                 Poll::Ready(Ok(Err(e))) => {
-                    log::error!("HTTP server thread error detected: {}", e);
+                    log::error!("HTTP server thread error detected: {e}");
                     return Some(Err(e));
                 }
                 Poll::Ready(Err(join_err)) => {
-                    log::error!("HTTP server thread panicked: {}", join_err);
-                    return Some(Err(anyhow!("HTTP server thread panicked: {}", join_err)));
+                    log::error!("HTTP server thread panicked: {join_err}");
+                    return Some(Err(anyhow!("HTTP server thread panicked: {join_err}")));
                 }
                 Poll::Pending => return None,
             }

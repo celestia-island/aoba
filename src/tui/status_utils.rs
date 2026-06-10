@@ -3,7 +3,7 @@ use chrono::{DateTime, Local};
 
 use crate::tui::{status::port::PortStatusIndicator, utils::bus::CoreToUi};
 
-/// Check and update temporary statuses (AppliedSuccess) that should auto-transition
+/// Check and update temporary statuses (`AppliedSuccess`) that should auto-transition
 /// after a certain time period. Returns true if any status was updated.
 pub(crate) fn check_and_update_temporary_statuses(
     core_tx: Option<&flume::Sender<CoreToUi>>,

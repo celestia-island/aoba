@@ -21,6 +21,7 @@
 //!
 //! ```rust,no_run
 //! use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+//! use std::sync::Arc;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
@@ -28,7 +29,7 @@
 //!     let master = ModbusBuilder::new_master(1)
 //!         .with_port("/dev/ttyUSB0")
 //!         .with_register(RegisterMode::Holding, 0, 10)
-//!         .start_master(None, None)?;
+//!         .build_master()?;
 //!
 //!     // Receive responses via iterator interface
 //!     while let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
@@ -42,6 +43,7 @@
 //!
 //! ```rust,no_run
 //! use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+//! use std::sync::Arc;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
@@ -49,7 +51,7 @@
 //!     let slave = ModbusBuilder::new_slave(1)
 //!         .with_port("/dev/ttyUSB0")
 //!         .with_register(RegisterMode::Holding, 0, 10)
-//!         .start_slave(None)?;
+//!         .build_slave()?;
 //!
 //!     // Receive request notifications via iterator interface
 //!     while let Some(notification) = slave.recv_timeout(std::time::Duration::from_secs(10)) {

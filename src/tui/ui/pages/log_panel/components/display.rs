@@ -278,9 +278,7 @@ fn build_master_comm_lines(
     ];
 
     let config_value = comm
-        .config_index
-        .map(|index| format!("0x{index:04X} ({index})"))
-        .unwrap_or_else(|| lang.tabs.log.comm_unknown.clone());
+        .config_index.map_or_else(|| lang.tabs.log.comm_unknown.clone(), |index| format!("0x{index:04X} ({index})"));
 
     line_two_spans.push(Span::raw(" #"));
     line_two_spans.push(Span::raw(config_value));
@@ -333,9 +331,7 @@ fn build_slave_comm_lines(
     ];
 
     let config_value = comm
-        .config_index
-        .map(|index| format!("0x{index:04X} ({index})"))
-        .unwrap_or_else(|| lang.tabs.log.comm_unknown.clone());
+        .config_index.map_or_else(|| lang.tabs.log.comm_unknown.clone(), |index| format!("0x{index:04X} ({index})"));
 
     line_two_spans.push(Span::raw(" #"));
     line_two_spans.push(Span::raw(config_value));
@@ -370,7 +366,7 @@ fn build_slave_comm_lines(
     [time_line, line_two, line_three]
 }
 
-fn comm_is_success(comm: &types::port::PortCommunicationLog) -> bool {
+const fn comm_is_success(comm: &types::port::PortCommunicationLog) -> bool {
     match comm.success_hint {
         Some(value) => value,
         None => comm.parse_error.is_none(),
@@ -390,9 +386,7 @@ fn build_comm_success_line(lang: &Lang, comm: &types::port::PortCommunicationLog
     let station_label = lang.tabs.log.comm_station_id_label.clone();
     let unknown = lang.tabs.log.comm_unknown.clone();
     let station_value = comm
-        .station_id
-        .map(|station| format!("0x{station:02X}"))
-        .unwrap_or_else(|| unknown.clone());
+        .station_id.map_or_else(|| unknown.clone(), |station| format!("0x{station:02X}"));
     let station_segment = format!("{station_label} {station_value}");
 
     let register_label = lang.tabs.log.comm_register_type_label.clone();
@@ -401,7 +395,7 @@ fn build_comm_success_line(lang: &Lang, comm: &types::port::PortCommunicationLog
             let (code, name) = register_mode_descriptor(mode);
             format!("{register_label} {code:02} {name}")
         }
-        None => format!("{register_label} {}", unknown.clone()),
+        None => format!("{register_label} {unknown}"),
     };
 
     let computed_end = comm.register_end.or_else(|| {
@@ -415,7 +409,7 @@ fn build_comm_success_line(lang: &Lang, comm: &types::port::PortCommunicationLog
     let range_label = lang.tabs.log.comm_address_range_label.clone();
     let range_value = match (comm.register_start, computed_end) {
         (Some(start), Some(end)) => format!("0x{start:04X} - 0x{end:04X}"),
-        _ => unknown.clone(),
+        _ => unknown,
     };
     let range_segment = format!("{range_label} {range_value}");
 
@@ -678,9 +672,7 @@ fn build_management_lines(
                 Span::raw(mode.clone()),
             ]);
 
-            let pid_text = pid
-                .map(|value| format!("0x{value:04X} ({value})"))
-                .unwrap_or_else(|| lang.tabs.log.comm_unknown.clone());
+            let pid_text = pid.map_or_else(|| lang.tabs.log.comm_unknown.clone(), |value| format!("0x{value:04X} ({value})"));
 
             let line_three = Line::from(vec![
                 Span::raw("  "),

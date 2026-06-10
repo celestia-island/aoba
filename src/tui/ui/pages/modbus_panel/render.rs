@@ -93,7 +93,7 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     }
 }
 
-/// Render the ModBus panel. Only reads from Status, does not mutate.
+/// Render the `ModBus` panel. Only reads from Status, does not mutate.
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let view_offset = read_status(|status| {
         if let crate::tui::status::Page::ModbusDashboard { view_offset, .. } = &status.page {

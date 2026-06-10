@@ -88,7 +88,7 @@ fn create_line(
 }
 
 /// Generate lines for modbus panel with 2:20:remaining layout (indicator:label:value).
-/// Returns lines that can be used with render_boxed_paragraph.
+/// Returns lines that can be used with `render_boxed_paragraph`.
 pub fn render_kv_lines_with_indicators(
     _sel_index: usize,
     terminal_width: u16,
@@ -629,7 +629,7 @@ pub fn render_kv_lines_with_indicators(
                     };
 
                     let hex_display = if current_value.starts_with("0x") {
-                        current_value.clone()
+                        current_value
                     } else if let Ok(n) = current_value.parse::<u8>() {
                         format!("0x{n:02X} ({n})")
                     } else {
@@ -720,7 +720,7 @@ pub fn render_kv_lines_with_indicators(
                         };
 
                         let hex_display = if current_value.starts_with("0x") {
-                            current_value.clone()
+                            current_value
                         } else if let Ok(n) = current_value.parse::<u16>() {
                             format!("0x{n:04X} ({n})")
                         } else {
@@ -764,7 +764,7 @@ pub fn render_kv_lines_with_indicators(
                         };
 
                         let hex_display = if current_value.starts_with("0x") {
-                            current_value.clone()
+                            current_value
                         } else if let Ok(n) = current_value.parse::<u16>() {
                             format!("0x{n:04X} ({n})")
                         } else {

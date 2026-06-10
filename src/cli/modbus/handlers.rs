@@ -21,6 +21,7 @@ pub struct FlumeSlaveHandler {
 
 impl FlumeSlaveHandler {
     /// Create a new flume slave handler with an unbounded channel
+    #[must_use]
     pub fn new() -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::unbounded();
         let handler = Self {
@@ -31,6 +32,7 @@ impl FlumeSlaveHandler {
     }
 
     /// Create a new flume slave handler with a bounded channel
+    #[must_use]
     pub fn with_capacity(cap: usize) -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::bounded(cap);
         let handler = Self {
@@ -40,12 +42,13 @@ impl FlumeSlaveHandler {
         (handler, receiver)
     }
 
-    /// Stop the handler (causes should_continue to return false)
+    /// Stop the handler (causes `should_continue` to return false)
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
     }
 
     /// Get a handle to control this handler
+    #[must_use]
     pub fn get_control_handle(&self) -> FlumeHandlerControl {
         FlumeHandlerControl {
             running: Arc::clone(&self.running),
@@ -79,6 +82,7 @@ pub struct FlumeMasterHandler {
 
 impl FlumeMasterHandler {
     /// Create a new flume master handler with an unbounded channel
+    #[must_use]
     pub fn new() -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::unbounded();
         let handler = Self {
@@ -89,6 +93,7 @@ impl FlumeMasterHandler {
     }
 
     /// Create a new flume master handler with a bounded channel
+    #[must_use]
     pub fn with_capacity(cap: usize) -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::bounded(cap);
         let handler = Self {
@@ -98,12 +103,13 @@ impl FlumeMasterHandler {
         (handler, receiver)
     }
 
-    /// Stop the handler (causes should_continue to return false)
+    /// Stop the handler (causes `should_continue` to return false)
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
     }
 
     /// Get a handle to control this handler
+    #[must_use]
     pub fn get_control_handle(&self) -> FlumeHandlerControl {
         FlumeHandlerControl {
             running: Arc::clone(&self.running),
@@ -143,6 +149,7 @@ impl FlumeHandlerControl {
     }
 
     /// Check if the handler is still running
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }

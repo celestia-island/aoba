@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use std::{io, sync::Arc, time::Duration};
 
-use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
+use ratatui::{backend::CrosstermBackend, layout::{Layout, Direction, Constraint}, prelude::*};
 
 use crate::{core::task_manager::spawn_task, tui::status::Status, utils::sleep_1s};
 
@@ -20,7 +20,7 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
         hints_count += 1; // dismiss hint row is appended to bottom hints
     }
 
-    let bottom_height = hints_count + if error_visible { 1 } else { 0 };
+    let bottom_height = hints_count + usize::from(error_visible);
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -61,18 +61,15 @@ pub(crate) fn run_rendering_loop(
                 if let Err(err) = res {
                     eprintln!("thread exited with error: {err:#}");
                     return Err(err);
-                } else {
-                    log::info!("a monitored thread exited cleanly; shutting down");
-                    return Ok(());
                 }
+                log::info!("a monitored thread exited cleanly; shutting down");
+                return Ok(());
             }
 
             let should_quit = !matches!(
                 bus.core_rx.recv_timeout(Duration::from_millis(100)),
-                Ok(crate::core::bus::CoreToUi::Tick)
-                    | Ok(crate::core::bus::CoreToUi::Refreshed)
-                    | Ok(crate::core::bus::CoreToUi::Error)
-                    | Err(flume::RecvTimeoutError::Timeout)
+                Ok(crate::core::bus::CoreToUi::Tick | crate::core::bus::CoreToUi::Refreshed |
+crate::core::bus::CoreToUi::Error) | Err(flume::RecvTimeoutError::Timeout)
             );
 
             if should_quit {
@@ -126,7 +123,7 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
             "PageDown" => (KeyCode::PageDown, KeyModifiers::NONE),
             "Home" => (KeyCode::Home, KeyModifiers::NONE),
             "End" => (KeyCode::End, KeyModifiers::NONE),
-            _ if key.starts_with("Char(") && key.ends_with(")") => {
+            _ if key.starts_with("Char(") && key.ends_with(')') => {
                 let ch = key[5..key.len() - 1]
                     .chars()
                     .next()
@@ -151,7 +148,7 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
     log::info!("📸 Starting screen capture mode");
 
     let app = Arc::new(RwLock::new(Status::default()));
-    crate::tui::status::init_status(app.clone())?;
+    crate::tui::status::init_status(app)?;
 
     let status_path = std::env::temp_dir().join("status.json");
     if status_path.exists() {

@@ -11,9 +11,9 @@ pub use util::*;
 
 /// Generic read-only accessor for status with an explicit static reference.
 ///
-/// - `status_cell` is the OnceCell containing the status
+/// - `status_cell` is the `OnceCell` containing the status
 /// - `f` is a user-provided closure that receives a reference to the status and
-///   returns `Result<R, E>` (mapped to anyhow::Result here). The closure may
+///   returns `Result<R, E>` (mapped to `anyhow::Result` here). The closure may
 ///   borrow from status. The returned value will be cloned before leaving
 ///   the function to avoid lifetime issues. Therefore `R: Clone` is required.
 pub fn read_status_generic<S, R, F>(status_cell: &OnceCell<Arc<RwLock<S>>>, f: F) -> Result<R>
@@ -28,13 +28,13 @@ where
     // Call user closure with borrowed reference
     let val = f(&guard)?;
     // Clone once to decouple lifetime
-    Ok(val.clone())
+    Ok(val)
 }
 
 /// Generic write accessor for status with an explicit static reference.
 ///
-/// - `status_cell` is the OnceCell containing the status
-/// - `f` is a FnMut that receives a mutable reference and may mutate status.
+/// - `status_cell` is the `OnceCell` containing the status
+/// - `f` is a `FnMut` that receives a mutable reference and may mutate status.
 /// - The closure returns a `Result<R>`; the returned value will be cloned
 ///   before returning to avoid lifetime issues. Use `Ok(())` if no value is
 ///   needed.
@@ -48,7 +48,7 @@ where
         .ok_or_else(|| anyhow!("Status not initialized"))?;
     let mut guard = status.write();
     let val = f(&mut guard)?;
-    Ok(val.clone())
+    Ok(val)
 }
 
 /// Generic initialization function for status.

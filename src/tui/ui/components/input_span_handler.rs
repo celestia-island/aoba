@@ -9,7 +9,7 @@ use crate::tui::{
 
 /// Handle keys when we are in an input/span edit mode.
 ///
-/// - `key` is the KeyEvent being handled.
+/// - `key` is the `KeyEvent` being handled.
 /// - `bus` is the UI/Core message bus to send Refresh/ToggleRuntime etc.
 /// - `commit_fn` is a closure that will be called when Enter commits and should
 ///   receive the final string (for string-mode edits) or None for index-mode commits.
@@ -36,10 +36,8 @@ where
 {
     // Only operate on the global temporary buffer in a generic way.
     match key.code {
-        crossterm::event::KeyCode::Left
-        | crossterm::event::KeyCode::Right
-        | crossterm::event::KeyCode::Char('h')
-        | crossterm::event::KeyCode::Char('l') => {
+        crossterm::event::KeyCode::Left | crossterm::event::KeyCode::Right |
+crossterm::event::KeyCode::Char('h' | 'l') => {
             let is_right = matches!(
                 key.code,
                 crossterm::event::KeyCode::Right | crossterm::event::KeyCode::Char('l')
@@ -92,7 +90,7 @@ where
                         read_status(|status| Ok(status.temporarily.input_raw_buffer.clone()))?;
                     if let InputRawBuffer::String { bytes, .. } = buf {
                         if let Ok(s) = std::str::from_utf8(&bytes) {
-                            let sig_count = s.chars().filter(|ch| ch.is_ascii_hexdigit()).count();
+                            let sig_count = s.chars().filter(char::is_ascii_hexdigit).count();
                             // If incoming char is a hex digit, count it toward the limit
                             if c.is_ascii_hexdigit() && sig_count >= max {
                                 accept = false;

@@ -112,7 +112,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for About (A key)
-        KeyCode::Char('a') | KeyCode::Char('A') => {
+        KeyCode::Char('a' | 'A') => {
             write_status(|status| {
                 status.page = Page::About { view_offset: 0 };
                 Ok(())
@@ -120,7 +120,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for New (N key) - activate port creation mode
-        KeyCode::Char('n') | KeyCode::Char('N') => {
+        KeyCode::Char('n' | 'N') => {
             log::info!("New port creation requested");
             write_status(|status| {
                 status.temporarily.new_port_creation.active = true;
@@ -136,7 +136,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for Delete (D key) - placeholder for port deletion
-        KeyCode::Char('d') | KeyCode::Char('D') => {
+        KeyCode::Char('d' | 'D') => {
             log::info!("Port deletion requested - feature not yet fully implemented");
             write_status(|status| {
                 status.temporarily.error = Some(crate::tui::status::ErrorInfo {
@@ -166,9 +166,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 let new_port_name = uuid.to_string();
 
                 log::info!(
-                    "Creating new {} port with UUID: {}",
-                    port_type_name,
-                    new_port_name
+                    "Creating new {port_type_name} port with UUID: {new_port_name}"
                 );
 
                 // Create a new port entry (without starting it)
@@ -338,66 +336,60 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
-    match cursor {
-        cursor::EntryCursor::Com { index } => {
-            if index > 0 {
-                let prev = index - 1;
-                let new_cursor = types::cursor::EntryCursor::Com { index: prev };
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(new_cursor),
-                        view_offset: prev,
-                    };
-                    Ok(())
-                })?;
-            }
-            // If already at index 0, stay there (no wrap-around in grid layout)
-        }
-        _ => {
-            // For other cursor types, move to last port
-            let last_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
-            let new_cursor = types::cursor::EntryCursor::Com { index: last_index };
+    if let cursor::EntryCursor::Com { index } = cursor {
+        if index > 0 {
+            let prev = index - 1;
+            let new_cursor = types::cursor::EntryCursor::Com { index: prev };
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
-                    view_offset: last_index,
+                    view_offset: prev,
                 };
                 Ok(())
             })?;
         }
+        // If already at index 0, stay there (no wrap-around in grid layout)
+    } else {
+        // For other cursor types, move to last port
+        let last_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
+        let new_cursor = types::cursor::EntryCursor::Com { index: last_index };
+        write_status(|status| {
+            status.page = Page::Entry {
+                cursor: Some(new_cursor),
+                view_offset: last_index,
+            };
+            Ok(())
+        })?;
     }
 
     Ok(())
 }
 
 pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
-    match cursor {
-        cursor::EntryCursor::Com { index } => {
-            let max_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
-            if index < max_index {
-                let next = index + 1;
-                let new_cursor = types::cursor::EntryCursor::Com { index: next };
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(new_cursor),
-                        view_offset: next,
-                    };
-                    Ok(())
-                })?;
-            }
-            // If already at last index, stay there (no wrap-around in grid layout)
-        }
-        _ => {
-            // For other cursor types, move to first port
-            let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
+    if let cursor::EntryCursor::Com { index } = cursor {
+        let max_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
+        if index < max_index {
+            let next = index + 1;
+            let new_cursor = types::cursor::EntryCursor::Com { index: next };
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
-                    view_offset: 0,
+                    view_offset: next,
                 };
                 Ok(())
             })?;
         }
+        // If already at last index, stay there (no wrap-around in grid layout)
+    } else {
+        // For other cursor types, move to first port
+        let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
+        write_status(|status| {
+            status.page = Page::Entry {
+                cursor: Some(new_cursor),
+                view_offset: 0,
+            };
+            Ok(())
+        })?;
     }
 
     Ok(())

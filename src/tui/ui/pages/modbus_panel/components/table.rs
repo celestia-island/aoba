@@ -14,7 +14,8 @@ use crate::tui::{
 
 /// Determine the number of registers to display per row based on terminal width.
 /// Returns 1, 4, or 8 depending on available space.
-pub fn get_registers_per_row(terminal_width: u16) -> usize {
+#[must_use]
+pub const fn get_registers_per_row(terminal_width: u16) -> usize {
     // Each register needs approximately 7 characters (6 for "0x0000" + 1 space)
     // Plus label space (~10 chars for "0x0000 ")
     const LABEL_WIDTH: u16 = 10;
@@ -32,7 +33,7 @@ pub fn get_registers_per_row(terminal_width: u16) -> usize {
 }
 
 /// Create a register row line that displays registers per line based on terminal width.
-/// row_base is the absolute address of the first slot in this row (aligned to registers_per_row).
+/// `row_base` is the absolute address of the first slot in this row (aligned to `registers_per_row`).
 pub fn render_register_row_line(
     label: &str,
     slave_index: usize,
@@ -200,7 +201,7 @@ pub fn render_register_row_line(
 
                 spans.extend(cell_spans.iter().cloned());
 
-                let cell_text: String = cell_spans.iter().map(|s| s.to_string()).collect();
+                let cell_text: String = cell_spans.iter().map(std::string::ToString::to_string).collect();
                 let cell_width = UnicodeWidthStr::width(cell_text.as_str());
                 if cell_width < col_width_value {
                     spans.push(Span::raw(" ".repeat(col_width_value - cell_width)));

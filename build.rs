@@ -65,23 +65,23 @@ fn main() -> Result<()> {
                                 .unwrap_or("")
                                 .to_string()
                         } else {
-                            "".to_string()
+                            String::new()
                         };
                         // determine the actual package name used in registry (if renamed, `package` field holds real name)
                         let actual_name = if val.is_table() {
                             val.get("package")
                                 .and_then(|x| x.as_str())
-                                .map(|s| s.to_string())
-                                .unwrap_or(k.to_string())
+                                .map(std::string::ToString::to_string)
+                                .unwrap_or(k.clone())
                         } else {
-                            k.to_string()
+                            k.clone()
                         };
                         direct_dep_names.push(actual_name.clone());
 
                         let mut dep_t = Table::new();
                         dep_t.insert("name".to_string(), TomlValue::String(actual_name.clone()));
                         if actual_name != k.as_str() {
-                            dep_t.insert("alias".to_string(), TomlValue::String(k.to_string()));
+                            dep_t.insert("alias".to_string(), TomlValue::String(k.clone()));
                         }
                         dep_t.insert("version".to_string(), TomlValue::String(ver));
                         darr.push(TomlValue::Table(dep_t));
@@ -114,7 +114,7 @@ fn main() -> Result<()> {
                     // build a set of direct dependency names from the earlier parsed Cargo.toml
                     let mut direct_set: HashSet<String> = HashSet::new();
                     if let Some(TomlValue::Array(arr)) = out_tbl.get("direct_dependency_names") {
-                        for v in arr.iter() {
+                        for v in arr {
                             if let TomlValue::String(s) = v {
                                 direct_set.insert(s.clone());
                             }
@@ -125,7 +125,7 @@ fn main() -> Result<()> {
 
                     // for each package name, keep only the entry with the highest semver version
                     let mut best_map: HashMap<String, (Version, String)> = HashMap::new();
-                    for p in pkgs.iter() {
+                    for p in pkgs {
                         if let Some(n) = p.get("name").and_then(|x| x.as_str()) {
                             // only include first-level direct dependencies
                             if !direct_set.contains(n) {
@@ -177,7 +177,7 @@ fn main() -> Result<()> {
                     }
 
                     let mut map_tbl = Table::new();
-                    for (name, (_ver, lic)) in best_map.into_iter() {
+                    for (name, (_ver, lic)) in best_map {
                         // only write a single key per package: `name` -> license
                         map_tbl.insert(name, TomlValue::String(lic));
                     }
@@ -208,14 +208,11 @@ fn main() -> Result<()> {
 }
 
 fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
-    let pkg_tbl = match out_tbl.get_mut("package") {
-        Some(TomlValue::Table(tbl)) => tbl,
-        _ => {
-            out_tbl.insert("package".to_string(), TomlValue::Table(Table::new()));
-            match out_tbl.get_mut("package") {
-                Some(TomlValue::Table(tbl)) => tbl,
-                _ => return,
-            }
+    let pkg_tbl = if let Some(TomlValue::Table(tbl)) = out_tbl.get_mut("package") { tbl } else {
+        out_tbl.insert("package".to_string(), TomlValue::Table(Table::new()));
+        match out_tbl.get_mut("package") {
+            Some(TomlValue::Table(tbl)) => tbl,
+            _ => return,
         }
     };
 
@@ -236,7 +233,7 @@ fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
         .split(':')
         .map(str::trim)
         .filter(|entry| !entry.is_empty())
-        .map(|entry| entry.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     if !authors.is_empty() {

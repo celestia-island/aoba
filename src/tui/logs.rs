@@ -133,7 +133,7 @@ pub(crate) fn append_modbus_log(
                         register_quantity = Some(u16::from_be_bytes([payload[4], payload[5]]));
                     }
                 } else if payload.len() >= 3 {
-                    let byte_count = payload[2] as u16;
+                    let byte_count = u16::from(payload[2]);
                     if register_quantity.is_none() {
                         register_quantity = match function_code {
                             0x01 | 0x02 => Some(byte_count * 8),
@@ -442,7 +442,7 @@ pub(crate) fn append_status_log(port_name: &str, status: &str, details: Option<&
         summary,
         PortManagementEvent::Status {
             status: status.to_string(),
-            details: details.map(|d| d.to_string()),
+            details: details.map(std::string::ToString::to_string),
         },
     );
 }
@@ -561,7 +561,7 @@ fn cli_mode_label(mode: &CliMode) -> String {
     }
 }
 
-pub(crate) fn map_function_to_register_mode(function_code: u8) -> Option<RegisterMode> {
+pub(crate) const fn map_function_to_register_mode(function_code: u8) -> Option<RegisterMode> {
     match function_code {
         0x01 | 0x05 | 0x0F => Some(RegisterMode::Coils),
         0x02 => Some(RegisterMode::DiscreteInputs),

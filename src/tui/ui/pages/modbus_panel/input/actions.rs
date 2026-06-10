@@ -75,7 +75,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
                             let types::port::PortConfig::Modbus { mode, .. } = &port.config;
-                            return Ok(if mode.is_master() { 0 } else { 1 });
+                            return Ok(usize::from(!mode.is_master()));
                         }
                     }
                 }
@@ -419,7 +419,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                             let current = item.last_values[value_index] != 0;
                                             let new_value_flag = !current;
                                             item.last_values[value_index] =
-                                                if new_value_flag { 1 } else { 0 };
+                                                u16::from(new_value_flag);
 
                                             match mode {
                                                 types::modbus::ModbusConnectionMode::Master => {
@@ -491,7 +491,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     {
                                         if let Err(err) =
                                             bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                                port_name: port_name.clone(),
+                                                port_name,
                                                 station_id: update.1,
                                                 register_type: update.0,
                                                 start_address: update.2,
@@ -556,26 +556,23 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
             });
             let needs_restart = port_data
                 .as_ref()
-                .map(|p| p.config_modified)
-                .unwrap_or(false);
+                .is_some_and(|p| p.config_modified);
 
             // Check if port has subprocess info (CLI subprocess)
             let has_subprocess_info = port_data
                 .as_ref()
-                .map(|p| p.subprocess_info.is_some())
-                .unwrap_or(false);
+                .is_some_and(|p| p.subprocess_info.is_some());
 
             // Check if port has any stations configured
             let has_stations = port_data
                 .as_ref()
-                .map(|p| {
+                .is_some_and(|p| {
                     let port = p;
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
                     let _count = stations.len();
 
                     !stations.is_empty()
-                })
-                .unwrap_or(false);
+                });
 
             // TUI only uses CLI subprocesses. Check if port has subprocess info.
             let should_restart = matches!(port_state, Some(types::port::PortState::OccupiedByThis))
@@ -712,7 +709,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     last_values: vec![0],
                     req_success: 0,
                     req_total: 0,
-                    next_poll_at: std::time::Instant::now() - std::time::Duration::from_secs(1), // Start immediately
+                    next_poll_at: std::time::Instant::now().checked_sub(std::time::Duration::from_secs(1)).unwrap(), // Start immediately
                     last_request_time: None,
                     last_response_time: None,
                     pending_requests: Vec::new(),

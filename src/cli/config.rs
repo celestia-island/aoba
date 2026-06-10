@@ -47,10 +47,10 @@ pub enum RegisterType {
 impl fmt::Display for RegisterType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RegisterType::Coils => write!(f, "coils"),
-            RegisterType::DiscreteInputs => write!(f, "discrete_inputs"),
-            RegisterType::Holding => write!(f, "holding"),
-            RegisterType::Input => write!(f, "input"),
+            Self::Coils => write!(f, "coils"),
+            Self::DiscreteInputs => write!(f, "discrete_inputs"),
+            Self::Holding => write!(f, "holding"),
+            Self::Input => write!(f, "input"),
         }
     }
 }
@@ -62,13 +62,13 @@ pub struct CommunicationParams {
     pub mode: CommunicationMethod,
     /// Dynamically pull data from external source
     pub dynamic_pull: bool,
-    /// Wait time (seconds) - deprecated, use request_interval_ms instead
+    /// Wait time (seconds) - deprecated, use `request_interval_ms` instead
     #[serde(default)]
     pub wait_time: Option<f64>,
-    /// Timeout (seconds) - deprecated, use timeout_ms instead
+    /// Timeout (seconds) - deprecated, use `timeout_ms` instead
     #[serde(default)]
     pub timeout: Option<f64>,
-    /// Request interval time in milliseconds (replaces wait_time)
+    /// Request interval time in milliseconds (replaces `wait_time`)
     #[serde(default = "default_request_interval_ms")]
     pub request_interval_ms: u32,
     /// Timeout waiting time in milliseconds (replaces timeout)
@@ -78,11 +78,11 @@ pub struct CommunicationParams {
     pub persistence: PersistenceMode,
 }
 
-fn default_request_interval_ms() -> u32 {
+const fn default_request_interval_ms() -> u32 {
     1000
 }
 
-fn default_timeout_ms() -> u32 {
+const fn default_timeout_ms() -> u32 {
     3000
 }
 

@@ -23,25 +23,28 @@ pub enum PortType {
 
 impl PortType {
     /// Check if this port type is virtual (IPC or HTTP)
-    pub fn is_virtual(&self) -> bool {
-        matches!(self, PortType::IPC | PortType::HTTP)
+    #[must_use]
+    pub const fn is_virtual(&self) -> bool {
+        matches!(self, Self::IPC | Self::HTTP)
     }
 
     /// Check if this port type is physical
-    pub fn is_physical(&self) -> bool {
-        matches!(self, PortType::Physical)
+    #[must_use]
+    pub const fn is_physical(&self) -> bool {
+        matches!(self, Self::Physical)
     }
 
     /// Detect port type from port name
+    #[must_use]
     pub fn detect(port_name: &str) -> Self {
         // Check if it's a UUID (IPC ports use UUID v7 format)
         if uuid::Uuid::parse_str(port_name).is_ok() {
-            return PortType::IPC;
+            return Self::IPC;
         }
 
         // Check if it's an HTTP/HTTPS URL
         if port_name.starts_with("http://") || port_name.starts_with("https://") {
-            return PortType::HTTP;
+            return Self::HTTP;
         }
 
         // Check if it looks like a physical port name
@@ -52,27 +55,27 @@ impl PortType {
 
         #[cfg(unix)]
         if port_name.starts_with("/dev/") {
-            return PortType::Physical;
+            return Self::Physical;
         }
 
         // Fallback to Unknown for unrecognized formats
-        PortType::Unknown
+        Self::Unknown
     }
 }
 
 impl std::fmt::Display for PortType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PortType::Physical => write!(f, "Physical"),
-            PortType::IPC => write!(f, "IPC"),
-            PortType::HTTP => write!(f, "HTTP"),
-            PortType::Unknown => write!(f, "Unknown"),
+            Self::Physical => write!(f, "Physical"),
+            Self::IPC => write!(f, "IPC"),
+            Self::HTTP => write!(f, "HTTP"),
+            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }
 
 /// Serial port configuration (baud rate, data bits, stop bits, parity)
-/// This replaces the runtime SerialConfig that was in the disabled runtime module
+/// This replaces the runtime `SerialConfig` that was in the disabled runtime module
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SerialConfig {
     pub baud: u32,
@@ -260,16 +263,19 @@ pub enum PortState {
 }
 
 impl PortState {
-    pub fn is_occupied_by_this(&self) -> bool {
-        matches!(self, PortState::OccupiedByThis)
+    #[must_use]
+    pub const fn is_occupied_by_this(&self) -> bool {
+        matches!(self, Self::OccupiedByThis)
     }
 
-    pub fn is_free(&self) -> bool {
-        matches!(self, PortState::Free)
+    #[must_use]
+    pub const fn is_free(&self) -> bool {
+        matches!(self, Self::Free)
     }
 
-    pub fn is_occupied_by_other(&self) -> bool {
-        matches!(self, PortState::OccupiedByOther)
+    #[must_use]
+    pub const fn is_occupied_by_other(&self) -> bool {
+        matches!(self, Self::OccupiedByOther)
     }
 }
 
@@ -280,7 +286,7 @@ pub struct PortData {
     pub extra: PortExtra,
     pub state: PortState,
 
-    /// CLI subprocess info (only present when state is OccupiedByThis)
+    /// CLI subprocess info (only present when state is `OccupiedByThis`)
     pub subprocess_info: Option<PortSubprocessInfo>,
 
     /// Serial port configuration (baud rate, data bits, stop bits, parity)
@@ -303,7 +309,7 @@ pub struct PortData {
 
 impl Default for PortData {
     fn default() -> Self {
-        PortData {
+        Self {
             port_name: String::new(),
             port_type: PortType::Unknown,
             extra: Default::default(),
@@ -332,8 +338,8 @@ pub enum PortConfig {
         mode: ModbusConnectionMode,
         /// Optional external data source configuration used in master mode.
         master_source: ModbusMasterDataSource,
-        /// Stores logical entries related to Modbus (using RegisterEntry as a
-        /// lightweight placeholder for per-endpoint configuration). The connection_mode
+        /// Stores logical entries related to Modbus (using `RegisterEntry` as a
+        /// lightweight placeholder for per-endpoint configuration). The `connection_mode`
         /// field in individual items is now derived from the global mode above.
         stations: Vec<ModbusRegisterItem>,
     },
@@ -341,7 +347,7 @@ pub enum PortConfig {
 
 impl Default for PortConfig {
     fn default() -> Self {
-        PortConfig::Modbus {
+        Self::Modbus {
             mode: ModbusConnectionMode::default_master(),
             master_source: ModbusMasterDataSource::default(),
             stations: Vec::new(),

@@ -49,11 +49,11 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
                     Ok(lines)
                 }
                 None => {
-                    if !app.ports.order.is_empty() {
+                    if app.ports.order.is_empty() {
+                        Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
+                    } else {
                         let lines = render_port_basic_info_lines(0);
                         Ok(lines)
-                    } else {
-                        Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
                     }
                 }
             }
@@ -130,7 +130,7 @@ fn get_refresh_content() -> Vec<Line<'static>> {
 }
 
 /// Render a simplified, local-only port basic info block for the entry page.
-/// This intentionally does not depend on the full ConfigPanel renderer to
+/// This intentionally does not depend on the full `ConfigPanel` renderer to
 /// avoid cursor/selection coupling issues. It shows enabled state and common
 /// serial parameters in a compact layout.
 fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {

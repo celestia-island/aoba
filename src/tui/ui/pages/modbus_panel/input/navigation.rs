@@ -21,7 +21,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         .contains(crossterm::event::KeyModifiers::CONTROL);
 
     // Handle Ctrl+S for saving configuration
-    if matches!(key.code, KeyCode::Char('s') | KeyCode::Char('S')) && has_ctrl {
+    if matches!(key.code, KeyCode::Char('s' | 'S')) && has_ctrl {
         log::info!("💾 Ctrl+S pressed - saving configuration and enabling port");
         // This will trigger port enable with current configuration
         handle_save_config(bus)?;
@@ -505,7 +505,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             if !is_enabled {
                 // Enable the port if not already enabled
                 log::info!("Port not enabled, triggering enable via ToggleRuntime");
-                bus.ui_tx.send(UiToCore::ToggleRuntime(port_name.clone()))?;
+                bus.ui_tx.send(UiToCore::ToggleRuntime(port_name))?;
             } else if needs_restart {
                 // Port already enabled, just restart it with new config
                 log::info!("Port already enabled, restarting with new config");
@@ -520,10 +520,10 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
 }
 
 /// Jump to previous station group
-/// - If on AddLine or ModbusMode, stay at AddLine (first group)
-/// - If on a station's item, jump to previous station's first item (StationId)
-/// - If on first station, jump to ModbusMode
-fn jump_to_prev_group(
+/// - If on `AddLine` or `ModbusMode`, stay at `AddLine` (first group)
+/// - If on a station's item, jump to previous station's first item (`StationId`)
+/// - If on first station, jump to `ModbusMode`
+const fn jump_to_prev_group(
     current_cursor: types::cursor::ModbusDashboardCursor,
 ) -> Result<types::cursor::ModbusDashboardCursor> {
     match current_cursor {
@@ -568,8 +568,8 @@ fn jump_to_prev_group(
 }
 
 /// Jump to next station group
-/// - If on AddLine, jump to ModbusMode
-/// - If on ModbusMode, jump to first station (if exists) or stay at ModbusMode
+/// - If on `AddLine`, jump to `ModbusMode`
+/// - If on `ModbusMode`, jump to first station (if exists) or stay at `ModbusMode`
 /// - If on a station's item, jump to next station's first item (if exists) or stay
 fn jump_to_next_group(
     current_cursor: types::cursor::ModbusDashboardCursor,
@@ -723,7 +723,7 @@ fn jump_to_next_group(
     }
 }
 
-/// Jump to last station group (first item of last station if exists, otherwise ModbusMode)
+/// Jump to last station group (first item of last station if exists, otherwise `ModbusMode`)
 fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
     let last_station_index = read_status(|status| {
         if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -788,7 +788,7 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
 fn validate_url(url: &str, expected_scheme: &str) -> Result<()> {
     let parsed = url::Url::parse(url)
         .map_err(|_| anyhow!(lang().protocol.modbus.err_invalid_url.replace("{}", url)))?;
-    if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{}s", expected_scheme) {
+    if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{expected_scheme}s") {
         Ok(())
     } else {
         Err(anyhow!(lang()

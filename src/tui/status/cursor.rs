@@ -5,9 +5,10 @@ use crate::tui::status;
 // 使用标准库的div_ceil方法
 
 /// For the config panel we have groups of options separated by blank lines.
-/// Define the sizes of each group so view_offset can account for the
+///
+/// Define the sizes of each group so `view_offset` can account for the
 /// extra blank rows introduced between groups.
-/// Note: RequestInterval and Timeout have been moved to Modbus panel
+/// Note: `RequestInterval` and Timeout have been moved to Modbus panel
 pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[4, 4];
 
 /// Cursor trait to unify cursor behaviour across pages.
@@ -37,56 +38,56 @@ pub enum EntryCursor {
 impl Cursor for EntryCursor {
     fn prev(self) -> Self {
         match self {
-            EntryCursor::Com { index } => {
+            Self::Com { index } => {
                 if index > 0 {
-                    EntryCursor::Com { index: index - 1 }
+                    Self::Com { index: index - 1 }
                 } else {
                     // Wrap to last special entry
-                    EntryCursor::About
+                    Self::About
                 }
             }
-            EntryCursor::Refresh => {
+            Self::Refresh => {
                 // Go to last COM port if any exist
                 let max_port_index = crate::tui::status::read_status(|status| {
                     Ok(status.ports.order.len().saturating_sub(1))
                 })
                 .unwrap_or(0);
                 if max_port_index > 0 {
-                    EntryCursor::Com {
+                    Self::Com {
                         index: max_port_index,
                     }
                 } else {
-                    EntryCursor::About
+                    Self::About
                 }
             }
-            EntryCursor::CreateVirtual => EntryCursor::Refresh,
-            EntryCursor::About => EntryCursor::CreateVirtual,
+            Self::CreateVirtual => Self::Refresh,
+            Self::About => Self::CreateVirtual,
         }
     }
 
     fn next(self) -> Self {
         match self {
-            EntryCursor::Com { index } => {
+            Self::Com { index } => {
                 let max_port_index = crate::tui::status::read_status(|status| {
                     Ok(status.ports.order.len().saturating_sub(1))
                 })
                 .unwrap_or(0);
                 if index < max_port_index {
-                    EntryCursor::Com { index: index + 1 }
+                    Self::Com { index: index + 1 }
                 } else {
-                    EntryCursor::Refresh
+                    Self::Refresh
                 }
             }
-            EntryCursor::Refresh => EntryCursor::CreateVirtual,
-            EntryCursor::CreateVirtual => EntryCursor::About,
-            EntryCursor::About => {
+            Self::Refresh => Self::CreateVirtual,
+            Self::CreateVirtual => Self::About,
+            Self::About => {
                 // Wrap to first COM port if any exist
                 if crate::tui::status::read_status(|status| Ok(!status.ports.order.is_empty()))
                     .unwrap_or(false)
                 {
-                    EntryCursor::Com { index: 0 }
+                    Self::Com { index: 0 }
                 } else {
-                    EntryCursor::Refresh
+                    Self::Refresh
                 }
             }
         }
@@ -94,21 +95,21 @@ impl Cursor for EntryCursor {
 
     fn view_offset(&self) -> usize {
         match self {
-            EntryCursor::Com { index } => *index,
-            EntryCursor::Refresh => {
+            Self::Com { index } => *index,
+            Self::Refresh => {
                 // When scrolling to the last 3 items, add +1 offset
                 let ports_count =
                     crate::tui::status::read_status(|status| Ok(status.ports.order.len()))
                         .unwrap_or(0);
                 ports_count.saturating_add(1)
             }
-            EntryCursor::CreateVirtual => {
+            Self::CreateVirtual => {
                 let ports_count =
                     crate::tui::status::read_status(|status| Ok(status.ports.order.len()))
                         .unwrap_or(0);
                 ports_count.saturating_add(2)
             }
-            EntryCursor::About => {
+            Self::About => {
                 let ports_count =
                     crate::tui::status::read_status(|status| Ok(status.ports.order.len()))
                         .unwrap_or(0);
@@ -118,8 +119,8 @@ impl Cursor for EntryCursor {
     }
 }
 
-/// ConfigPanelCursor describes the cursor/selection in the config panel
-/// Note: RequestInterval and Timeout have been moved to Modbus panel
+/// `ConfigPanelCursor` describes the cursor/selection in the config panel
+/// Note: `RequestInterval` and Timeout have been moved to Modbus panel
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConfigPanelCursor {
     /// Enable/Disable port toggle
@@ -142,30 +143,33 @@ pub enum ConfigPanelCursor {
 
 impl ConfigPanelCursor {
     /// Get all cursor variants in order
-    pub const fn all() -> &'static [ConfigPanelCursor] {
+    #[must_use]
+    pub const fn all() -> &'static [Self] {
         &[
-            ConfigPanelCursor::EnablePort,
-            ConfigPanelCursor::ProtocolMode,
-            ConfigPanelCursor::ProtocolConfig,
-            ConfigPanelCursor::ViewCommunicationLog,
-            ConfigPanelCursor::BaudRate,
-            ConfigPanelCursor::DataBits { custom_mode: false },
-            ConfigPanelCursor::Parity,
-            ConfigPanelCursor::StopBits,
+            Self::EnablePort,
+            Self::ProtocolMode,
+            Self::ProtocolConfig,
+            Self::ViewCommunicationLog,
+            Self::BaudRate,
+            Self::DataBits { custom_mode: false },
+            Self::Parity,
+            Self::StopBits,
         ]
     }
 
     /// Convert to index for compatibility with existing code
+    #[must_use]
     pub fn to_index(self) -> usize {
         Self::all().iter().position(|&c| c == self).unwrap_or(0)
     }
 
     /// Convert from index for compatibility with existing code
+    #[must_use]
     pub fn from_index(index: usize) -> Self {
         Self::all()
             .get(index)
             .copied()
-            .unwrap_or(ConfigPanelCursor::EnablePort)
+            .unwrap_or(Self::EnablePort)
     }
 }
 
@@ -210,7 +214,7 @@ impl Cursor for ConfigPanelCursor {
     }
 }
 
-/// ModbusDashboardCursor describes the cursor/selection in the modbus dashboard
+/// `ModbusDashboardCursor` describes the cursor/selection in the modbus dashboard
 ///
 /// This cursor carries explicit identity information for the selected element so
 /// renderers and input handlers can determine exactly which block and which
@@ -250,33 +254,33 @@ pub enum ModbusDashboardCursor {
 impl Cursor for ModbusDashboardCursor {
     fn prev(self) -> Self {
         // Build flat ordered list using shared helper to keep behavior consistent
-        let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
-        flat.push(ModbusDashboardCursor::AddLine);
-        flat.push(ModbusDashboardCursor::ModbusMode);
+        let mut flat: Vec<Self> = Vec::new();
+        flat.push(Self::AddLine);
+        flat.push(Self::ModbusMode);
 
         let master_value_kind = master_source_value_kind();
         if is_modbus_master_mode() {
-            flat.push(ModbusDashboardCursor::MasterSourceKind);
+            flat.push(Self::MasterSourceKind);
             if master_value_kind.is_some() {
-                flat.push(ModbusDashboardCursor::MasterSourceValue);
+                flat.push(Self::MasterSourceValue);
             }
         }
 
         // Add RequestInterval and Timeout only in Slave mode
         if is_modbus_slave_mode() {
-            flat.push(ModbusDashboardCursor::RequestInterval);
-            flat.push(ModbusDashboardCursor::Timeout);
+            flat.push(Self::RequestInterval);
+            flat.push(Self::Timeout);
         }
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
-            flat.push(ModbusDashboardCursor::StationId { index: idx });
-            flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
-            flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
-            flat.push(ModbusDashboardCursor::RegisterLength { index: idx });
+            flat.push(Self::StationId { index: idx });
+            flat.push(Self::RegisterMode { index: idx });
+            flat.push(Self::RegisterStartAddress { index: idx });
+            flat.push(Self::RegisterLength { index: idx });
             let regs = item.register_length as usize;
             for reg in 0..regs {
-                flat.push(ModbusDashboardCursor::Register {
+                flat.push(Self::Register {
                     slave_index: idx,
                     register_index: reg,
                 });
@@ -292,33 +296,33 @@ impl Cursor for ModbusDashboardCursor {
     }
 
     fn next(self) -> Self {
-        let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
-        flat.push(ModbusDashboardCursor::AddLine);
-        flat.push(ModbusDashboardCursor::ModbusMode);
+        let mut flat: Vec<Self> = Vec::new();
+        flat.push(Self::AddLine);
+        flat.push(Self::ModbusMode);
 
         let master_value_kind = master_source_value_kind();
         if is_modbus_master_mode() {
-            flat.push(ModbusDashboardCursor::MasterSourceKind);
+            flat.push(Self::MasterSourceKind);
             if master_value_kind.is_some() {
-                flat.push(ModbusDashboardCursor::MasterSourceValue);
+                flat.push(Self::MasterSourceValue);
             }
         }
 
         // Add RequestInterval and Timeout only in Slave mode
         if is_modbus_slave_mode() {
-            flat.push(ModbusDashboardCursor::RequestInterval);
-            flat.push(ModbusDashboardCursor::Timeout);
+            flat.push(Self::RequestInterval);
+            flat.push(Self::Timeout);
         }
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
-            flat.push(ModbusDashboardCursor::StationId { index: idx });
-            flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
-            flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
-            flat.push(ModbusDashboardCursor::RegisterLength { index: idx });
+            flat.push(Self::StationId { index: idx });
+            flat.push(Self::RegisterMode { index: idx });
+            flat.push(Self::RegisterStartAddress { index: idx });
+            flat.push(Self::RegisterLength { index: idx });
             let regs = item.register_length as usize;
             for reg in 0..regs {
-                flat.push(ModbusDashboardCursor::Register {
+                flat.push(Self::Register {
                     slave_index: idx,
                     register_index: reg,
                 });
@@ -364,28 +368,28 @@ impl Cursor for ModbusDashboardCursor {
         offset += base_rows;
 
         // Build items and walk until we find the current selection
-        if *self == ModbusDashboardCursor::AddLine {
+        if *self == Self::AddLine {
             return 0;
         }
-        if *self == ModbusDashboardCursor::ModbusMode {
+        if *self == Self::ModbusMode {
             return 1;
         }
         if has_master {
             let mut row = 2usize;
-            if *self == ModbusDashboardCursor::MasterSourceKind {
+            if *self == Self::MasterSourceKind {
                 return row;
             }
             if value_kind.is_some() {
                 row += 1;
-                if *self == ModbusDashboardCursor::MasterSourceValue {
+                if *self == Self::MasterSourceValue {
                     return row;
                 }
             }
         }
-        if *self == ModbusDashboardCursor::RequestInterval {
+        if *self == Self::RequestInterval {
             return 2;
         }
-        if *self == ModbusDashboardCursor::Timeout {
+        if *self == Self::Timeout {
             return 3;
         }
 
@@ -397,19 +401,19 @@ impl Cursor for ModbusDashboardCursor {
             let rows = 1 + config_rows + reg_rows;
 
             match self {
-                ModbusDashboardCursor::StationId { index } if *index == idx => {
+                Self::StationId { index } if *index == idx => {
                     return offset + 1;
                 }
-                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
+                Self::RegisterMode { index } if *index == idx => {
                     return offset + 2;
                 }
-                ModbusDashboardCursor::RegisterStartAddress { index } if *index == idx => {
+                Self::RegisterStartAddress { index } if *index == idx => {
                     return offset + 3;
                 }
-                ModbusDashboardCursor::RegisterLength { index } if *index == idx => {
+                Self::RegisterLength { index } if *index == idx => {
                     return offset + 4;
                 }
-                ModbusDashboardCursor::Register {
+                Self::Register {
                     slave_index,
                     register_index,
                 } if *slave_index == idx => {
@@ -502,7 +506,7 @@ fn build_modbus_items_vec() -> Vec<status::modbus::ModbusRegisterItem> {
                 master_source: _,
                 stations,
             } = &port_data.config;
-            for it in stations.iter() {
+            for it in stations {
                 // Just add the item as-is since the global mode is now stored separately
                 items_vec.push(it.clone());
             }
@@ -512,7 +516,7 @@ fn build_modbus_items_vec() -> Vec<status::modbus::ModbusRegisterItem> {
     items_vec
 }
 
-/// LogPanelCursor describes the cursor/selection in the log panel
+/// `LogPanelCursor` describes the cursor/selection in the log panel
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LogPanelCursor {
     /// First item in log panel
@@ -522,11 +526,13 @@ pub enum LogPanelCursor {
 
 impl LogPanelCursor {
     /// Get all cursor variants in order
-    pub const fn all() -> &'static [LogPanelCursor] {
-        &[LogPanelCursor::FirstItem]
+    #[must_use]
+    pub const fn all() -> &'static [Self] {
+        &[Self::FirstItem]
     }
 
     /// Convert to index for compatibility with existing code
+    #[must_use]
     pub fn to_index(self) -> usize {
         Self::all().iter().position(|&c| c == self).unwrap_or(0)
     }

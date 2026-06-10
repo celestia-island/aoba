@@ -76,7 +76,7 @@ pub fn set_config_path(path: Option<PathBuf>) {
 
 /// Get the configured config file path
 pub fn get_config_path_setting() -> Option<PathBuf> {
-    CONFIG_FILE_PATH.get().and_then(|p| p.clone())
+    CONFIG_FILE_PATH.get().and_then(std::clone::Clone::clone)
 }
 
 /// Get the current no-cache flag value
@@ -91,7 +91,7 @@ pub struct PersistedPortConfig {
     pub config: SerializablePortConfig,
 }
 
-/// Serializable version of PortConfig
+/// Serializable version of `PortConfig`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SerializablePortConfig {
     Modbus {
@@ -107,7 +107,7 @@ pub struct SerializableMasterSource {
     pub value: Option<String>,
 }
 
-/// Serializable version of ModbusRegisterItem
+/// Serializable version of `ModbusRegisterItem`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableStation {
     pub station_id: u8,
@@ -249,7 +249,7 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
 /// Load is automatically skipped if `--no-config-cache` flag is set or no config path is specified.
 ///
 /// # Returns
-/// - `Ok(HashMap)` with loaded configs, or empty HashMap if skipped/not found
+/// - `Ok(HashMap)` with loaded configs, or empty `HashMap` if skipped/not found
 /// - `Err` if load failed
 pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     if is_no_cache() {

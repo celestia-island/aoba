@@ -1,4 +1,4 @@
-//! Conversion functions between the new StationConfig format and the internal ModbusRegisterItem format.
+//! Conversion functions between the new `StationConfig` format and the internal `ModbusRegisterItem` format.
 //!
 //! This module provides bidirectional conversion to maintain compatibility during the transition
 //! from the old configuration structure to the new station-based design.
@@ -10,10 +10,11 @@ use super::status::types::modbus::{
     StationConfig, StationMode,
 };
 
-/// Convert a list of StationConfigs to ModbusRegisterItems
+/// Convert a list of `StationConfigs` to `ModbusRegisterItems`
 ///
 /// This flattens the hierarchical station structure into individual register items
 /// that can be used by the existing runtime code.
+#[must_use]
 pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegisterItem> {
     let mut items = Vec::new();
 
@@ -96,10 +97,11 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
     items
 }
 
-/// Convert a list of ModbusRegisterItems back to StationConfigs
+/// Convert a list of `ModbusRegisterItems` back to `StationConfigs`
 ///
 /// This groups register items by station ID and organizes them by register type.
 /// The mode parameter indicates whether the station should be Master or Slave.
+#[must_use]
 pub fn register_items_to_stations(
     items: &[ModbusRegisterItem],
     mode: ModbusConnectionMode,
@@ -142,16 +144,18 @@ pub fn register_items_to_stations(
     stations
 }
 
-/// Convert ModbusConnectionMode to StationMode
-pub fn modbus_connection_mode_to_station_mode(mode: &ModbusConnectionMode) -> StationMode {
+/// Convert `ModbusConnectionMode` to `StationMode`
+#[must_use]
+pub const fn modbus_connection_mode_to_station_mode(mode: &ModbusConnectionMode) -> StationMode {
     match mode {
         ModbusConnectionMode::Master => StationMode::Master,
         ModbusConnectionMode::Slave { .. } => StationMode::Slave,
     }
 }
 
-/// Convert StationMode to ModbusConnectionMode
-pub fn station_mode_to_modbus_connection_mode(mode: StationMode) -> ModbusConnectionMode {
+/// Convert `StationMode` to `ModbusConnectionMode`
+#[must_use]
+pub const fn station_mode_to_modbus_connection_mode(mode: StationMode) -> ModbusConnectionMode {
     match mode {
         StationMode::Master => ModbusConnectionMode::Master,
         StationMode::Slave => ModbusConnectionMode::Slave {

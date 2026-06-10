@@ -168,7 +168,14 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                 let station_idx = offset + incoming_idx;
                                                 let old_value = modbus_stations[idx].last_values.get(station_idx).copied();
                                                 // Only update if this register doesn't have a pending write
-                                                if !pending_indices.contains(&station_idx) {
+                                                if pending_indices.contains(&station_idx) {
+                                                    let pending_val = modbus_stations[idx].pending_writes.get(&station_idx).copied().unwrap_or(0);
+                                                    log::info!(
+                                                        "  ⏸️  Register addr=0x{:04X} (idx={}): Skipped (pending=0x{pending_val:04X}, incoming=0x{value:04X})",
+                                                        range.address_start + incoming_idx as u16,
+                                                        station_idx
+                                                    );
+                                                } else {
                                                     // Ensure last_values is large enough
                                                     if station_idx >= modbus_stations[idx].last_values.len() {
                                                         modbus_stations[idx].last_values.resize(station_idx + 1, 0);
@@ -189,13 +196,6 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                             station_idx
                                                         );
                                                     }
-                                                } else {
-                                                    let pending_val = modbus_stations[idx].pending_writes.get(&station_idx).copied().unwrap_or(0);
-                                                    log::info!(
-                                                        "  ⏸️  Register addr=0x{:04X} (idx={}): Skipped (pending=0x{pending_val:04X}, incoming=0x{value:04X})",
-                                                        range.address_start + incoming_idx as u16,
-                                                        station_idx
-                                                    );
                                                 }
                                             }
                                         } else if !range.initial_values.is_empty() {

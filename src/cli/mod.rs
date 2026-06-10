@@ -7,7 +7,8 @@ pub mod status;
 
 use clap::{Arg, ArgMatches, Command};
 
-/// Parse command line arguments and return ArgMatches.
+/// Parse command line arguments and return `ArgMatches`.
+#[must_use]
 pub fn parse_args() -> ArgMatches {
     Command::new("aoba")
         .arg(

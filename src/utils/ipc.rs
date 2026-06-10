@@ -29,7 +29,7 @@ impl Pipe {
     /// Create new pipe from stream
     fn new(conn: LocalSocketStream) -> Self {
         let buffer = Vec::with_capacity(1024);
-        Pipe { conn, buffer }
+        Self { conn, buffer }
     }
 
     /// Write serialized data using postcard encoding with chunked transfer
@@ -39,7 +39,7 @@ impl Pipe {
         let data = postcard::to_allocvec(data)?;
 
         let len = data.len();
-        let chunks_len = len / 1024 + if len % 1024 == 0 { 0 } else { 1 };
+        let chunks_len = len / 1024 + usize::from(len % 1024 != 0);
 
         // Send length metadata
         let metadata = postcard::to_allocvec(&(len, chunks_len))?;
@@ -161,7 +161,7 @@ impl IpcSender {
                 return Err(anyhow!("Operation timed out"));
             }
 
-            result.map(|_| pipe)
+            result.map(|()| pipe)
         })
         .await?;
 
@@ -289,7 +289,7 @@ impl IpcReceiver {
                 return Err(anyhow!("Operation timed out"));
             }
 
-            result.map(|_| pipe)
+            result.map(|()| pipe)
         })
         .await?;
 
@@ -309,12 +309,9 @@ fn create_listener(name: &str) -> Result<LocalSocketListener> {
     let socket_name = {
         if cfg!(unix) {
             // On Unix, try abstract namespace first, fall back to file path
-            match name.to_ns_name::<GenericNamespaced>() {
-                Ok(ns) => ListenerOptions::new().name(ns).create_sync(),
-                Err(_) => {
-                    let path = name.to_fs_name::<GenericFilePath>()?;
-                    ListenerOptions::new().name(path).create_sync()
-                }
+            if let Ok(ns) = name.to_ns_name::<GenericNamespaced>() { ListenerOptions::new().name(ns).create_sync() } else {
+                let path = name.to_fs_name::<GenericFilePath>()?;
+                ListenerOptions::new().name(path).create_sync()
             }
         } else {
             // On Windows, use named pipes
@@ -345,12 +342,9 @@ async fn connect_with_retry(name: &str) -> Result<LocalSocketStream> {
             if cfg!(unix) {
                 // On Unix, try abstract namespace first, fall back to file path
                 let name_ref = name_clone.as_str();
-                match name_ref.to_ns_name::<GenericNamespaced>() {
-                    Ok(ns) => Ok(LocalSocketStream::connect(ns)?),
-                    Err(_) => {
-                        let path = name_ref.to_fs_name::<GenericFilePath>()?;
-                        Ok(LocalSocketStream::connect(path)?)
-                    }
+                if let Ok(ns) = name_ref.to_ns_name::<GenericNamespaced>() { Ok(LocalSocketStream::connect(ns)?) } else {
+                    let path = name_ref.to_fs_name::<GenericFilePath>()?;
+                    Ok(LocalSocketStream::connect(path)?)
                 }
             } else {
                 // On Windows, use named pipes

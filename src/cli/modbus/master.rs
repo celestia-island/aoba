@@ -45,22 +45,22 @@ impl std::str::FromStr for DataSource {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "manual" {
-            Ok(DataSource::Manual)
+            Ok(Self::Manual)
         } else if let Some(path) = s.strip_prefix("file:") {
-            Ok(DataSource::File(path.to_string()))
+            Ok(Self::File(path.to_string()))
         } else if let Some(name) = s.strip_prefix("pipe:") {
-            Ok(DataSource::Pipe(name.to_string()))
+            Ok(Self::Pipe(name.to_string()))
         } else if let Some(url) = s.strip_prefix("mqtt://") {
-            Ok(DataSource::MqttServer(format!("mqtt://{}", url)))
+            Ok(Self::MqttServer(format!("mqtt://{url}")))
         } else if let Some(url) = s.strip_prefix("mqtts://") {
-            Ok(DataSource::MqttServer(format!("mqtts://{}", url)))
+            Ok(Self::MqttServer(format!("mqtts://{url}")))
         } else if let Some(port_str) = s.strip_prefix("http://") {
             let port: u16 = port_str
                 .parse()
                 .map_err(|_| anyhow!("Invalid HTTP port number"))?;
-            Ok(DataSource::HttpServer(port))
+            Ok(Self::HttpServer(port))
         } else if let Some(path) = s.strip_prefix("ipc:") {
-            Ok(DataSource::IpcPipe(path.to_string()))
+            Ok(Self::IpcPipe(path.to_string()))
         } else {
             Err(anyhow!("Invalid data source format"))
         }
@@ -193,10 +193,10 @@ async fn handle_stations_post(
 
     // Forward stations to the update thread
     state.tx.send_async(stations_for_send).await.map_err(|e| {
-        log::error!("Failed to send stations to update thread: {}", e);
+        log::error!("Failed to send stations to update thread: {e}");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Internal Server Error: {}", e),
+            format!("Internal Server Error: {e}"),
         )
     })?;
 
@@ -214,12 +214,9 @@ async fn handle_stations_post(
             stations_snapshot.clear();
             let mut ok = true;
             for station in &stations {
-                match crate::cli::modbus::build_station_snapshot_from_storage(storage, station) {
-                    Ok(sc) => stations_snapshot.push(sc),
-                    Err(_) => {
-                        ok = false;
-                        break;
-                    }
+                if let Ok(sc) = crate::cli::modbus::build_station_snapshot_from_storage(storage, station) { stations_snapshot.push(sc) } else {
+                    ok = false;
+                    break;
                 }
             }
 
@@ -252,8 +249,8 @@ async fn run_http_server_daemon(
     shutdown_rx: flume::Receiver<()>,
     storage: Option<Arc<Mutex<ModbusStorageSmall>>>,
 ) -> Result<()> {
-    let addr = format!("127.0.0.1:{}", port);
-    log::info!("Starting HTTP server daemon on {}", addr);
+    let addr = format!("127.0.0.1:{port}");
+    log::info!("Starting HTTP server daemon on {addr}");
 
     let state = HttpServerState {
         tx,
@@ -272,9 +269,9 @@ async fn run_http_server_daemon(
     // Use task_manager to spawn the async HTTP server daemon
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
+        .map_err(|e| anyhow!("Failed to bind HTTP server to {addr}: {e}"))?;
 
-    log::info!("HTTP server daemon listening on {}", addr);
+    log::info!("HTTP server daemon listening on {addr}");
 
     // Create shutdown signal from channel
     let shutdown_signal = async move {
@@ -292,7 +289,7 @@ async fn run_http_server_daemon(
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal)
         .await
-        .map_err(|e| anyhow!("HTTP server error: {}", e))?;
+        .map_err(|e| anyhow!("HTTP server error: {e}"))?;
 
     Ok(())
 }
@@ -340,7 +337,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         });
 
         // register handle+shutdown sender in global registry for lookup/shutdown
-        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx);
 
         // Ensure cleanup on program exit also shuts down the daemon
         cleanup::register_cleanup(move || {
@@ -413,7 +410,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
                 }
             }
             Err(e) => {
-                log::warn!("Timeout waiting for HTTP POST data: {}", e);
+                log::warn!("Timeout waiting for HTTP POST data: {e}");
             }
         }
     }
@@ -450,17 +447,17 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
                         ReadAction::Data
                     }
                     Ok(_) => {
-                        if !assembling.is_empty() {
-                            ReadAction::FrameReady
-                        } else {
+                        if assembling.is_empty() {
                             ReadAction::NoData
+                        } else {
+                            ReadAction::FrameReady
                         }
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                        if !assembling.is_empty() {
-                            ReadAction::FrameReady
-                        } else {
+                        if assembling.is_empty() {
                             ReadAction::Timeout
+                        } else {
+                            ReadAction::FrameReady
                         }
                     }
                     Err(err) => ReadAction::Error(err.to_string()),
@@ -685,14 +682,14 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                     Ok(())
                 }
                 Err(e) => {
-                    log::error!("HTTP server daemon failed: {}", e);
+                    log::error!("HTTP server daemon failed: {e}");
                     Err(e)
                 }
             }
         });
 
         // Register handle+shutdown sender into global registry
-        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx);
 
         // ensure cleanup will shutdown and join
         cleanup::register_cleanup(move || {
@@ -712,7 +709,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
     // Create IPC socket server if --ipc-socket-path is provided
     if let Some(ipc_socket_path) = matches.get_one::<String>("ipc-socket-path") {
-        log::info!("🔌 IPC: Starting IPC socket server at {}", ipc_socket_path);
+        log::info!("🔌 IPC: Starting IPC socket server at {ipc_socket_path}");
 
         let ipc_socket_path = ipc_socket_path.clone();
         let ipc_storage = storage.clone();
@@ -738,7 +735,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                     log::info!("🔌 IPC: Socket server ended normally");
                 }
                 Err(e) => {
-                    log::error!("🔌 IPC: Socket server error: {}", e);
+                    log::error!("🔌 IPC: Socket server error: {e}");
                 }
             }
         });
@@ -851,7 +848,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
         // Check if HTTP server thread has panicked or errored
         if let Some(port) = http_server_thread {
             if let Some(result) = http_registry::get_handle_error(port) {
-                return result.map_err(|e| anyhow!("HTTP server thread failed: {}", e));
+                return result.map_err(|e| anyhow!("HTTP server thread failed: {e}"));
             }
         }
 
@@ -919,10 +916,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         };
 
                         log::info!(
-                            "Master storage decision: reason={:?}, is_first={}, allow_zeros={}",
-                            update_reason,
-                            is_first_config,
-                            allow_zero_writes
+                            "Master storage decision: reason={update_reason:?}, is_first={is_first_config}, allow_zeros={allow_zero_writes}"
                         );
 
                         // Apply the station updates to storage
@@ -952,10 +946,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                                 "❌ Failed to set holding register at 0x{addr:04X}: {e}"
                                             );
                                         } else {
-                                            log::info!("✅ Updated holding register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
+                                            log::info!("✅ Updated holding register 0x{addr:04X} = 0x{val:04X} (reason={update_reason:?})");
                                         }
                                     } else {
-                                        log::info!("⏭️  Skipped holding register 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        log::info!("⏭️  Skipped holding register 0x{addr:04X} (value=0, reason={update_reason:?})");
                                     }
                                 }
                             }
@@ -970,14 +964,12 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                             log::warn!("Failed to set coil at {addr}: {e}");
                                         } else {
                                             log::info!(
-                                                "✏️ Updated coil 0x{addr:04X} = {val} (reason={:?})",
-                                                update_reason
+                                                "✏️ Updated coil 0x{addr:04X} = {val} (reason={update_reason:?})"
                                             );
                                         }
                                     } else {
                                         log::info!(
-                                            "⏭️  Skipped coil 0x{addr:04X} (value=0, reason={:?})",
-                                            update_reason
+                                            "⏭️  Skipped coil 0x{addr:04X} (value=0, reason={update_reason:?})"
                                         );
                                     }
                                 }
@@ -994,10 +986,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                                 "Failed to set discrete input at {addr}: {e}"
                                             );
                                         } else {
-                                            log::info!("✏️ Updated discrete input 0x{addr:04X} = {val} (reason={:?})", update_reason);
+                                            log::info!("✏️ Updated discrete input 0x{addr:04X} = {val} (reason={update_reason:?})");
                                         }
                                     } else {
-                                        log::info!("⏭️  Skipped discrete input 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        log::info!("⏭️  Skipped discrete input 0x{addr:04X} (value=0, reason={update_reason:?})");
                                     }
                                 }
                             }
@@ -1013,10 +1005,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                                 "Failed to set input register at {addr}: {e}"
                                             );
                                         } else {
-                                            log::info!("✏️ Updated input register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
+                                            log::info!("✏️ Updated input register 0x{addr:04X} = 0x{val:04X} (reason={update_reason:?})");
                                         }
                                     } else {
-                                        log::info!("⏭️  Skipped input register 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        log::info!("⏭️  Skipped input register 0x{addr:04X} (value=0, reason={update_reason:?})");
                                     }
                                 }
                             }
@@ -1093,67 +1085,65 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         ReadAction2::Data
                     }
                     Ok(_) => {
-                        if !assembling.is_empty() {
-                            if let Some(last_time) = last_byte_time {
-                                if last_time.elapsed() >= frame_gap {
-                                    // Determine parsed_range without holding lock
-                                    let request_preview = assembling.clone();
-                                    let parsed_range = if request_preview.len() >= 8 {
-                                        let func = request_preview[1];
-                                        match func {
-                                            0x01 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                            }
-                                            0x02 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                            }
-                                            0x03 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                            }
-                                            0x04 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                            }
-                                            _ => None,
+                        if assembling.is_empty() {
+                            ReadAction2::NoData
+                        } else if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                // Determine parsed_range without holding lock
+                                let request_preview = assembling.clone();
+                                let parsed_range = if request_preview.len() >= 8 {
+                                    let func = request_preview[1];
+                                    match func {
+                                        0x01 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
                                         }
-                                    } else {
-                                        None
-                                    };
-                                    ReadAction2::FrameReady(parsed_range)
+                                        0x02 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        }
+                                        0x03 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        }
+                                        0x04 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        }
+                                        _ => None,
+                                    }
                                 } else {
-                                    ReadAction2::NoData
-                                }
+                                    None
+                                };
+                                ReadAction2::FrameReady(parsed_range)
                             } else {
                                 ReadAction2::NoData
                             }
@@ -1162,66 +1152,64 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         }
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                        if !assembling.is_empty() {
-                            if let Some(last_time) = last_byte_time {
-                                if last_time.elapsed() >= frame_gap {
-                                    let request_preview = assembling.clone();
-                                    let parsed_range = if request_preview.len() >= 8 {
-                                        let func = request_preview[1];
-                                        match func {
-                                            0x01 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                            }
-                                            0x02 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                            }
-                                            0x03 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                            }
-                                            0x04 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                            }
-                                            _ => None,
+                        if assembling.is_empty() {
+                            ReadAction2::Timeout
+                        } else if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                let request_preview = assembling.clone();
+                                let parsed_range = if request_preview.len() >= 8 {
+                                    let func = request_preview[1];
+                                    match func {
+                                        0x01 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
                                         }
-                                    } else {
-                                        None
-                                    };
-                                    ReadAction2::FrameReady(parsed_range)
+                                        0x02 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        }
+                                        0x03 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        }
+                                        0x04 => {
+                                            let start = u16::from_be_bytes([
+                                                request_preview[2],
+                                                request_preview[3],
+                                            ]);
+                                            let qty = u16::from_be_bytes([
+                                                request_preview[4],
+                                                request_preview[5],
+                                            ]);
+                                            Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        }
+                                        _ => None,
+                                    }
                                 } else {
-                                    ReadAction2::Timeout
-                                }
+                                    None
+                                };
+                                ReadAction2::FrameReady(parsed_range)
                             } else {
                                 ReadAction2::Timeout
                             }
@@ -1268,10 +1256,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                 if now.duration_since(*t) > cache_ttl {
                                     continue;
                                 }
-                                let a1 = start as u32;
-                                let a2 = (start + qty) as u32;
-                                let b1 = *cstart as u32;
-                                let b2 = (cstart + clen) as u32;
+                                let a1 = u32::from(start);
+                                let a2 = u32::from(start + qty);
+                                let b1 = u32::from(*cstart);
+                                let b2 = u32::from(cstart + clen);
                                 if a1 < b2 && b1 < a2 {
                                     force = true;
                                     break;
@@ -1371,39 +1359,27 @@ fn respond_to_request(
     #[allow(unreachable_patterns)]
     let response = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => {
-            match build_slave_holdings_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build holdings response");
-                    return Err(anyhow!("Failed to build holdings response"));
-                }
+            if let Ok(Some(resp)) = build_slave_holdings_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build holdings response");
+                return Err(anyhow!("Failed to build holdings response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetInputs => {
-            match build_slave_inputs_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build input registers response");
-                    return Err(anyhow!("Failed to build input registers response"));
-                }
+            if let Ok(Some(resp)) = build_slave_inputs_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build input registers response");
+                return Err(anyhow!("Failed to build input registers response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetCoils => {
-            match build_slave_coils_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build coils response");
-                    return Err(anyhow!("Failed to build coils response"));
-                }
+            if let Ok(Some(resp)) = build_slave_coils_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build coils response");
+                return Err(anyhow!("Failed to build coils response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetDiscretes => {
-            match build_slave_discrete_inputs_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build discrete inputs response");
-                    return Err(anyhow!("Failed to build discrete inputs response"));
-                }
+            if let Ok(Some(resp)) = build_slave_discrete_inputs_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build discrete inputs response");
+                return Err(anyhow!("Failed to build discrete inputs response"));
             }
         }
         // Write function codes - Modbus allows slaves to write to master's registers
@@ -1417,9 +1393,7 @@ fn respond_to_request(
             let write_addr = u16::from_be_bytes([request[2], request[3]]);
             let write_value = u16::from_be_bytes([request[4], request[5]]);
             log::info!(
-                "respond_to_request: Write Single Holding Register - addr=0x{:04X}, value=0x{:04X}",
-                write_addr,
-                write_value
+                "respond_to_request: Write Single Holding Register - addr=0x{write_addr:04X}, value=0x{write_value:04X}"
             );
 
             // Write to storage
@@ -1487,10 +1461,7 @@ fn respond_to_request(
             }
 
             log::info!(
-                "respond_to_request: Write Multiple Holding Registers - addr=0x{:04X}, count={}, values={:?}",
-                write_addr,
-                write_count,
-                values
+                "respond_to_request: Write Multiple Holding Registers - addr=0x{write_addr:04X}, count={write_count}, values={values:?}"
             );
 
             // Write to storage
@@ -1513,7 +1484,7 @@ fn respond_to_request(
                         if let Err(e) = ipc_conns.status.send(&msg) {
                             log::warn!("Failed to send StationsUpdate via IPC: {e}");
                         } else {
-                            log::info!("📤 Master: Sent StationsUpdate for {} holdings starting at addr=0x{write_addr:04X}", write_count);
+                            log::info!("📤 Master: Sent StationsUpdate for {write_count} holdings starting at addr=0x{write_addr:04X}");
                         }
                     }
                     Err(e) => {
@@ -1541,9 +1512,7 @@ fn respond_to_request(
             let write_value = u16::from_be_bytes([request[4], request[5]]);
             let coil_state = write_value == 0xFF00;
             log::info!(
-                "respond_to_request: Write Single Coil - addr=0x{:04X}, value={}",
-                write_addr,
-                coil_state
+                "respond_to_request: Write Single Coil - addr=0x{write_addr:04X}, value={coil_state}"
             );
 
             // Write to storage
@@ -1558,7 +1527,7 @@ fn respond_to_request(
                     crate::protocol::status::types::modbus::RegisterMode::Coils,
                     write_addr,
                     1,
-                    Some(vec![if coil_state { 1 } else { 0 }]),
+                    Some(vec![u16::from(coil_state)]),
                 );
 
                 match postcard::to_allocvec(&vec![station_config]) {
@@ -1595,9 +1564,7 @@ fn respond_to_request(
             }
 
             log::info!(
-                "respond_to_request: Write Multiple Coils - addr=0x{:04X}, count={}",
-                write_addr,
-                write_count
+                "respond_to_request: Write Multiple Coils - addr=0x{write_addr:04X}, count={write_count}"
             );
 
             // Write to storage
@@ -1611,11 +1578,7 @@ fn respond_to_request(
                     let byte_idx = (i / 8) as usize;
                     let bit_idx = (i % 8) as usize;
                     let coil_value = if byte_idx < byte_count {
-                        if (request[7 + byte_idx] & (1 << bit_idx)) != 0 {
-                            1
-                        } else {
-                            0
-                        }
+                        u16::from((request[7 + byte_idx] & (1 << bit_idx)) != 0)
                     } else {
                         0
                     };
@@ -1637,7 +1600,7 @@ fn respond_to_request(
                         if let Err(e) = ipc_conns.status.send(&msg) {
                             log::warn!("Failed to send StationsUpdate via IPC: {e}");
                         } else {
-                            log::info!("📤 Master: Sent StationsUpdate for {} coils starting at addr=0x{write_addr:04X}", write_count);
+                            log::info!("📤 Master: Sent StationsUpdate for {write_count} coils starting at addr=0x{write_addr:04X}");
                         }
                     }
                     Err(e) => {
@@ -1742,14 +1705,14 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::MqttServer(url) => {
                 // MQTT: subscribe to broker and continuously update on new messages
-                log::info!("Starting MQTT subscription loop for: {}", url);
+                log::info!("Starting MQTT subscription loop for: {url}");
 
                 // Parse MQTT URL
                 let parsed_url = match url::Url::parse(url) {
                     Ok(u) => u,
                     Err(e) => {
-                        log::error!("Invalid MQTT URL: {}", e);
-                        return Err(anyhow!("Invalid MQTT URL: {}", e));
+                        log::error!("Invalid MQTT URL: {e}");
+                        return Err(anyhow!("Invalid MQTT URL: {e}"));
                     }
                 };
 
@@ -1762,7 +1725,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     return Err(anyhow!("MQTT URL must include a topic path"));
                 }
 
-                log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
+                log::info!("MQTT: connecting to {host}:{port}, topic: {topic}");
 
                 // Create channel to receive MQTT messages from blocking thread
                 let (mqtt_tx, mqtt_rx) = flume::unbounded::<String>();
@@ -1780,11 +1743,11 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
 
                     // Subscribe to topic
                     if let Err(e) = client.subscribe(&topic, rumqttc::QoS::AtMostOnce) {
-                        log::error!("Failed to subscribe to MQTT topic: {}", e);
-                        return Err(anyhow!("Failed to subscribe: {}", e));
+                        log::error!("Failed to subscribe to MQTT topic: {e}");
+                        return Err(anyhow!("Failed to subscribe: {e}"));
                     }
 
-                    log::info!("MQTT: subscribed to topic '{}'", topic);
+                    log::info!("MQTT: subscribed to topic '{topic}'");
 
                     // Process incoming messages and send via channel
                     for notification in connection.iter() {
@@ -1802,7 +1765,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 // Other events, ignore
                             }
                             Err(e) => {
-                                log::warn!("MQTT connection error: {}", e);
+                                log::warn!("MQTT connection error: {e}");
                                 break;
                             }
                         }
@@ -1917,7 +1880,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     }
                                 }
                                 Err(e) => {
-                                    log::warn!("Failed to extract values from HTTP data: {}", e);
+                                    log::warn!("Failed to extract values from HTTP data: {e}");
                                 }
                             }
                         }
@@ -1934,7 +1897,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::IpcPipe(path) => {
                 // IPC pipe: similar to regular Pipe
-                log::info!("📂 IPC: Opening IPC pipe at: {}", path);
+                log::info!("📂 IPC: Opening IPC pipe at: {path}");
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -1980,7 +1943,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
-                log::info!("📂 File: Opening file data source at: {}", path);
+                log::info!("📂 File: Opening file data source at: {path}");
                 let file = match std::fs::File::open(path) {
                     Ok(f) => f,
                     Err(err) => {
@@ -2053,7 +2016,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it
-                log::info!("📂 Pipe: Opening named pipe at: {}", path);
+                log::info!("📂 Pipe: Opening named pipe at: {path}");
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -2136,7 +2099,7 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
             for byte_idx in 0..byte_count {
                 let byte = response[3 + byte_idx];
                 for bit_idx in 0..8 {
-                    let coil_val = if (byte & (1 << bit_idx)) != 0 { 1 } else { 0 };
+                    let coil_val = u16::from((byte & (1 << bit_idx)) != 0);
                     values.push(coil_val);
                 }
             }
@@ -2188,7 +2151,7 @@ async fn read_one_data_update(
             let url = url.clone();
             let join_result = tokio::task::spawn_blocking(move || {
                 let parsed_url =
-                    url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
+                    url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {e}"))?;
                 let host = parsed_url
                     .host_str()
                     .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
@@ -2203,7 +2166,7 @@ async fn read_one_data_update(
                 let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
                 client
                     .subscribe(topic, rumqttc::QoS::AtMostOnce)
-                    .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
+                    .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {e}"))?;
 
                 for notification in connection.iter() {
                     if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
@@ -2223,7 +2186,7 @@ async fn read_one_data_update(
                 Err(anyhow!("MQTT connection closed before receiving a message"))
             })
             .await
-            .map_err(|e| anyhow!("MQTT task panicked: {}", e))?;
+            .map_err(|e| anyhow!("MQTT task panicked: {e}"))?;
 
             join_result
         }

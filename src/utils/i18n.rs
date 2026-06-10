@@ -10,7 +10,7 @@ const ZH_CHT_TOML: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh_cht.toml"));
 
 derive_struct! {
-    #[derive(PartialEq, Serialize, Deserialize)]
+    #[derive(PartialEq, Eq, Serialize, Deserialize)]
     pub Lang {
         index: {
             title: String = "title".to_string(),
@@ -362,7 +362,7 @@ pub fn init_i18n() {
     // Detect preferred languages from env vars
     let mut prefs: Vec<String> = Vec::new();
     if let Ok(v) = std::env::var("LANGUAGE") {
-        prefs.extend(v.split(':').map(|s| s.to_lowercase()));
+        prefs.extend(v.split(':').map(str::to_lowercase));
     }
     if let Ok(v) = std::env::var("LC_ALL") {
         prefs.push(v.to_lowercase());
@@ -377,7 +377,7 @@ pub fn init_i18n() {
 
     // Simple matcher: try to map prefs to available locales
     let mut chosen: Option<(&str, Lang)> = None;
-    for p in prefs.iter() {
+    for p in &prefs {
         if p.contains("zh") {
             if p.contains("tw") || p.contains("hk") || p.contains("cht") {
                 if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh_cht") {
@@ -413,6 +413,6 @@ pub fn init_i18n() {
     log::info!(
         "i18n: user={} locale={}",
         user,
-        LOCALE.get().map(|s| s.as_str()).unwrap_or("-")
+        LOCALE.get().map_or("-", std::string::String::as_str)
     );
 }

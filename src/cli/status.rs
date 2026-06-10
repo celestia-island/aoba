@@ -30,6 +30,7 @@ pub struct CliStatusDumper {
 
 impl CliStatusDumper {
     /// Create a new dumper and start the background task.
+    #[must_use]
     pub fn new(status: CliStatus, port_name: &str) -> Self {
         let should_stop = Arc::new(AtomicBool::new(false));
         let should_stop_clone = should_stop.clone();

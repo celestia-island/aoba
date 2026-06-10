@@ -10,7 +10,7 @@ use crate::tui::{
     utils::bus::{self, Bus, UiToCore},
 };
 
-fn key_is_ctrl_c(key: &KeyEvent) -> bool {
+const fn key_is_ctrl_c(key: &KeyEvent) -> bool {
     if let KeyCode::Char(ch) = key.code {
         if ch == '\u{3}' {
             return true;
@@ -31,7 +31,7 @@ pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
         // Poll for input. Keep this loop tight and avoid toggling mouse
         // capture here — constantly enabling/disabling mouse capture
         // interferes with terminal selection and adds latency.
-        if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
+        if matches!(crossterm::event::poll(Duration::from_millis(100)), Ok(true)) {
             if let Ok(event) = crossterm::event::read() {
                 log::info!("⌨️ Received event: {event:?}");
                 // handle_event now returns Result<()> and performs any quit
@@ -99,7 +99,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         // Handle Ctrl + Esc for "force return without saving"
-        if let KeyCode::Esc = key.code {
+        if key.code == KeyCode::Esc {
             log::info!("⚠️ Ctrl+Esc detected: force return without saving");
             // This will be handled by page-specific handlers
             // The modifier flag will be checked in the page handlers
@@ -132,7 +132,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
     }
 
-    if !has_ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
+    if !has_ctrl && matches!(key.code, KeyCode::Char('q' | 'Q')) {
         log::info!("Global quit: q/Q detected (no modifiers)");
         bus.ui_tx.send(UiToCore::Quit)?;
         return Ok(());

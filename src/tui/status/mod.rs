@@ -161,8 +161,9 @@ pub mod serializable {
         }
     }
 
-    /// Convert from global Status to TuiStatus for serialization
+    /// Convert from global Status to `TuiStatus` for serialization
     impl TuiStatus {
+        #[must_use]
         pub fn from_status(status: &super::Status) -> Self {
             let mut ports = Vec::new();
 
@@ -246,7 +247,7 @@ pub mod serializable {
                 super::Page::About { .. } => TuiPage::About,
             };
 
-            TuiStatus {
+            Self {
                 ports,
                 port_order: status.ports.order.clone(),
                 page,
@@ -364,7 +365,7 @@ pub mod serializable {
 
     fn convert_station(station: &TuiModbusStation) -> Result<ModbusRegisterItem> {
         let register_mode = RegisterMode::try_from(station.register_type.as_str())
-            .map_err(|_| anyhow!("Unsupported register type: {}", station.register_type))?;
+            .map_err(|()| anyhow!("Unsupported register type: {}", station.register_type))?;
 
         let register_length = u16::try_from(station.register_count).map_err(|_| {
             anyhow!(
@@ -459,7 +460,7 @@ pub mod serializable {
         })
     }
 
-    fn default_config_panel_cursor() -> ConfigPanelCursor {
+    const fn default_config_panel_cursor() -> ConfigPanelCursor {
         ConfigPanelCursor::EnablePort
     }
 
@@ -517,7 +518,7 @@ pub mod serializable {
         Ok(cursor)
     }
 
-    fn default_modbus_dashboard_cursor() -> ModbusDashboardCursor {
+    const fn default_modbus_dashboard_cursor() -> ModbusDashboardCursor {
         ModbusDashboardCursor::AddLine
     }
 
@@ -549,7 +550,7 @@ pub mod serializable {
 
     impl Default for ModbusCursorHelper {
         fn default() -> Self {
-            ModbusCursorHelper::Direct(ModbusDashboardCursor::AddLine)
+            Self::Direct(ModbusDashboardCursor::AddLine)
         }
     }
 
@@ -568,19 +569,19 @@ pub mod serializable {
                     let index = station_index.or(slave_index).unwrap_or(0);
                     let reg_index = register_index.unwrap_or(0);
                     match kind.to_ascii_lowercase().as_str() {
-                        "addline" => Ok(ModbusDashboardCursor::AddLine),
-                        "modbusmode" => Ok(ModbusDashboardCursor::ModbusMode),
-                        "mastersourcekind" => Ok(ModbusDashboardCursor::MasterSourceKind),
-                        "mastersourcevalue" => Ok(ModbusDashboardCursor::MasterSourceValue),
-                        "requestinterval" => Ok(ModbusDashboardCursor::RequestInterval),
-                        "timeout" => Ok(ModbusDashboardCursor::Timeout),
-                        "stationid" => Ok(ModbusDashboardCursor::StationId { index }),
-                        "registermode" => Ok(ModbusDashboardCursor::RegisterMode { index }),
+                        "addline" => Ok(Self::AddLine),
+                        "modbusmode" => Ok(Self::ModbusMode),
+                        "mastersourcekind" => Ok(Self::MasterSourceKind),
+                        "mastersourcevalue" => Ok(Self::MasterSourceValue),
+                        "requestinterval" => Ok(Self::RequestInterval),
+                        "timeout" => Ok(Self::Timeout),
+                        "stationid" => Ok(Self::StationId { index }),
+                        "registermode" => Ok(Self::RegisterMode { index }),
                         "registerstartaddress" => {
-                            Ok(ModbusDashboardCursor::RegisterStartAddress { index })
+                            Ok(Self::RegisterStartAddress { index })
                         }
-                        "registerlength" => Ok(ModbusDashboardCursor::RegisterLength { index }),
-                        "register" => Ok(ModbusDashboardCursor::Register {
+                        "registerlength" => Ok(Self::RegisterLength { index }),
+                        "register" => Ok(Self::Register {
                             slave_index: index,
                             register_index: reg_index,
                         }),
@@ -714,7 +715,7 @@ pub fn init_status(status: Arc<RwLock<Status>>) -> Result<()> {
 
 /// TUI-specific read-only accessor for `Status`.
 ///
-/// This is a wrapper around the generic read_status function that uses the TUI status tree.
+/// This is a wrapper around the generic `read_status` function that uses the TUI status tree.
 pub fn read_status<R, F>(f: F) -> Result<R>
 where
     F: FnOnce(&Status) -> Result<R>,
@@ -725,7 +726,7 @@ where
 
 /// TUI-specific write accessor for `Status`.
 ///
-/// This is a wrapper around the generic write_status function that uses the TUI status tree.
+/// This is a wrapper around the generic `write_status` function that uses the TUI status tree.
 pub fn write_status<R, F>(f: F) -> Result<R>
 where
     F: FnMut(&mut Status) -> Result<R>,

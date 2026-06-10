@@ -40,7 +40,7 @@ pub use slave_holdings::build_slave_holdings_response;
 pub use slave_inputs::build_slave_inputs_response;
 
 pub fn boot_modbus_pull_service(id: u8, request_sender: Sender<Bytes>) -> Result<()> {
-    let request_tx = request_sender.to_owned();
+    let request_tx = request_sender.clone();
 
     let mut last_sent_timestamp = chrono::Utc::now();
 
@@ -51,17 +51,17 @@ pub fn boot_modbus_pull_service(id: u8, request_sender: Sender<Bytes>) -> Result
     }
 
     impl PollTask {
-        fn next(&self) -> Self {
+        const fn next(&self) -> Self {
             match self {
-                PollTask::GetCoils => PollTask::GetHoldings,
-                PollTask::GetHoldings => PollTask::GetCoils,
+                Self::GetCoils => Self::GetHoldings,
+                Self::GetHoldings => Self::GetCoils,
             }
         }
 
-        fn wait_next_duration(&self) -> Duration {
+        const fn wait_next_duration(&self) -> Duration {
             match self {
-                PollTask::GetCoils => Duration::seconds(2),
-                PollTask::GetHoldings => Duration::seconds(1),
+                Self::GetCoils => Duration::seconds(2),
+                Self::GetHoldings => Duration::seconds(1),
             }
         }
     }
@@ -99,7 +99,7 @@ pub fn boot_modbus_slave_service(
     fn crc16_modbus(data: &[u8]) -> u16 {
         let mut crc: u16 = 0xFFFF;
         for &b in data {
-            crc ^= b as u16;
+            crc ^= u16::from(b);
             for _ in 0..8 {
                 if crc & 0x0001 != 0 {
                     crc >>= 1;
@@ -201,7 +201,7 @@ pub fn boot_modbus_slave_service(
                     );
                     let mut ret = ret; // make mutable for trimming
                     trim_duplicate_payload(0x01, &mut ret)?;
-                    let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
+                    let duplicate = last_response.as_ref().is_some_and(|v| v == &ret);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x01), suppressing extra send.");
                     } else {
@@ -226,7 +226,7 @@ pub fn boot_modbus_slave_service(
                     );
                     let mut ret = ret;
                     trim_duplicate_payload(0x02, &mut ret)?;
-                    let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
+                    let duplicate = last_response.as_ref().is_some_and(|v| v == &ret);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x02), suppressing extra send.");
                     } else {
@@ -249,7 +249,7 @@ pub fn boot_modbus_slave_service(
                     );
                     let mut ret = ret;
                     trim_duplicate_payload(0x03, &mut ret)?;
-                    let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
+                    let duplicate = last_response.as_ref().is_some_and(|v| v == &ret);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x03), suppressing extra send.");
                     } else {
@@ -272,7 +272,7 @@ pub fn boot_modbus_slave_service(
                     );
                     let mut ret = ret;
                     trim_duplicate_payload(0x04, &mut ret)?;
-                    let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
+                    let duplicate = last_response.as_ref().is_some_and(|v| v == &ret);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x04), suppressing extra send.");
                     } else {
@@ -293,7 +293,8 @@ pub fn boot_modbus_slave_service(
 }
 
 /// Check if a port name represents a virtual port (IPC/HTTP) rather than a physical serial port.
-/// This is a convenience wrapper around PortType::detect().is_virtual().
+/// This is a convenience wrapper around `PortType::detect().is_virtual()`.
+#[must_use]
 pub fn is_virtual_port(port_name: &str) -> bool {
     use crate::protocol::status::types::port::PortType;
     PortType::detect(port_name).is_virtual()

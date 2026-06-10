@@ -36,12 +36,12 @@ pub fn is_debug_dump_enabled() -> bool {
 /// Dumps occur every 500ms.
 ///
 /// # Arguments
-/// * `output_path` - Path to the output file (e.g., "/tmp/ci_tui_status.json" or "/tmp/ci_cli_vcom1_status.json")
+/// * `output_path` - Path to the output file (e.g., "/`tmp/ci_tui_status.json`" or "/`tmp/ci_cli_vcom1_status.json`")
 /// * `shutdown_signal` - Optional Arc<AtomicBool> to signal thread shutdown
 /// * `status_fn` - Function to call to get the status to dump
 ///
 /// # Returns
-/// A JoinHandle to the spawned thread
+/// A `JoinHandle` to the spawned thread
 pub fn start_status_dump_thread(
     output_path: PathBuf,
     shutdown_signal: Option<Arc<AtomicBool>>,
@@ -70,9 +70,9 @@ pub fn start_status_dump_thread(
             })
             .await;
             match res {
-                Err(e) => log::warn!("Failed to spawn_blocking for status dump: {}", e),
+                Err(e) => log::warn!("Failed to spawn_blocking for status dump: {e}"),
                 Ok(Err(e)) => {
-                    log::warn!("Failed to dump status to {}: {}", output_path.display(), e)
+                    log::warn!("Failed to dump status to {}: {}", output_path.display(), e);
                 }
                 Ok(Ok(())) => {}
             }

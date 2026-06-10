@@ -1,7 +1,7 @@
 /// Core runtime logic for managing CLI subprocesses and handling IPC
 ///
 /// This module contains the main core thread logic that can be shared across
-/// different UI frontends (TUI, GUI, WebUI).
+/// different UI frontends (TUI, GUI, `WebUI`).
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
@@ -82,7 +82,7 @@ pub async fn run_core_thread<C: CoreContext>(
 ) -> Result<()> {
     let mut polling_enabled = config.polling_enabled;
     let scan_interval = config.scan_interval;
-    let mut last_scan = std::time::Instant::now() - scan_interval;
+    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap();
 
     let mut subprocess_manager = SubprocessManager::new();
 

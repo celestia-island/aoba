@@ -1,7 +1,8 @@
 use anyhow::Result;
 use std::{path::Path, process::Command};
 
-/// Return a sorted list of available ports as (port_name, port_type_string).
+/// Return a sorted list of available ports as (`port_name`, `port_type_string`).
+#[must_use]
 pub fn enumerate_ports() -> Vec<(String, String)> {
     // Use unified platform-specific enumeration which includes virtual port
     // detection when CI/debug hints are enabled.
@@ -14,7 +15,7 @@ pub fn enumerate_ports() -> Vec<(String, String)> {
 }
 
 /// Check occupation status for a list of ports by invoking the current executable
-/// with `--check-port <port>` for each port. Returns a vector of (port_name, is_occupied).
+/// with `--check-port <port>` for each port. Returns a vector of (`port_name`, `is_occupied`).
 pub fn check_ports_occupied(exe_path: &Path, ports: &[String]) -> Result<Vec<(String, bool)>> {
     let mut results: Vec<(String, bool)> = Vec::new();
 
@@ -33,7 +34,7 @@ pub fn check_ports_occupied(exe_path: &Path, ports: &[String]) -> Result<Vec<(St
                 results.push((port_name.clone(), is_occupied));
             }
             Err(e) => {
-                log::warn!("Failed to spawn CLI subprocess for {}: {}", port_name, e);
+                log::warn!("Failed to spawn CLI subprocess for {port_name}: {e}");
                 // on error, conservatively assume free
                 results.push((port_name.clone(), false));
             }
@@ -54,12 +55,13 @@ pub struct PreviousPort {
 
 /// Merge enumerated ports with previous ports according to preservation policy.
 ///
-/// - `enumerated` is a slice of (name, port_type)
+/// - `enumerated` is a slice of (name, `port_type`)
 /// - `previous` is a slice of `PreviousPort` snapshots
 ///
-/// Returns a vector of (name, Option<port_type>) in the desired order.
-/// For enumerated ports the port_type is Some(..). For preserved-but-not-enumerated
-/// ports the port_type will be None.
+/// Returns a vector of (name, Option<`port_type`>) in the desired order.
+/// For enumerated ports the `port_type` is Some(..). For preserved-but-not-enumerated
+/// ports the `port_type` will be None.
+#[must_use]
 pub fn merge_enumeration(
     enumerated: &[(String, String)],
     previous: &[PreviousPort],

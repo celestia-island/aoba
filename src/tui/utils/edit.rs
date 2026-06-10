@@ -52,7 +52,7 @@ pub fn select_field_by_cursor(
 }
 
 /// Begin editing: set `editing = true` and invoke `select_field_by_cursor`.
-pub fn begin_edit(editing: &mut bool) {
+pub const fn begin_edit(editing: &mut bool) {
     crate::utils::form::begin_edit(editing);
 }
 

@@ -48,7 +48,7 @@ pub(crate) fn emit_modbus_ipc_log(
                 data: format_hex_bytes(payload.frame),
                 timestamp: None,
                 station_id: payload.station_id,
-                register_mode: payload.register_mode.map(|m| format!("{:?}", m)),
+                register_mode: payload.register_mode.map(|m| format!("{m:?}")),
                 start_address: payload.start_address,
                 quantity: payload.quantity,
                 success: payload.success,
@@ -76,6 +76,7 @@ pub struct CliModbusHook {
 }
 
 impl CliModbusHook {
+    #[must_use]
     pub fn new(matches: &ArgMatches) -> Self {
         let ipc = crate::cli::actions::setup_ipc(matches);
         let output_sink = matches
@@ -265,18 +266,10 @@ pub fn extract_values_from_storage(
             RegisterMode::Holding => storage.get_holding(addr)?,
             RegisterMode::Input => storage.get_input(addr)?,
             RegisterMode::Coils => {
-                if storage.get_coil(addr)? {
-                    1
-                } else {
-                    0
-                }
+                u16::from(storage.get_coil(addr)?)
             }
             RegisterMode::DiscreteInputs => {
-                if storage.get_discrete(addr)? {
-                    1
-                } else {
-                    0
-                }
+                u16::from(storage.get_discrete(addr)?)
             }
         };
         values.push(value);
@@ -323,7 +316,7 @@ pub fn record_changed_range(
     }
 }
 
-/// Build a StationConfig snapshot by reading current values from `storage`.
+/// Build a `StationConfig` snapshot by reading current values from `storage`.
 ///
 /// This clones the provided `station` and replaces each `RegisterRange`'s
 /// `initial_values` with the values read from `storage` for that range.
@@ -333,7 +326,7 @@ pub fn build_station_snapshot_from_storage(
 ) -> Result<StationConfig> {
     let mut sc = station.clone();
 
-    for range in sc.map.holding.iter_mut() {
+    for range in &mut sc.map.holding {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,
@@ -343,7 +336,7 @@ pub fn build_station_snapshot_from_storage(
         range.initial_values = vals;
     }
 
-    for range in sc.map.coils.iter_mut() {
+    for range in &mut sc.map.coils {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,
@@ -353,7 +346,7 @@ pub fn build_station_snapshot_from_storage(
         range.initial_values = vals;
     }
 
-    for range in sc.map.discrete_inputs.iter_mut() {
+    for range in &mut sc.map.discrete_inputs {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,
@@ -363,7 +356,7 @@ pub fn build_station_snapshot_from_storage(
         range.initial_values = vals;
     }
 
-    for range in sc.map.input.iter_mut() {
+    for range in &mut sc.map.input {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,

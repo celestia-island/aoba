@@ -50,7 +50,7 @@ fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
     if let Some((_, after)) = tail.split_once("0x") {
         let num: String = after
             .chars()
-            .take_while(|c| c.is_ascii_hexdigit())
+            .take_while(char::is_ascii_hexdigit)
             .collect();
         if !num.is_empty() {
             if let Ok(v) = u16::from_str_radix(&num, 16) {
@@ -175,7 +175,7 @@ fn list_ports_from_shell() -> Vec<String> {
         "ls /dev/tty.* /dev/cu.* 2>/dev/null",
     ];
 
-    for cmd in candidates.iter() {
+    for cmd in &candidates {
         let output = Command::new("bash").arg("-lc").arg(cmd).output();
         if let Ok(out) = output {
             if out.status.success() {
@@ -198,6 +198,7 @@ fn list_ports_from_shell() -> Vec<String> {
 }
 
 /// Return the list of available serial ports sorted / deduped for Unix.
+#[must_use]
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     // In CI debug mode (when --debug-ci-e2e-test is set), skip real serial port enumeration
     // and only return virtual ports to avoid interference from host serial devices
@@ -223,14 +224,14 @@ pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     sort_and_dedup_ports(raw_ports)
 }
 
+#[must_use]
 pub fn available_ports_enriched() -> Vec<(SerialPortInfo, PortExtra)> {
     available_ports_sorted()
         .into_iter()
         .map(|p| {
             let meta = try_extract_vid_pid_serial(&p.port_type);
             let (vid, pid, serial, manufacturer, product) = meta
-                .map(|(v, p2, s, m, pr)| (Some(v), Some(p2), s, m, pr))
-                .unwrap_or((None, None, None, None, None));
+                .map_or((None, None, None, None, None), |(v, p2, s, m, pr)| (Some(v), Some(p2), s, m, pr));
             (
                 p,
                 PortExtra {
@@ -246,11 +247,11 @@ pub fn available_ports_enriched() -> Vec<(SerialPortInfo, PortExtra)> {
         .collect()
 }
 
-pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInfo> {
+pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInfo> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut unique: Vec<SerialPortInfo> = Vec::new();
 
-    for p in raw_ports.into_iter() {
+    for p in raw_ports {
         let base = match p.port_name.rsplit('/').next() {
             Some(b) => b.to_lowercase(),
             None => p.port_name.to_lowercase(),
@@ -279,11 +280,11 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         groups.entry(base).or_default().push(i);
     }
 
-    for (_base, indexs) in groups.into_iter() {
+    for (_base, indexs) in groups {
         if indexs.len() <= 1 {
             continue;
         }
-        for i in indexs.into_iter() {
+        for i in indexs {
             if let SerialPortType::UsbPort(info) = &ports[i].port_type {
                 ports[i].port_name = format!(
                     "{} (vid:{:04x} pid:{:04x})",
@@ -296,7 +297,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
     // Priority sort: Virtual ports (socat) first, then USB / ACM, then ttys
     fn priority(name: &str) -> i32 {
         let n = name.to_lowercase();
-        if n.contains("vcom") || n.contains("tptyv") || n.contains("pts") && n.contains("v") {
+        if n.contains("vcom") || n.contains("tptyv") || n.contains("pts") && n.contains('v') {
             // Virtual ports created by socat get highest priority for testing
             -1
         } else if n.contains("ttyusb") || n.contains("usb") {
@@ -313,17 +314,18 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
     ports.sort_by(|a, b| {
         let pa = priority(&a.port_name);
         let pb = priority(&b.port_name);
-        if pa != pb {
-            pa.cmp(&pb)
-        } else {
+        if pa == pb {
             a.port_name.cmp(&b.port_name)
+        } else {
+            pa.cmp(&pb)
         }
     });
 
     ports
 }
 
-/// Try to extract vid / pid / serial from a SerialPortType on Unix platforms.
+/// Try to extract vid / pid / serial from a `SerialPortType` on Unix platforms.
+#[must_use]
 pub fn try_extract_vid_pid_serial(pt: &serialport::SerialPortType) -> Option<VidPidSerial> {
     match pt {
         serialport::SerialPortType::UsbPort(info) => {
@@ -335,7 +337,7 @@ pub fn try_extract_vid_pid_serial(pt: &serialport::SerialPortType) -> Option<Vid
         // Some serialport versions have different field names; try to fall back
         // To Debug parsing (best-effort).
         _ => {
-            let dbg = format!("{:?}", pt).to_lowercase();
+            let dbg = format!("{pt:?}").to_lowercase();
             let vid = parse_hex_after(&dbg, "vid");
             let pid = parse_hex_after(&dbg, "pid");
             let sn = parse_serial_after(&dbg, "serial")

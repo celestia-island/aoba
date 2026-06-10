@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// Helper function to derive selection from page state (entry page specific)
-pub fn derive_selection_from_page(
+pub const fn derive_selection_from_page(
     page: &crate::tui::status::Page,
     ports_order: &[String],
 ) -> Result<usize> {
@@ -86,10 +86,10 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             if i == selection {
                 if let Ok(buf) = input_buffer {
                     use crate::tui::status::ui::InputRawBuffer;
-                    if !matches!(buf, InputRawBuffer::None) {
-                        prefix_style = Style::default().fg(Color::Yellow);
-                    } else {
+                    if matches!(buf, InputRawBuffer::None) {
                         prefix_style = Style::default().fg(Color::Green);
+                    } else {
+                        prefix_style = Style::default().fg(Color::Yellow);
                     }
                 } else {
                     prefix_style = Style::default().fg(Color::Green);
@@ -186,30 +186,27 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         Ok((lines, view_offset, show_scrollbar))
     });
 
-    match res {
-        Ok((lines, view_offset, show_scrollbar)) => {
-            render_boxed_paragraph(
-                frame,
-                area,
-                lines,
-                view_offset,
-                Some(lang().index.com_ports.as_str()),
-                false,
-                show_scrollbar,
-            );
-            Ok(())
-        }
-        Err(_) => {
-            render_boxed_paragraph(
-                frame,
-                area,
-                Vec::<Line>::new(),
-                0,
-                Some(lang().index.com_ports.as_str()),
-                false,
-                false,
-            );
-            Ok(())
-        }
+    if let Ok((lines, view_offset, show_scrollbar)) = res {
+        render_boxed_paragraph(
+            frame,
+            area,
+            lines,
+            view_offset,
+            Some(lang().index.com_ports.as_str()),
+            false,
+            show_scrollbar,
+        );
+        Ok(())
+    } else {
+        render_boxed_paragraph(
+            frame,
+            area,
+            Vec::<Line>::new(),
+            0,
+            Some(lang().index.com_ports.as_str()),
+            false,
+            false,
+        );
+        Ok(())
     }
 }

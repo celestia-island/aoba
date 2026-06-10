@@ -11,7 +11,8 @@ pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
 }
 
 /// Helper: whether a port is occupied by this instance
-pub fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bool {
+#[must_use]
+pub const fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bool {
     if let Some(port) = port_data {
         return port.state.is_occupied_by_this();
     }
@@ -19,6 +20,7 @@ pub fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bo
 }
 
 /// Get serial parameter value by cursor type
+#[must_use]
 pub fn get_serial_param_value_by_cursor(
     port_data: Option<&types::port::PortData>,
     cursor_type: types::cursor::ConfigPanelCursor,

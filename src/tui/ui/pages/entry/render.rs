@@ -24,16 +24,16 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     if in_creation {
         // Show creation mode hints using "Press xxx to yyy" format
         Ok(vec![vec![
-            lang().hotkeys.press_enter_submit.to_string(),
-            lang().hotkeys.press_esc_cancel.to_string(),
+            lang().hotkeys.press_enter_submit.clone(),
+            lang().hotkeys.press_esc_cancel.clone(),
         ]])
     } else {
         // Show normal mode hints using "Press xxx to yyy" format
         Ok(vec![vec![
-            lang().index.hint_press_n_new_port.to_string(),
-            lang().index.hint_press_d_delete_port.to_string(),
-            lang().index.hint_press_a_about.to_string(),
-            lang().hotkeys.press_q_quit.to_string(),
+            lang().index.hint_press_n_new_port.clone(),
+            lang().index.hint_press_d_delete_port.clone(),
+            lang().index.hint_press_a_about.clone(),
+            lang().hotkeys.press_q_quit.clone(),
         ]])
     }
 }
@@ -80,7 +80,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
 /// Get the base node height (always fixed at 4 lines)
 /// Stations are now rendered outside the box, so node height doesn't include them
-fn get_node_height() -> u16 {
+const fn get_node_height() -> u16 {
     // Base height: 2 content lines (name + type) + 2 border lines = 4
     4u16
 }
@@ -138,7 +138,7 @@ fn render_node_grid(
             selection + 1
         };
 
-        let indicator_text = format!(" {} / {} ", display_position, actual_port_count);
+        let indicator_text = format!(" {display_position} / {actual_port_count} ");
         let indicator_width = indicator_text.len() as u16;
         let indicator_area = Rect {
             x: area.x + area.width.saturating_sub(indicator_width + 1),
@@ -290,7 +290,7 @@ fn truncate_text(text: &str, max_chars: usize) -> String {
     } else {
         // Take first 7 chars + "..."
         let truncated: String = chars.iter().take(7).collect();
-        format!("{}...", truncated)
+        format!("{truncated}...")
     }
 }
 
@@ -360,9 +360,9 @@ fn render_node(
 
         // Selection indicator: angle brackets around the circle when selected
         let indicator_text = if is_selected {
-            format!(" > {} < ", status_indicator)
+            format!(" > {status_indicator} < ")
         } else {
-            format!("   {}   ", status_indicator)
+            format!("   {status_indicator}   ")
         };
 
         let indicator_style = if is_selected {
@@ -474,7 +474,7 @@ fn render_node(
     }
 
     // Check if any other port references this port (this port is a data source)
-    for (other_port_name, other_port_data) in ports_map.iter() {
+    for (other_port_name, other_port_data) in ports_map {
         if other_port_name != port_name && other_port_data.state.is_occupied_by_this() {
             let crate::tui::status::port::PortConfig::Modbus {
                 master_source: other_master_source,
@@ -509,7 +509,7 @@ fn render_node(
                 "├"
             };
 
-            let full_text = format!(" {}{}", timeline_char, reference_text);
+            let full_text = format!(" {timeline_char}{reference_text}");
 
             let reference_area = Rect {
                 x: area.x,

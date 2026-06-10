@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
-/// Returns lines that can be used with render_boxed_paragraph.
+/// Returns lines that can be used with `render_boxed_paragraph`.
 ///
 /// Each line has the format: [>] [Label____] [Value_____] with proper spacing.
 pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'static>>> {

@@ -23,6 +23,7 @@ fn check_port_occupation(port_name: &str) -> bool {
 }
 
 /// Helper to establish IPC connections if requested (bidirectional)
+#[must_use]
 pub fn setup_ipc(matches: &ArgMatches) -> Option<IpcConnections> {
     if let Some(channel_id) = matches.get_one::<String>("ipc-channel") {
         log::info!("IPC: Attempting to connect to status channel: {channel_id}");
@@ -113,7 +114,7 @@ pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
         }
 
         // Exit with appropriate code: 0 = free, 1 = occupied
-        std::process::exit(if is_occupied { 1 } else { 0 });
+        std::process::exit(i32::from(is_occupied));
     }
 
     if matches.get_flag("list-ports") {
@@ -125,7 +126,7 @@ pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
             // Note: CLI one-shot commands don't have access to status tree,
             // so we always report ports as "Free" in this context
-            for (p, extra) in ports_enriched.iter() {
+            for (p, extra) in &ports_enriched {
                 let status = "Free";
 
                 // Attempt to capture annotation if present in port_name (parenthetical)
@@ -156,12 +157,12 @@ pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
                 println!("{s}");
             } else {
                 // Fallback to plain listing
-                for (p, _) in ports_enriched.iter() {
+                for (p, _) in &ports_enriched {
                     println!("{p_port}", p_port = p.port_name);
                 }
             }
         } else {
-            for (p, _) in ports_enriched.iter() {
+            for (p, _) in &ports_enriched {
                 println!("{p_port}", p_port = p.port_name);
             }
         }
@@ -196,7 +197,7 @@ pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
         } else if crate::protocol::modbus::is_virtual_port(port_str) {
             // Create a default namespaced IPC socket name for this virtual port.
             // Using the port string verbatim is acceptable: namespaced names may include hyphens.
-            let default_socket = format!("aoba-ipc-{}", port_str);
+            let default_socket = format!("aoba-ipc-{port_str}");
             if let Err(err) = super::modbus::slave::handle_slave_listen_ipc_channel(
                 matches,
                 port,

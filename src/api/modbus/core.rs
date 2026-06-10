@@ -36,7 +36,7 @@ pub fn slave_process_one_request(
         reg_mode: _reg_mode,
         storage,
         hooks: &[],
-        port_name: "".to_string(),
+        port_name: String::new(),
         residual_buffer,
     };
     slave_process_one_request_with_hooks(&params)
@@ -113,8 +113,7 @@ pub fn slave_process_one_request_with_hooks(
             let mut residual = params.residual_buffer.lock();
             residual.clear();
             return Err(anyhow!(
-                "Skipped response frame echo ({} bytes)",
-                total_bytes
+                "Skipped response frame echo ({total_bytes} bytes)"
             ));
         }
     }
@@ -165,7 +164,7 @@ pub fn slave_process_one_request_with_hooks(
                     let remaining = original_data[remaining_start..].to_vec();
                     if !remaining.is_empty() {
                         let mut residual = params.residual_buffer.lock();
-                        *residual = remaining.clone();
+                        *residual = remaining;
                     }
                 } else {
                     // No remaining data; ensure residual buffer is empty
@@ -257,7 +256,7 @@ pub fn slave_process_one_request_with_hooks(
             }
             Err(e) => {
                 // Parse failed at this position; try the next offset
-                last_parse_error = Some(anyhow!("{:?}", e));
+                last_parse_error = Some(anyhow!("{e:?}"));
                 continue;
             }
         }
@@ -265,9 +264,7 @@ pub fn slave_process_one_request_with_hooks(
 
     // Sliding-window traversal complete: no valid frame found
     log::warn!(
-        "No valid Modbus frame found in {} bytes (tried {} offsets)",
-        total_bytes,
-        total_bytes
+        "No valid Modbus frame found in {total_bytes} bytes (tried {total_bytes} offsets)"
     );
 
     // Improvement strategy: clear the residual buffer on parse failures
@@ -286,11 +283,10 @@ pub fn slave_process_one_request_with_hooks(
 
     // Return a special marker error to tell the caller to pause polling
     if let Some(err) = last_parse_error {
-        Err(anyhow!("PARSE_FAILED: {}", err))
+        Err(anyhow!("PARSE_FAILED: {err}"))
     } else {
         Err(anyhow!(
-            "PARSE_FAILED: No valid frame found in {} bytes",
-            total_bytes
+            "PARSE_FAILED: No valid frame found in {total_bytes} bytes"
         ))
     }
 }
@@ -318,8 +314,7 @@ fn parse_response_values(
                     values.push(value);
                 } else {
                     log::warn!(
-                        "Incomplete register at offset {}: response too short",
-                        offset
+                        "Incomplete register at offset {offset}: response too short"
                     );
                 }
             }
@@ -338,11 +333,7 @@ fn parse_response_values(
                         if values.len() >= register_length as usize {
                             break;
                         }
-                        let bit_value = if (byte_val & (1 << bit_idx)) != 0 {
-                            1
-                        } else {
-                            0
-                        };
+                        let bit_value = u16::from((byte_val & (1 << bit_idx)) != 0);
                         values.push(bit_value);
                     }
                 }
@@ -398,8 +389,7 @@ pub fn master_write_coils(
 
     if bytes_read < 8 {
         return Err(anyhow!(
-            "Invalid write response (too short: {} bytes)",
-            bytes_read
+            "Invalid write response (too short: {bytes_read} bytes)"
         ));
     }
 
@@ -414,7 +404,7 @@ pub fn master_write_coils(
         );
     } else if response[1] & 0x80 != 0 {
         let error_code = response[2];
-        return Err(anyhow!("Modbus exception: error code 0x{:02X}", error_code));
+        return Err(anyhow!("Modbus exception: error code 0x{error_code:02X}"));
     }
 
     Ok(request_frame)
@@ -437,18 +427,10 @@ fn extract_values_from_storage(
             RegisterMode::Holding => storage.get_holding(addr)?,
             RegisterMode::Input => storage.get_input(addr)?,
             RegisterMode::Coils => {
-                if storage.get_coil(addr)? {
-                    1
-                } else {
-                    0
-                }
+                u16::from(storage.get_coil(addr)?)
             }
             RegisterMode::DiscreteInputs => {
-                if storage.get_discrete(addr)? {
-                    1
-                } else {
-                    0
-                }
+                u16::from(storage.get_discrete(addr)?)
             }
         };
         values.push(value);
@@ -542,7 +524,7 @@ pub(super) fn execute_single_poll_internal(
 
     // Validate
     if total_bytes < 5 {
-        return Err(anyhow!("Response too short: {} bytes", total_bytes));
+        return Err(anyhow!("Response too short: {total_bytes} bytes"));
     }
 
     if response[0] != station_id {
@@ -565,7 +547,7 @@ pub(super) fn execute_single_poll_internal(
         let mut port = port_arc.lock();
         if let Ok(n) = port.read(&mut flush_buffer) {
             if n > 0 {
-                log::warn!("Flushed {} residual bytes", n);
+                log::warn!("Flushed {n} residual bytes");
             }
         }
         return Err(anyhow!(
@@ -586,9 +568,7 @@ pub(super) fn execute_single_poll_internal(
 
     if byte_count != expected_byte_count {
         return Err(anyhow!(
-            "Byte count mismatch: expected {}, got {}",
-            expected_byte_count,
-            byte_count
+            "Byte count mismatch: expected {expected_byte_count}, got {byte_count}"
         ));
     }
 
@@ -642,35 +622,39 @@ pub(super) fn execute_single_poll_internal(
 ///
 /// # Example (Continuous Polling)
 ///
-/// ```rust,no_run
-/// use flume::unbounded;
-/// use std::sync::{Arc, Mutex};
-///
-/// let (response_tx, response_rx) = unbounded();
-/// let (control_tx, control_rx) = unbounded();
-///
-/// let port = /* open serial port */;
-/// let port_arc = Arc::new(Mutex::new(port));
-///
-/// // Spawn continuous polling
-/// std::thread::spawn(move || {
-///     master_poll_loop(
-///         port_arc,
-///         1, 0x00, 10,
-///         RegisterMode::Holding,
-///         response_tx,
-///         Some(control_rx),
-///         1000, // poll every 1 second
-///     ).unwrap();
-/// });
-///
-/// // Receive responses
-/// while let Ok(response) = response_rx.recv() {
-///     println!("Got response: {:?}", response);
-/// }
-///
-/// // Stop gracefully
-/// control_tx.send("stop".to_string()).unwrap();
+/// ```rust,ignore
+/// // Example usage (requires open serial port):
+/// // use flume::unbounded;
+/// // use std::sync::Arc;
+/// // use parking_lot::Mutex;
+/// // use aoba::api::modbus::core::{master_poll_loop, MasterPollParams};
+/// // use aoba::protocol::status::types::modbus::RegisterMode;
+/// //
+/// // let (response_tx, response_rx) = unbounded();
+/// // let (control_tx, control_rx) = unbounded();
+/// //
+/// // let port = serialport::new("/dev/ttyUSB0", 9600).open().unwrap();
+/// // let port_arc = Arc::new(Mutex::new(port));
+/// //
+/// // std::thread::spawn(move || {
+/// //     let params = MasterPollParams {
+/// //         port_arc,
+/// //         station_id: 1,
+/// //         register_address: 0x00,
+/// //         register_length: 10,
+/// //         reg_mode: RegisterMode::Holding,
+/// //         response_tx,
+/// //         control_rx: Some(control_rx),
+/// //         poll_interval_ms: 1000,
+/// //     };
+/// //     master_poll_loop(&params).unwrap();
+/// // });
+/// //
+/// // while let Ok(response) = response_rx.recv() {
+/// //     println!("Got response: {:?}", response);
+/// // }
+/// //
+/// // control_tx.send("stop".to_string()).unwrap();
 /// ```
 ///
 /// # Example (One-Shot Request)
@@ -715,7 +699,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                         // Future: implement pause/resume logic
                     }
                     _ => {
-                        log::warn!("Unknown control command: {}", cmd);
+                        log::warn!("Unknown control command: {cmd}");
                     }
                 }
             }
@@ -760,7 +744,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                     port.flush()?;
                     Ok(())
                 })() {
-                    Err(anyhow!("Failed to send request: {}", e))
+                    Err(anyhow!("Failed to send request: {e}"))
                 } else {
                     // Calculate expected response length
                     let expected_data_bytes = match params.reg_mode {
@@ -786,7 +770,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                                 total_bytes += bytes_read;
                                 Ok(())
                             }
-                            Err(e) => Err(anyhow!("Failed to read response: {}", e)),
+                            Err(e) => Err(anyhow!("Failed to read response: {e}")),
                         }
                     }?;
 
@@ -809,7 +793,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 
                     // Validate response
                     if total_bytes < 5 {
-                        Err(anyhow!("Response too short: {} bytes", total_bytes))
+                        Err(anyhow!("Response too short: {total_bytes} bytes"))
                     } else if response[0] != params.station_id {
                         Err(anyhow!(
                             "Station ID mismatch: expected {}, got {}",
@@ -825,7 +809,53 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                             RegisterMode::DiscreteInputs => 0x02,
                         };
 
-                        if response[1] != expected_func {
+                        if response[1] == expected_func {
+                            // Verify byte count
+                            let byte_count = response[2] as usize;
+                            let expected_byte_count = match params.reg_mode {
+                                RegisterMode::Holding | RegisterMode::Input => {
+                                    params.register_length as usize * 2
+                                }
+                                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                                    (params.register_length as usize).div_ceil(8)
+                                }
+                            };
+
+                            if byte_count == expected_byte_count {
+                                // Parse values
+                                match parse_response_values(
+                                    response,
+                                    params.register_length,
+                                    params.reg_mode,
+                                ) {
+                                    Ok(values) => {
+                                        if values.len() == params.register_length as usize {
+                                            Ok(ModbusResponse {
+                                                station_id: params.station_id,
+                                                register_address: params.register_address,
+                                                register_mode:
+                                                    ResponseRegisterMode::from_register_mode(
+                                                        params.reg_mode,
+                                                    ),
+                                                values,
+                                                timestamp: chrono::Utc::now().to_rfc3339(),
+                                            })
+                                        } else {
+                                            Err(anyhow!(
+                                                "Value count mismatch: expected {}, got {}",
+                                                params.register_length,
+                                                values.len()
+                                            ))
+                                        }
+                                    }
+                                    Err(e) => Err(anyhow!("Failed to parse values: {e}")),
+                                }
+                            } else {
+                                Err(anyhow!(
+                                    "Byte count mismatch: expected {expected_byte_count}, got {byte_count}"
+                                ))
+                            }
+                        } else {
                             let actual_func = response[1];
                             log::warn!(
                                 "Function code mismatch: expected 0x{:02X} ({:?}), got 0x{:02X}",
@@ -839,7 +869,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                             let mut port = params.port_arc.lock();
                             if let Ok(n) = port.read(&mut flush_buffer) {
                                 if n > 0 {
-                                    log::warn!("Flushed {} residual bytes", n);
+                                    log::warn!("Flushed {n} residual bytes");
                                 }
                             }
 
@@ -849,59 +879,11 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                                 expected_func,
                                 actual_func
                             ))
-                        } else {
-                            // Verify byte count
-                            let byte_count = response[2] as usize;
-                            let expected_byte_count = match params.reg_mode {
-                                RegisterMode::Holding | RegisterMode::Input => {
-                                    params.register_length as usize * 2
-                                }
-                                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                                    (params.register_length as usize).div_ceil(8)
-                                }
-                            };
-
-                            if byte_count != expected_byte_count {
-                                Err(anyhow!(
-                                    "Byte count mismatch: expected {}, got {}",
-                                    expected_byte_count,
-                                    byte_count
-                                ))
-                            } else {
-                                // Parse values
-                                match parse_response_values(
-                                    response,
-                                    params.register_length,
-                                    params.reg_mode,
-                                ) {
-                                    Ok(values) => {
-                                        if values.len() != params.register_length as usize {
-                                            Err(anyhow!(
-                                                "Value count mismatch: expected {}, got {}",
-                                                params.register_length,
-                                                values.len()
-                                            ))
-                                        } else {
-                                            Ok(ModbusResponse {
-                                                station_id: params.station_id,
-                                                register_address: params.register_address,
-                                                register_mode:
-                                                    ResponseRegisterMode::from_register_mode(
-                                                        params.reg_mode,
-                                                    ),
-                                                values,
-                                                timestamp: chrono::Utc::now().to_rfc3339(),
-                                            })
-                                        }
-                                    }
-                                    Err(e) => Err(anyhow!("Failed to parse values: {}", e)),
-                                }
-                            }
                         }
                     }
                 }
             }
-            Err(e) => Err(anyhow!("Failed to generate request: {}", e)),
+            Err(e) => Err(anyhow!("Failed to generate request: {e}")),
         };
 
         // ==================== End of inline poll logic ====================
@@ -913,7 +895,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 
                 // Send response via channel (non-blocking)
                 if let Err(e) = params.response_tx.try_send(response) {
-                    log::warn!("Failed to send response to channel: {}", e);
+                    log::warn!("Failed to send response to channel: {e}");
                     if matches!(e, flume::TrySendError::Disconnected(_)) {
                         log::error!("Response channel disconnected, stopping poll loop");
                         break;
@@ -923,17 +905,13 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
             Err(err) => {
                 consecutive_errors += 1;
                 log::warn!(
-                    "Poll error (#{}/{}): {}",
-                    consecutive_errors,
-                    MAX_CONSECUTIVE_ERRORS,
-                    err
+                    "Poll error (#{consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}): {err}"
                 );
 
                 // Recovery logic
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
                     log::error!(
-                        "Too many consecutive errors ({}), entering recovery mode",
-                        consecutive_errors
+                        "Too many consecutive errors ({consecutive_errors}), entering recovery mode"
                     );
                     std::thread::sleep(std::time::Duration::from_secs(5));
                     consecutive_errors = 0;
@@ -961,24 +939,26 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 /// 3. Sends a stop command
 /// 4. Returns the response
 ///
-/// # Example
-///
-/// ```rust,no_run
-/// use std::sync::{Arc, Mutex};
-///
-/// let port = /* open serial port */;
-/// let port_arc = Arc::new(Mutex::new(port));
-///
-/// let response = master_poll_once_and_stop(
-///     port_arc,
-///     1,      // station_id
-///     0x00,   // register_address
-///     10,     // register_length
-///     RegisterMode::Holding,
-///     5000,   // 5 second timeout
-/// )?;
-///
-/// println!("Values: {:?}", response.values);
+/// ```rust,ignore
+/// // Example usage (requires open serial port):
+/// // use aoba::api::modbus::core::master_poll_once_and_stop;
+/// // use aoba::protocol::status::types::modbus::RegisterMode;
+/// // use std::sync::Arc;
+/// // use parking_lot::Mutex;
+/// //
+/// // let port = serialport::new("/dev/ttyUSB0", 9600).open().unwrap();
+/// // let port_arc = Arc::new(Mutex::new(port));
+/// //
+/// // let response = master_poll_once_and_stop(
+/// //     port_arc,
+/// //     1,
+/// //     0x00,
+/// //     10,
+/// //     RegisterMode::Holding,
+/// //     5000,
+/// // ).unwrap();
+/// //
+/// // println!("Values: {:?}", response.values);
 /// ```
 pub fn master_poll_once_and_stop(
     port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
@@ -1017,5 +997,5 @@ pub fn master_poll_once_and_stop(
     let _ = handle.join();
 
     // Return result
-    result.map_err(|e| anyhow!("Timeout or channel error: {}", e))
+    result.map_err(|e| anyhow!("Timeout or channel error: {e}"))
 }

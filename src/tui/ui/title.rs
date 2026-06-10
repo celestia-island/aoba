@@ -3,7 +3,7 @@ use anyhow::Result;
 use ratatui::{
     prelude::*,
     text::{Line, Span},
-    widgets::*,
+    widgets::{Block, Borders, Paragraph},
 };
 
 use crate::{
@@ -17,9 +17,7 @@ fn get_port_name(selected_port: usize) -> Result<String> {
             Ok(status
                 .ports
                 .map
-                .get(&name)
-                .map(|port| port.port_name.clone())
-                .unwrap_or_else(|| format!("COM{selected_port}")))
+                .get(&name).map_or_else(|| format!("COM{selected_port}"), |port| port.port_name.clone()))
         })?
     } else {
         format!("COM{selected_port}")

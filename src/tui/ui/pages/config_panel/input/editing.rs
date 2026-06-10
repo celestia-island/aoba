@@ -233,7 +233,7 @@ fn handle_navigation_input(
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
+        KeyCode::Up | KeyCode::Down | KeyCode::Char('k' | 'j') => {
             write_status(|status| {
                 if let crate::tui::status::Page::ConfigPanel {
                     cursor,
@@ -260,7 +260,7 @@ fn handle_navigation_input(
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => Ok(()),
+        KeyCode::Left | KeyCode::Right | KeyCode::Char('h' | 'l') => Ok(()),
         KeyCode::Enter => {
             log::info!("handle_navigation_input: Enter pressed, calling handle_enter_action");
             handle_enter_action(selected_cursor, bus)?;
@@ -479,8 +479,7 @@ fn handle_selector_commit(
                             .ports
                             .map
                             .get(port_name)
-                            .map(|port| port.serial_config.baud)
-                            .unwrap_or(9600))
+                            .map_or(9600, |port| port.serial_config.baud))
                     })?;
 
                     write_status(|status| {
@@ -491,16 +490,15 @@ fn handle_selector_commit(
                         Ok(())
                     })?;
                     return Ok(()); // Don't commit yet, wait for string input
-                } else {
-                    // Update serial config directly
-                    write_status(|status| {
-                        if let Some(port) = status.ports.map.get_mut(port_name) {
-                            port.serial_config.baud = sel.as_u32();
-                            port.config_modified = true;
-                        }
-                        Ok(())
-                    })?;
                 }
+                // Update serial config directly
+                write_status(|status| {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        port.serial_config.baud = sel.as_u32();
+                        port.config_modified = true;
+                    }
+                    Ok(())
+                })?;
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
                 let data_bits = match i {

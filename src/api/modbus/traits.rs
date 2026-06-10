@@ -162,7 +162,7 @@ impl ModbusMasterHandler for LoggingHandler {
 /// # Returns
 ///
 /// - `Ok(())` if any handler intercepted (returned Ok)
-/// - `Err` if all handlers passed through (NotHandled) or an error occurred
+/// - `Err` if all handlers passed through (`NotHandled`) or an error occurred
 pub fn execute_slave_handler_chain(
     handlers: &[Arc<dyn ModbusSlaveHandler>],
     response: &ModbusResponse,
@@ -186,12 +186,12 @@ pub fn execute_slave_handler_chain(
                             // Continue to next handler
                         }
                         HandlerError::ProcessingError(_) => {
-                            log::error!("Handler {} error: {}", i, e);
+                            log::error!("Handler {i} error: {e}");
                             return Err(e);
                         }
                     }
                 } else {
-                    log::error!("Handler {} error: {}", i, e);
+                    log::error!("Handler {i} error: {e}");
                     last_error = Some(e);
                 }
             }
@@ -225,12 +225,12 @@ pub fn execute_master_handler_chain(
                             // Continue to next handler
                         }
                         HandlerError::ProcessingError(_) => {
-                            log::error!("Handler {} error: {}", i, e);
+                            log::error!("Handler {i} error: {e}");
                             return Err(e);
                         }
                     }
                 } else {
-                    log::error!("Handler {} error: {}", i, e);
+                    log::error!("Handler {i} error: {e}");
                     last_error = Some(e);
                 }
             }
@@ -245,7 +245,7 @@ pub fn execute_master_handler_chain(
 /// # Returns
 ///
 /// - `Ok(Some(data))` if any source provided data
-/// - `Ok(None)` if all sources returned None or NotHandled
+/// - `Ok(None)` if all sources returned None or `NotHandled`
 /// - `Err` if a processing error occurred
 pub fn execute_data_source_chain(
     sources: &mut [Arc<Mutex<dyn ModbusDataSource>>],
@@ -272,12 +272,12 @@ pub fn execute_data_source_chain(
                             // Continue to next source
                         }
                         HandlerError::ProcessingError(_) => {
-                            log::error!("Data source {} error: {}", i, e);
+                            log::error!("Data source {i} error: {e}");
                             return Err(e);
                         }
                     }
                 } else {
-                    log::error!("Data source {} error: {}", i, e);
+                    log::error!("Data source {i} error: {e}");
                     return Err(e);
                 }
             }

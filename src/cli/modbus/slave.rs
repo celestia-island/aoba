@@ -75,7 +75,7 @@ fn run_slave_poll_transaction(
             }
         };
 
-        request_frame = request_bytes.1.clone();
+        request_frame = request_bytes.1;
 
         log::info!("run_slave_poll_transaction: Sending request to master: {request_frame:02X?}");
         {
@@ -148,11 +148,7 @@ fn run_slave_poll_transaction(
                         if values.len() >= register_length as usize {
                             break;
                         }
-                        let bit_value = if (byte_val & (1 << bit_idx)) != 0 {
-                            1
-                        } else {
-                            0
-                        };
+                        let bit_value = u16::from((byte_val & (1 << bit_idx)) != 0);
                         values.push(bit_value);
                     }
                     if values.len() >= register_length as usize {
@@ -258,7 +254,7 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
     // Open serial port with configured timeout
     let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
@@ -499,7 +495,7 @@ pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
     let response = {
         // Open serial port in a scope to ensure it's closed before returning
         let port_handle =
-            open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64))?;
+            open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms)))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -607,7 +603,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
     // Open serial port with configured timeout
     let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
@@ -733,10 +729,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     matches!(update_reason.as_deref(), Some("user_edit"));
 
                                 log::info!(
-                                    "Write decision: reason={:?}, should_process={}, allow_zeros={}",
-                                    update_reason,
-                                    should_process_writes,
-                                    allow_zero_writes
+                                    "Write decision: reason={update_reason:?}, should_process={should_process_writes}, allow_zeros={allow_zero_writes}"
                                 );
 
                                 if should_process_writes {
@@ -975,7 +968,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                     write_value,
                     write_type.clone(),
                     write_result.is_ok(),
-                    write_result.as_ref().err().map(|e| e.to_string()),
+                    write_result.as_ref().err().map(std::string::ToString::to_string),
                 );
 
                 if let Err(e) = ipc_conns.status.send(&msg) {
@@ -1129,7 +1122,7 @@ pub async fn handle_slave_listen_ipc_channel(
 
     // Open serial port with configured timeout
     let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
@@ -1187,14 +1180,11 @@ pub async fn handle_slave_listen_ipc_channel(
     }
 
     let listener =
-        match ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() {
-            Ok(name) => ListenerOptions::new().name(name).create_sync(),
-            Err(_) => {
-                // Fall back to file path
-                let path =
-                    ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
-                ListenerOptions::new().name(path).create_sync()
-            }
+        if let Ok(name) = ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() { ListenerOptions::new().name(name).create_sync() } else {
+            // Fall back to file path
+            let path =
+                ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
+            ListenerOptions::new().name(path).create_sync()
         }?;
 
     log::info!("IPC socket listener created, waiting for connections...");

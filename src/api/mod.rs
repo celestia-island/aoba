@@ -9,6 +9,7 @@ pub use crate::protocol::status::types::{modbus::RegisterMode, port::PortType};
 ///
 /// Virtual ports include IPC channels (UUID format) and HTTP/HTTPS URLs.
 /// Physical serial ports (e.g. `/dev/ttyUSB0`, `COM3`) return `false`.
+#[must_use]
 pub fn is_virtual_port(port_name: &str) -> bool {
     PortType::detect(port_name).is_virtual()
 }

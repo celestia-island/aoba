@@ -39,22 +39,26 @@ impl ModbusMaster {
     /// ```rust,no_run
     /// use aoba::api::modbus::{ModbusMaster, ModbusPortConfig, RegisterMode};
     ///
-    /// let config = ModbusPortConfig {
-    ///     port_name: "/dev/ttyUSB0".to_string(),
-    ///     baud_rate: 9600,
-    ///     station_id: 1,
-    ///     register_address: 0x00,
-    ///     register_length: 10,
-    ///     register_mode: RegisterMode::Holding,
-    ///     timeout_ms: 1000,
-    ///     error_recovery_delay_ms: 1000,
-    /// };
+    /// fn example() -> anyhow::Result<()> {
+    ///     let config = ModbusPortConfig {
+    ///         port_name: "/dev/ttyUSB0".to_string(),
+    ///         baud_rate: 9600,
+    ///         station_id: 1,
+    ///         register_address: 0x00,
+    ///         register_length: 10,
+    ///         register_mode: RegisterMode::Holding,
+    ///         timeout_ms: 1000,
+    ///         error_recovery_delay_ms: Some(1000),
+    ///         poll_interval_ms: 1000,
+    ///     };
     ///
-    /// let master = ModbusMaster::new_simple(config, 1000)?;
+    ///     let master = ModbusMaster::new_simple(config, 1000)?;
     ///
-    /// // Receive responses
-    /// while let Some(response) = master.try_recv() {
-    ///     println!("Values: {:?}", response.values);
+    ///     // Receive responses
+    ///     while let Some(response) = master.try_recv() {
+    ///         println!("Values: {:?}", response.values);
+    ///     }
+    ///     Ok(())
     /// }
     /// ```
     pub fn new_simple(config: ModbusPortConfig, poll_interval_ms: u64) -> Result<Self> {
@@ -205,7 +209,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow!("Incomplete write response: {} bytes", bytes_read));
+            return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
         }
 
         // Check response
@@ -225,6 +229,7 @@ impl ModbusMaster {
     }
 
     /// Get a reference to the port handle for advanced operations (manual mode only)
+    #[must_use]
     pub fn port_handle(&self) -> Option<&Arc<Mutex<Box<dyn serialport::SerialPort>>>> {
         self.port_arc.as_ref()
     }
@@ -254,7 +259,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow!("Incomplete write response: {} bytes", bytes_read));
+            return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
         }
 
         let response = &buffer[..bytes_read];
@@ -293,7 +298,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow!("Incomplete write response: {} bytes", bytes_read));
+            return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
         }
 
         let response = &buffer[..bytes_read];
@@ -310,17 +315,20 @@ impl ModbusMaster {
     }
 
     /// Try to receive without blocking (iterator-like interface)
+    #[must_use]
     pub fn try_recv(&self) -> Option<ModbusResponse> {
         self.receiver.try_recv().ok()
     }
 
     /// Receive a response with timeout
+    #[must_use]
     pub fn recv_timeout(&self, timeout: Duration) -> Option<ModbusResponse> {
         self.receiver.recv_timeout(timeout).ok()
     }
 
     /// Get the underlying receiver for advanced usage
-    pub fn receiver(&self) -> &flume::Receiver<ModbusResponse> {
+    #[must_use]
+    pub const fn receiver(&self) -> &flume::Receiver<ModbusResponse> {
         &self.receiver
     }
 
@@ -334,7 +342,7 @@ impl ModbusMaster {
     pub fn send_control(&self, command: &str) -> Result<()> {
         if let Some(tx) = &self.control_sender {
             tx.send(command.to_string())
-                .map_err(|e| anyhow!("Failed to send control command: {}", e))?;
+                .map_err(|e| anyhow!("Failed to send control command: {e}"))?;
             Ok(())
         } else {
             Err(anyhow!(
@@ -439,7 +447,7 @@ pub async fn run_master_loop_with_handler(
 
         if let Some(h) = &hooks {
             if let Err(e) = h.on_before_request(&config.port_name) {
-                log::warn!("Hook on_before_request failed: {}", e);
+                log::warn!("Hook on_before_request failed: {e}");
             }
         }
 
@@ -477,7 +485,7 @@ pub async fn run_master_loop_with_handler(
                             Ok(())
                         }
                         other => {
-                            log::warn!("Write operation not supported for {:?}", other);
+                            log::warn!("Write operation not supported for {other:?}");
                             Ok(())
                         }
                     };
@@ -492,7 +500,7 @@ pub async fn run_master_loop_with_handler(
                     // No data this cycle
                 }
                 Err(e) => {
-                    log::warn!("Data source error: {}", e);
+                    log::warn!("Data source error: {e}");
                 }
             }
         }
@@ -507,13 +515,13 @@ pub async fn run_master_loop_with_handler(
             Ok(response) => {
                 if let Some(h) = &hooks {
                     if let Err(e) = h.on_after_response(&config.port_name, &response) {
-                        log::warn!("Hook on_after_response failed: {}", e);
+                        log::warn!("Hook on_after_response failed: {e}");
                     }
                 }
 
                 // Use handler to process response
                 if let Err(e) = handler.handle_response(&response) {
-                    log::error!("Handler failed to process response: {}", e);
+                    log::error!("Handler failed to process response: {e}");
                     if let Some(h) = &hooks {
                         h.on_error(&config.port_name, &e);
                     }
@@ -553,7 +561,7 @@ pub async fn run_master_loop_with_handler(
                         // call before_request hooks again
                         if let Some(h) = &hooks {
                             if let Err(e) = h.on_before_request(&config.port_name) {
-                                log::warn!("Hook on_before_request failed during retry: {}", e);
+                                log::warn!("Hook on_before_request failed during retry: {e}");
                             }
                         }
 
@@ -569,13 +577,12 @@ pub async fn run_master_loop_with_handler(
                                     if let Err(e) =
                                         h.on_after_response(&config.port_name, &response)
                                     {
-                                        log::warn!("Hook on_after_response failed: {}", e);
+                                        log::warn!("Hook on_after_response failed: {e}");
                                     }
                                 }
                                 if let Err(e) = handler.handle_response(&response) {
                                     log::error!(
-                                        "Handler failed to process response after retry: {}",
-                                        e
+                                        "Handler failed to process response after retry: {e}"
                                     );
                                     if let Some(h) = &hooks {
                                         h.on_error(&config.port_name, &e);
@@ -590,10 +597,7 @@ pub async fn run_master_loop_with_handler(
                                     h.on_error(&config.port_name, &last_err);
                                 }
                                 log::warn!(
-                                    "Retry {}/{} failed: {}",
-                                    attempt,
-                                    max_retries,
-                                    last_err
+                                    "Retry {attempt}/{max_retries} failed: {last_err}"
                                 );
                             }
                         }
@@ -640,7 +644,7 @@ async fn run_master_loop(
         poll_interval_ms: _, // Poll interval is hard-coded to 1 second for single-register mode
     } = config;
 
-    log::info!("Starting master loop (middleware) for {}", port_name);
+    log::info!("Starting master loop (middleware) for {port_name}");
     // debug info removed
 
     let port_handle = open_serial_port(&port_name, baud_rate, Duration::from_millis(timeout_ms))?;
@@ -650,7 +654,7 @@ async fn run_master_loop(
         // Execute hook chain: on_before_request
         for hook in &hooks {
             if let Err(e) = hook.on_before_request(&port_name) {
-                log::warn!("Hook on_before_request failed: {}", e);
+                log::warn!("Hook on_before_request failed: {e}");
             }
         }
 
@@ -678,7 +682,7 @@ async fn run_master_loop(
                                         &coil_values,
                                         &mut request_frame,
                                     ) {
-                                        log::error!("Failed to generate coils write frame: {}", e);
+                                        log::error!("Failed to generate coils write frame: {e}");
                                     } else {
                                         // Call on_before_write hooks to transform data (e.g., byte-swap)
                                         for hook in &hooks {
@@ -687,7 +691,7 @@ async fn run_master_loop(
                                                 &mut request_frame,
                                                 register_mode,
                                             ) {
-                                                log::warn!("Hook on_before_write failed: {}", e);
+                                                log::warn!("Hook on_before_write failed: {e}");
                                             }
                                         }
 
@@ -697,14 +701,14 @@ async fn run_master_loop(
                                         {
                                             let mut port = port_arc.lock();
                                             if let Err(e) = port.write_all(&request_frame) {
-                                                log::error!("Failed to send write request: {}", e);
+                                                log::error!("Failed to send write request: {e}");
                                                 let err =
-                                                    anyhow!("Failed to send write request: {}", e);
+                                                    anyhow!("Failed to send write request: {e}");
                                                 for hook in &hooks {
                                                     hook.on_error(&port_name, &err);
                                                 }
                                             } else if let Err(e) = port.flush() {
-                                                log::error!("Failed to flush write request: {}", e);
+                                                log::error!("Failed to flush write request: {e}");
                                             } else {
                                                 // Wait for confirmation
                                                 std::thread::sleep(
@@ -723,14 +727,12 @@ async fn run_master_loop(
                                                     }
                                                     Ok(bytes_read) => {
                                                         log::warn!(
-                                                            "Incomplete write response: {} bytes",
-                                                            bytes_read
+                                                            "Incomplete write response: {bytes_read} bytes"
                                                         );
                                                     }
                                                     Err(e) => {
                                                         log::error!(
-                                                            "Failed to read write confirmation: {}",
-                                                            e
+                                                            "Failed to read write confirmation: {e}"
                                                         );
                                                     }
                                                 }
@@ -739,7 +741,7 @@ async fn run_master_loop(
                                     }
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to generate coils write request: {}", e);
+                                    log::error!("Failed to generate coils write request: {e}");
                                 }
                             }
                         }
@@ -747,13 +749,13 @@ async fn run_master_loop(
                             log::warn!("Holding register write not yet implemented");
                         }
                         _ => {
-                            log::warn!("Write operation not supported for {:?}", register_mode);
+                            log::warn!("Write operation not supported for {register_mode:?}");
                         }
                     }
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    log::error!("Data source chain error: {}", e);
+                    log::error!("Data source chain error: {e}");
                 }
             }
         }
@@ -770,7 +772,7 @@ async fn run_master_loop(
                 // Execute hook chain: on_after_response
                 for hook in &hooks {
                     if let Err(e) = hook.on_after_response(&port_name, &response) {
-                        log::warn!("Hook on_after_response failed: {}", e);
+                        log::warn!("Hook on_after_response failed: {e}");
                     }
                 }
 
@@ -798,16 +800,13 @@ async fn run_master_loop(
                 }
 
                 if max_retries == 0 {
-                    log::warn!("Error polling on {}: {}", port_name, err);
+                    log::warn!("Error polling on {port_name}: {err}");
                     for hook in &hooks {
                         hook.on_error(&port_name, &err);
                     }
                 } else {
                     log::warn!(
-                        "Error polling on {}: {} - retrying up to {} times",
-                        port_name,
-                        err,
-                        max_retries
+                        "Error polling on {port_name}: {err} - retrying up to {max_retries} times"
                     );
                     let mut last_err = err;
                     let mut success = false;
@@ -817,7 +816,7 @@ async fn run_master_loop(
                         // call before_request hooks again
                         for hook in &hooks {
                             if let Err(e) = hook.on_before_request(&port_name) {
-                                log::warn!("Hook on_before_request failed during retry: {}", e);
+                                log::warn!("Hook on_before_request failed during retry: {e}");
                             }
                         }
 
@@ -831,7 +830,7 @@ async fn run_master_loop(
                             Ok(response) => {
                                 for hook in &hooks {
                                     if let Err(e) = hook.on_after_response(&port_name, &response) {
-                                        log::warn!("Hook on_after_response failed: {}", e);
+                                        log::warn!("Hook on_after_response failed: {e}");
                                     }
                                 }
                                 if sender.send(response).is_err() {
@@ -847,10 +846,7 @@ async fn run_master_loop(
                                     hook.on_error(&port_name, &last_err);
                                 }
                                 log::warn!(
-                                    "Retry {}/{} failed: {}",
-                                    attempt,
-                                    max_retries,
-                                    last_err
+                                    "Retry {attempt}/{max_retries} failed: {last_err}"
                                 );
                             }
                         }
@@ -858,9 +854,7 @@ async fn run_master_loop(
 
                     if !success {
                         log::warn!(
-                            "Retries exhausted for {}: last error: {}",
-                            port_name,
-                            last_err
+                            "Retries exhausted for {port_name}: last error: {last_err}"
                         );
                     }
                 }
@@ -912,7 +906,7 @@ async fn run_multi_register_master_loop(
             // Execute hook chain: on_before_request
             for hook in &hooks {
                 if let Err(e) = hook.on_before_request(&port_name) {
-                    log::warn!("Hook on_before_request failed: {}", e);
+                    log::warn!("Hook on_before_request failed: {e}");
                 }
             }
 
@@ -952,7 +946,7 @@ async fn run_multi_register_master_loop(
                                         &coil_values,
                                         &mut request_frame,
                                     ) {
-                                        log::error!("Failed to generate coils write frame: {}", e);
+                                        log::error!("Failed to generate coils write frame: {e}");
                                     } else {
                                         // Call on_before_write hooks to transform data (e.g., byte-swap)
                                         for hook in &hooks {
@@ -961,7 +955,7 @@ async fn run_multi_register_master_loop(
                                                 &mut request_frame,
                                                 RegisterMode::Coils,
                                             ) {
-                                                log::warn!("Hook on_before_write failed: {}", e);
+                                                log::warn!("Hook on_before_write failed: {e}");
                                             }
                                         }
 
@@ -978,11 +972,10 @@ async fn run_multi_register_master_loop(
 
                                         if let Err(e) = write_result {
                                             log::error!(
-                                                "Failed to send/flush write request: {}",
-                                                e
+                                                "Failed to send/flush write request: {e}"
                                             );
                                             let err =
-                                                anyhow!("Failed to send write request: {}", e);
+                                                anyhow!("Failed to send write request: {e}");
                                             for hook in &hooks {
                                                 hook.on_error(&port_name, &err);
                                             }
@@ -1011,14 +1004,12 @@ async fn run_multi_register_master_loop(
                                                 }
                                                 Ok(bytes_read) => {
                                                     log::warn!(
-                                                        "Incomplete write response: {} bytes",
-                                                        bytes_read
+                                                        "Incomplete write response: {bytes_read} bytes"
                                                     );
                                                 }
                                                 Err(e) => {
                                                     log::error!(
-                                                        "Failed to read write confirmation: {}",
-                                                        e
+                                                        "Failed to read write confirmation: {e}"
                                                     );
                                                 }
                                             }
@@ -1026,7 +1017,7 @@ async fn run_multi_register_master_loop(
                                     }
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to generate coils write request: {}", e);
+                                    log::error!("Failed to generate coils write request: {e}");
                                 }
                             }
                         } else {
@@ -1035,7 +1026,7 @@ async fn run_multi_register_master_loop(
                     }
                     Ok(None) => {}
                     Err(e) => {
-                        log::error!("Data source chain error: {}", e);
+                        log::error!("Data source chain error: {e}");
                     }
                 }
             }
@@ -1054,7 +1045,7 @@ async fn run_multi_register_master_loop(
                     // Execute hook chain: on_after_response
                     for hook in &hooks {
                         if let Err(e) = hook.on_after_response(&port_name, &response) {
-                            log::warn!("Hook on_after_response failed: {}", e);
+                            log::warn!("Hook on_after_response failed: {e}");
                         }
                     }
 
@@ -1109,7 +1100,7 @@ async fn run_multi_register_master_loop(
                             // call before_request hooks again
                             for hook in &hooks {
                                 if let Err(e) = hook.on_before_request(&port_name) {
-                                    log::warn!("Hook on_before_request failed during retry: {}", e);
+                                    log::warn!("Hook on_before_request failed during retry: {e}");
                                 }
                             }
 
@@ -1125,7 +1116,7 @@ async fn run_multi_register_master_loop(
                                         if let Err(e) =
                                             hook.on_after_response(&port_name, &response)
                                         {
-                                            log::warn!("Hook on_after_response failed: {}", e);
+                                            log::warn!("Hook on_after_response failed: {e}");
                                         }
                                     }
                                     if sender.send(response).is_err() {
@@ -1141,10 +1132,7 @@ async fn run_multi_register_master_loop(
                                         hook.on_error(&port_name, &last_err);
                                     }
                                     log::warn!(
-                                        "Retry {}/{} failed: {}",
-                                        attempt,
-                                        max_retries,
-                                        last_err
+                                        "Retry {attempt}/{max_retries} failed: {last_err}"
                                     );
                                 }
                             }

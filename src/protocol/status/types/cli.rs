@@ -44,11 +44,11 @@ impl std::str::FromStr for OutputSink {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(path) = s.strip_prefix("file:") {
-            Ok(OutputSink::File {
+            Ok(Self::File {
                 path: path.to_string(),
             })
         } else if let Some(name) = s.strip_prefix("pipe:") {
-            Ok(OutputSink::Pipe {
+            Ok(Self::Pipe {
                 path: name.to_string(),
             })
         } else {
@@ -67,11 +67,11 @@ impl OutputSink {
     pub fn write(&self, data: &str) -> Result<()> {
         use std::io::Write;
         match self {
-            OutputSink::Stdout => {
+            Self::Stdout => {
                 println!("{data}");
                 Ok(())
             }
-            OutputSink::File { path } => {
+            Self::File { path } => {
                 let mut file = std::fs::OpenOptions::new()
                     .create(true)
                     .append(true)
@@ -79,7 +79,7 @@ impl OutputSink {
                 writeln!(file, "{data}")?;
                 Ok(())
             }
-            OutputSink::Pipe { path } => {
+            Self::Pipe { path } => {
                 let mut file = std::fs::OpenOptions::new().write(true).open(path)?;
                 writeln!(file, "{data}")?;
                 Ok(())
@@ -90,6 +90,7 @@ impl OutputSink {
 
 impl CliStatus {
     /// Create a new CLI status for slave listen mode
+    #[must_use]
     pub fn new_slave_listen(
         port_name: String,
         station_id: u8,
@@ -109,6 +110,7 @@ impl CliStatus {
     }
 
     /// Create a new CLI status for slave poll mode
+    #[must_use]
     pub fn new_slave_poll(
         port_name: String,
         station_id: u8,
@@ -128,6 +130,7 @@ impl CliStatus {
     }
 
     /// Create a new CLI status for master provide mode
+    #[must_use]
     pub fn new_master_provide(
         port_name: String,
         station_id: u8,

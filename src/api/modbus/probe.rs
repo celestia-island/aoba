@@ -40,8 +40,7 @@ pub fn probe_modbus_rtu_baud(
 
     if crate::api::is_virtual_port(port) {
         return Err(anyhow!(
-            "Port {} is a virtual port — baud-rate probing requires a physical serial port",
-            port
+            "Port {port} is a virtual port — baud-rate probing requires a physical serial port"
         ));
     }
 
@@ -50,7 +49,7 @@ pub fn probe_modbus_rtu_baud(
             Ok(true) => return Ok(Some(baud)),
             Ok(false) => continue,
             Err(e) => {
-                log::debug!("probe at {} baud failed: {}", baud, e);
+                log::debug!("probe at {baud} baud failed: {e}");
                 continue;
             }
         }

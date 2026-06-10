@@ -94,6 +94,7 @@ pub struct ModbusBuilder {
 
 impl ModbusBuilder {
     /// Create a new builder for a Modbus Master.
+    #[must_use]
     pub fn new_master(station_id: u8) -> Self {
         Self {
             port_name: None,
@@ -113,6 +114,7 @@ impl ModbusBuilder {
     }
 
     /// Create a new builder for a Modbus Slave.
+    #[must_use]
     pub fn new_slave(station_id: u8) -> Self {
         Self {
             port_name: None,
@@ -132,6 +134,7 @@ impl ModbusBuilder {
     }
 
     /// Set the serial port name.
+    #[must_use]
     pub fn with_port(mut self, port_name: &str) -> Self {
         self.port_name = Some(port_name.to_string());
         self
@@ -139,11 +142,12 @@ impl ModbusBuilder {
 
     /// Use a virtual serial port with a randomly generated name.
     /// On Unix, this will be in the system temp directory as `vcom_{uuid}`.
+    #[must_use]
     pub fn with_virtual_port(mut self) -> Self {
         let uuid = uuid::Uuid::new_v4();
         #[cfg(unix)]
         let port_name = std::env::temp_dir()
-            .join(format!("vcom_{}", uuid))
+            .join(format!("vcom_{uuid}"))
             .to_string_lossy()
             .to_string();
         #[cfg(windows)]
@@ -154,13 +158,15 @@ impl ModbusBuilder {
     }
 
     /// Set the baud rate.
-    pub fn with_baud_rate(mut self, baud_rate: u32) -> Self {
+    #[must_use]
+    pub const fn with_baud_rate(mut self, baud_rate: u32) -> Self {
         self.baud_rate = baud_rate;
         self
     }
 
     /// Set the register configuration (single register, for backward compatibility).
-    pub fn with_register(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
+    #[must_use]
+    pub const fn with_register(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
         self.register_mode = mode;
         self.register_address = address;
         self.register_length = length;
@@ -185,6 +191,7 @@ impl ModbusBuilder {
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[must_use]
     pub fn add_register_poll(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
         self.register_polls.push(RegisterPollConfig {
             register_mode: mode,
@@ -195,7 +202,8 @@ impl ModbusBuilder {
     }
 
     /// Set the timeout in milliseconds.
-    pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
+    #[must_use]
+    pub const fn with_timeout(mut self, timeout_ms: u64) -> Self {
         self.timeout_ms = timeout_ms;
         self
     }
@@ -207,7 +215,8 @@ impl ModbusBuilder {
     ///
     /// Recommended: 100-500ms depending on baud rate and communication quality.
     /// Default for Slave: 300ms. Master ignores this setting.
-    pub fn with_error_recovery_delay(mut self, delay_ms: u64) -> Self {
+    #[must_use]
+    pub const fn with_error_recovery_delay(mut self, delay_ms: u64) -> Self {
         self.error_recovery_delay_ms = Some(delay_ms);
         self
     }
@@ -215,7 +224,7 @@ impl ModbusBuilder {
     /// Set the polling interval in milliseconds (Master only).
     ///
     /// For multi-register masters, this is the delay **between each register type poll**.
-    /// Example: poll_interval=1000ms means:
+    /// Example: `poll_interval=1000ms` means:
     /// - Poll Coils → wait 1s → Poll Holding → wait 1s → Poll Coils...
     ///
     /// Shorter intervals = faster updates but higher bus load.
@@ -241,7 +250,8 @@ impl ModbusBuilder {
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn with_poll_interval(mut self, interval_ms: u64) -> Self {
+    #[must_use]
+    pub const fn with_poll_interval(mut self, interval_ms: u64) -> Self {
         self.poll_interval_ms = interval_ms;
         self
     }
@@ -254,13 +264,15 @@ impl ModbusBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, LoggingHandler};
+    /// use aoba::api::modbus::{ModbusBuilder, ModbusHook};
     /// use std::sync::Arc;
+    ///
+    /// struct LoggingHook;
+    /// impl ModbusHook for LoggingHook {}
     ///
     /// let master = ModbusBuilder::new_master(1)
     ///     .with_port("COM1")
-    ///     .add_hook(Arc::new(LoggingHandler))  // First hook
-    ///     .add_hook(Arc::new(CustomHook))      // Second hook
+    ///     .add_hook(Arc::new(LoggingHook))
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
@@ -281,10 +293,16 @@ impl ModbusBuilder {
     /// use std::sync::Arc;
     /// use parking_lot::Mutex;
     ///
+    /// struct CsvDataSource;
+    /// impl ModbusDataSource for CsvDataSource {
+    ///     fn next_data(&mut self) -> anyhow::Result<Option<Vec<u16>>> {
+    ///         Ok(None)
+    ///     }
+    /// }
+    ///
     /// let master = ModbusBuilder::new_master(1)
     ///     .with_port("COM1")
-    ///     .add_data_source(Arc::new(Mutex::new(FileDataSource::new("data.csv")?)))
-    ///     .add_data_source(Arc::new(Mutex::new(DefaultDataSource::new())))
+    ///     .add_data_source(Arc::new(Mutex::new(CsvDataSource)))
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
@@ -319,14 +337,17 @@ impl ModbusBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, LoggingHandler};
+    /// use aoba::api::modbus::{ModbusBuilder, ModbusHook, RegisterMode};
     /// use std::sync::Arc;
+    ///
+    /// struct LoggingHook;
+    /// impl ModbusHook for LoggingHook {}
     ///
     /// let slave = ModbusBuilder::new_slave(19)
     ///     .with_port("COM2")
     ///     .with_baud_rate(57600)
     ///     .with_register(RegisterMode::Holding, 0x10, 33)
-    ///     .add_hook(Arc::new(LoggingHandler))
+    ///     .add_hook(Arc::new(LoggingHook))
     ///     .build_slave()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
@@ -364,15 +385,18 @@ impl ModbusBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode, LoggingHandler};
+    /// use aoba::api::modbus::{ModbusBuilder, ModbusHook, RegisterMode};
     /// use std::sync::Arc;
+    ///
+    /// struct LoggingHook;
+    /// impl ModbusHook for LoggingHook {}
     ///
     /// let master = ModbusBuilder::new_master(19)
     ///     .with_port("COM1")
     ///     .with_baud_rate(57600)
     ///     .add_register_poll(RegisterMode::Coils, 0x01, 11)
     ///     .add_register_poll(RegisterMode::Holding, 0x10, 33)
-    ///     .add_hook(Arc::new(LoggingHandler))
+    ///     .add_hook(Arc::new(LoggingHook))
     ///     .with_timeout(2000)
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
@@ -399,16 +423,16 @@ impl ModbusBuilder {
             poll_interval_ms: self.poll_interval_ms,
         };
 
-        if !self.register_polls.is_empty() {
+        if self.register_polls.is_empty() {
+            // Single register mode
+            master::ModbusMaster::new(config, self.hooks, self.data_sources)
+        } else {
             master::ModbusMaster::new_multi_register(
                 config,
                 self.register_polls,
                 self.hooks,
                 self.data_sources,
             )
-        } else {
-            // Single register mode
-            master::ModbusMaster::new(config, self.hooks, self.data_sources)
         }
     }
 

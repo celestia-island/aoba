@@ -5,7 +5,7 @@ use crate::tui::{
     status::{cursor::Cursor, write_status},
 };
 
-/// Ensure current cursor for ConfigPanel does not point to hidden items when
+/// Ensure current cursor for `ConfigPanel` does not point to hidden items when
 /// the selected port is not occupied by this instance or when the port is virtual.
 /// This moves the cursor to a visible default and updates `view_offset` when needed.
 pub fn sanitize_configpanel_cursor() -> Result<()> {

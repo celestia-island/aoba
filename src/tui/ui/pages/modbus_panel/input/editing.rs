@@ -359,7 +359,7 @@ fn commit_selector_edit(
                             new_mode
                         );
                         crate::tui::append_runtime_restart_log(&port_name, reason, connection_mode);
-                        return Ok(Some(port_name.clone()));
+                        return Ok(Some(port_name));
                     }
                 }
                 types::cursor::ModbusDashboardCursor::MasterSourceKind => {
@@ -384,7 +384,7 @@ fn commit_selector_edit(
 
                             master_source.set_kind(new_kind);
                             port.config_modified = true;
-                            log::info!("Updated master data source kind to {:?}", new_kind);
+                            log::info!("Updated master data source kind to {new_kind:?}");
                         }
 
                         Ok(())
@@ -406,7 +406,7 @@ fn commit_selector_edit(
                             reason,
                             StationMode::Master,
                         );
-                        return Ok(Some(port_name.clone()));
+                        return Ok(Some(port_name));
                     }
                 }
                 types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
@@ -456,7 +456,7 @@ fn commit_selector_edit(
                             new_mode
                         );
                         crate::tui::append_runtime_restart_log(&port_name, reason, connection_mode);
-                        return Ok(Some(port_name.clone()));
+                        return Ok(Some(port_name));
                     }
                 }
                 types::cursor::ModbusDashboardCursor::MasterSourceValue => {
@@ -520,23 +520,21 @@ fn commit_selector_edit(
 
                                         // CRITICAL FIX: Copy station configurations from source port
                                         if let Some(source_stations) = source_stations {
-                                            if !source_stations.is_empty() {
+                                            if source_stations.is_empty() {
+                                                log::warn!(
+                                                    "Source port '{selected_port_name}' has no station configurations to copy"
+                                                );
+                                            } else {
                                                 *stations = source_stations;
                                                 log::info!(
                                                     "Copied {} station configuration(s) from source port '{}'",
                                                     stations.len(),
                                                     selected_port_name
                                                 );
-                                            } else {
-                                                log::warn!(
-                                                    "Source port '{}' has no station configurations to copy",
-                                                    selected_port_name
-                                                );
                                             }
                                         } else {
                                             log::warn!(
-                                                "Source port '{}' not found or not accessible",
-                                                selected_port_name
+                                                "Source port '{selected_port_name}' not found or not accessible"
                                             );
                                         }
 
@@ -544,8 +542,7 @@ fn commit_selector_edit(
                                             should_restart = true;
                                         }
                                         log::info!(
-                                            "Updated port forwarding source to: {}",
-                                            selected_port_name
+                                            "Updated port forwarding source to: {selected_port_name}"
                                         );
                                     }
                                 }
@@ -569,7 +566,7 @@ fn commit_selector_edit(
                                     reason,
                                     StationMode::Master,
                                 );
-                                return Ok(Some(port_name.clone()));
+                                return Ok(Some(port_name));
                             }
                         }
                     }
@@ -635,7 +632,7 @@ fn commit_text_edit(
                                 if let Ok(new_port) = trimmed.parse::<u16>() {
                                     if new_port == 0 {
                                         // Invalid port range
-                                        log::warn!("Invalid port number: {}", new_port);
+                                        log::warn!("Invalid port number: {new_port}");
                                     } else if *port != new_port {
                                         *port = new_port;
                                         port_data.config_modified = true;
@@ -647,7 +644,7 @@ fn commit_text_edit(
                                         }
                                     }
                                 } else {
-                                    log::warn!("Failed to parse port number from: {}", trimmed);
+                                    log::warn!("Failed to parse port number from: {trimmed}");
                                 }
                             }
                             ModbusMasterDataSource::IpcPipe { path } => {
@@ -700,7 +697,7 @@ fn commit_text_edit(
                         }
 
                         bus.ui_tx
-                            .send(UiToCore::RestartRuntime(port_name.clone()))?;
+                            .send(UiToCore::RestartRuntime(port_name))?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::StationId { index } => {
@@ -817,10 +814,10 @@ fn commit_text_edit(
                                     RegisterMode::Holding => (register_value, "holding"),
                                     RegisterMode::Input => (register_value, "input"),
                                     RegisterMode::Coils => {
-                                        (if register_value == 0 { 0 } else { 1 }, "coil")
+                                        (u16::from(register_value != 0), "coil")
                                     }
                                     RegisterMode::DiscreteInputs => {
-                                        (if register_value == 0 { 0 } else { 1 }, "discrete")
+                                        (u16::from(register_value != 0), "discrete")
                                     }
                                 };
 
@@ -867,7 +864,7 @@ fn commit_text_edit(
                                 "📤 Sending RegisterUpdate to core: port={port_name}, station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                             );
                             if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                port_name: port_name.clone(),
+                                port_name,
                                 station_id: *station_id,
                                 register_type: register_type.clone(),
                                 start_address: *start_address,

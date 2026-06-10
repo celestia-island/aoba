@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::Local;
 
-use ratatui::{layout::*, prelude::*, widgets::*};
+use ratatui::{layout::{Rect, Layout, Direction, Constraint, Alignment}, prelude::*, widgets::{Block, Borders, Paragraph}};
 
 use crate::{
     tui::{
@@ -59,7 +59,7 @@ pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
         }
     }
 
-    let err_lines = if err_opt.is_some() { 1usize } else { 0usize };
+    let err_lines = usize::from(err_opt.is_some());
     let rows_count = hints.len() + err_lines;
 
     if rows_count == 0 {
@@ -72,8 +72,7 @@ pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
         .margin(0)
         .constraints(
             (0..rows_count)
-                .map(|_| Constraint::Length(1))
-                .collect::<Vec<Constraint>>(),
+                .map(|_| Constraint::Length(1)),
         )
         .split(area);
 
@@ -130,6 +129,7 @@ where
 
 /// Format a key / value shortcut hint, e.g. key = "i", value = "Edit" -> "i=Edit".
 /// Provided here so pages / components can register consistent kv-styled hints.
+#[must_use]
 pub fn format_kv_hint(key: &str, value: &str) -> String {
     // Use localized template, replace {key} and {label}
     let tmpl = lang().hotkeys.hint_kv_template.as_str();

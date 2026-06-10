@@ -55,15 +55,11 @@ where
                 ),
                 Span::styled(
                     T::iter()
-                        .nth(selected_index)
-                        .map(|item| item.to_string())
-                        .unwrap_or_else(|| {
+                        .nth(selected_index).map_or_else(|| {
                             // If the index is out of bounds, wrap to valid range
                             T::iter()
-                                .nth(selected_index % T::iter().len())
-                                .map(|item| item.to_string())
-                                .unwrap_or_else(|| "Invalid".to_string())
-                        }),
+                                .nth(selected_index % T::iter().len()).map_or_else(|| "Invalid".to_string(), |item| item.to_string())
+                        }, |item| item.to_string()),
                     Style::default().fg(Color::Yellow),
                 ),
                 Span::styled(
@@ -78,14 +74,14 @@ where
 }
 
 /// Input spans with placeholder support
-/// When current_value is empty and placeholder is provided, displays placeholder in gray italic
+/// When `current_value` is empty and placeholder is provided, displays placeholder in gray italic
 pub fn input_spans_with_placeholder<'a>(
     current_value: impl ToString,
     placeholder: Option<impl ToString>,
     state: TextState,
 ) -> Result<Vec<Span<'a>>> {
     let value_str = current_value.to_string();
-    let placeholder_text = placeholder.as_ref().map(|p| p.to_string());
+    let placeholder_text = placeholder.as_ref().map(std::string::ToString::to_string);
 
     let mut out: Vec<Span> = Vec::new();
     let show_placeholder = value_str.is_empty() && placeholder_text.is_some();

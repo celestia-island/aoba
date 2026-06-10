@@ -1,7 +1,7 @@
 /// CLI subprocess manager for core business logic
 ///
 /// This module manages CLI subprocesses that handle actual serial port communication.
-/// It can be used by any UI frontend (TUI, GUI, WebUI).
+/// It can be used by any UI frontend (TUI, GUI, `WebUI`).
 use anyhow::{anyhow, Result};
 use std::{
     collections::HashMap,
@@ -159,11 +159,11 @@ impl ManagedSubprocess {
                         Ok(_) => {
                             let trimmed = line.trim_end_matches(['\r', '\n']);
                             if !trimmed.is_empty() {
-                                log::info!("CLI[{}] stdout: {}", port_label, trimmed);
+                                log::info!("CLI[{port_label}] stdout: {trimmed}");
                             }
                         }
                         Err(err) => {
-                            log::warn!("CLI[{}] stdout reader error: {}", port_label, err);
+                            log::warn!("CLI[{port_label}] stdout reader error: {err}");
                             break;
                         }
                     }
@@ -190,13 +190,13 @@ impl ManagedSubprocess {
                         Ok(_) => {
                             let trimmed = line.trim_end_matches(['\r', '\n']);
                             if !trimmed.is_empty() {
-                                log::warn!("CLI[{}] stderr: {}", port_label, trimmed);
+                                log::warn!("CLI[{port_label}] stderr: {trimmed}");
                                 // Send to channel for TUI to capture
                                 let _ = stderr_tx_clone.send(trimmed.to_string());
                             }
                         }
                         Err(err) => {
-                            log::warn!("CLI[{}] stderr reader error: {}", port_label, err);
+                            log::warn!("CLI[{port_label}] stderr reader error: {err}");
                             break;
                         }
                     }
@@ -220,7 +220,7 @@ impl ManagedSubprocess {
             // Flatten the nested Result<Result<T, E>, JoinError> to Result<T, E>
             let flattened_result = match result {
                 Ok(inner_result) => inner_result,
-                Err(join_error) => return Err(anyhow!("Task join error: {}", join_error)),
+                Err(join_error) => return Err(anyhow!("Task join error: {join_error}")),
             };
             ipc_tx.send(flattened_result)?;
             Ok(())
@@ -373,7 +373,7 @@ impl ManagedSubprocess {
     ///
     /// # Parameters
     /// - `stations`: Station configurations to send
-    /// - `reason`: Optional reason for update ("user_edit", "initial_config", "sync", "read_response")
+    /// - `reason`: Optional reason for update ("`user_edit`", "`initial_config`", "sync", "`read_response`")
     pub fn send_stations_update(
         &mut self,
         stations: &[StationConfig],
@@ -466,6 +466,7 @@ impl Default for SubprocessManager {
 
 impl SubprocessManager {
     /// Create a new subprocess manager
+    #[must_use]
     pub fn new() -> Self {
         Self {
             processes: HashMap::new(),
@@ -505,10 +506,10 @@ impl SubprocessManager {
             .processes
             .iter_mut()
             .filter_map(|(port, subprocess)| {
-                if !subprocess.is_alive() {
-                    Some(port.clone())
-                } else {
+                if subprocess.is_alive() {
                     None
+                } else {
+                    Some(port.clone())
                 }
             })
             .collect();
@@ -527,7 +528,7 @@ impl SubprocessManager {
     pub fn poll_ipc_messages(&mut self) -> Vec<(String, IpcMessage)> {
         let mut messages = Vec::new();
 
-        for (port_name, subprocess) in self.processes.iter_mut() {
+        for (port_name, subprocess) in &mut self.processes {
             if let Ok(Some(msg)) = subprocess.try_recv_ipc() {
                 messages.push((port_name.clone(), msg));
             }
@@ -540,7 +541,7 @@ impl SubprocessManager {
     pub fn poll_stderr_logs(&mut self) -> Vec<(String, Vec<String>)> {
         let mut all_logs = Vec::new();
 
-        for (port_name, subprocess) in self.processes.iter_mut() {
+        for (port_name, subprocess) in &mut self.processes {
             let logs = subprocess.try_recv_stderr_logs();
             if !logs.is_empty() {
                 all_logs.push((port_name.clone(), logs));
@@ -551,11 +552,13 @@ impl SubprocessManager {
     }
 
     /// Get snapshot for a running subprocess
+    #[must_use]
     pub fn snapshot(&self, port_name: &str) -> Option<SubprocessSnapshot> {
-        self.processes.get(port_name).map(|sp| sp.snapshot())
+        self.processes.get(port_name).map(ManagedSubprocess::snapshot)
     }
 
     /// Get the list of active subprocess port names
+    #[must_use]
     pub fn active_ports(&self) -> Vec<String> {
         self.processes.keys().cloned().collect()
     }
@@ -568,7 +571,7 @@ impl SubprocessManager {
     /// # Parameters
     /// - `port_name`: Name of the port to update
     /// - `get_stations`: Callback to retrieve station configuration
-    /// - `reason`: Optional reason for update ("user_edit", "initial_config", "sync", "read_response")
+    /// - `reason`: Optional reason for update ("`user_edit`", "`initial_config`", "sync", "`read_response`")
     pub fn send_stations_update_for_port<F>(
         &mut self,
         port_name: &str,

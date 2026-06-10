@@ -12,10 +12,8 @@ pub fn open_serial_port(
     let port_type = PortType::detect(port);
     if port_type.is_virtual() {
         return Err(anyhow!(
-            "Port {} is a virtual port (type: {}). Virtual ports cannot be opened as physical serial ports. \
-            Use IPC or HTTP communication methods instead.",
-            port,
-            port_type
+            "Port {port} is a virtual port (type: {port_type}). Virtual ports cannot be opened as physical serial ports. \
+            Use IPC or HTTP communication methods instead."
         ));
     }
 
@@ -51,6 +49,7 @@ pub fn open_serial_port(
 ///   `ERROR_SHARING_VIOLATION` / `ERROR_ACCESS_DENIED`.
 /// - **Unix**: resolves the canonical device path, then walks `/proc/*/fd`
 ///   comparing device IDs.
+#[must_use]
 pub fn is_port_occupied(port_name: &str) -> bool {
     use crate::protocol::status::types::port::PortType;
 
@@ -114,15 +113,12 @@ pub fn is_port_occupied(port_name: &str) -> bool {
         use std::path::{Path, PathBuf};
 
         fn canonical_device_path(port_path: &str) -> Option<PathBuf> {
-            match fs::canonicalize(port_path) {
-                Ok(path) => Some(path),
-                Err(_) => {
-                    let candidate = Path::new(port_path);
-                    if candidate.is_absolute() {
-                        Some(candidate.to_path_buf())
-                    } else {
-                        std::env::current_dir().ok().map(|cwd| cwd.join(candidate))
-                    }
+            if let Ok(path) = fs::canonicalize(port_path) { Some(path) } else {
+                let candidate = Path::new(port_path);
+                if candidate.is_absolute() {
+                    Some(candidate.to_path_buf())
+                } else {
+                    std::env::current_dir().ok().map(|cwd| cwd.join(candidate))
                 }
             }
         }

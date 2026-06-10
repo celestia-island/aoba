@@ -17,7 +17,7 @@ use crate::{
     tui::{
         cli_data::initialize_cli_data_source,
         ipc::handle_cli_ipc_message,
-        logs::*,
+        logs::{append_subprocess_exited_log, append_subprocess_stopped_log, append_subprocess_spawned_log, append_lifecycle_log},
         status::{
             self as types,
             port::{PortConfig, PortData, PortState, PortStatusIndicator, PortSubprocessInfo},
@@ -228,10 +228,10 @@ pub async fn run_core_thread(
 ) -> Result<()> {
     let mut polling_enabled = true;
     let scan_interval = Duration::from_secs(30);
-    let mut last_scan = std::time::Instant::now() - scan_interval;
+    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap();
     let mut scan_in_progress = false;
 
-    let _last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
+    let _last_modbus_run = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(1)).unwrap();
     let mut subprocess_manager = SubprocessManager::new();
     loop {
         let msg_count_before = ui_rx.len();
@@ -387,7 +387,7 @@ pub async fn run_core_thread(
                             if is_abnormal_exit {
                                 let error_msg = match exit_status {
                                     Some(status) => {
-                                        format!("Process exited with status: {}", status)
+                                        format!("Process exited with status: {status}")
                                     }
                                     None => "Process was terminated by signal".to_string(),
                                 };
@@ -462,7 +462,7 @@ pub async fn run_core_thread(
                     }
                     Ok(())
                 }) {
-                    log::warn!("Failed to store stderr logs for {}: {}", port_name, err);
+                    log::warn!("Failed to store stderr logs for {port_name}: {err}");
                 }
             }
         }
@@ -543,7 +543,7 @@ async fn restart_runtime(
             log::warn!("{label}: failed to stop CLI subprocess for {port_name}: {err}");
         }
 
-        if let Some(path) = info.data_source_path.clone() {
+        if let Some(path) = info.data_source_path {
             if let Err(_err) = fs::remove_file(&path) {}
         }
 
@@ -585,7 +585,7 @@ fn stop_runtime(
             log::warn!("{label}: failed to stop CLI subprocess for {port_name}: {err}");
         }
 
-        if let Some(path) = info.data_source_path.clone() {
+        if let Some(path) = info.data_source_path {
             if let Err(_err) = fs::remove_file(&path) {}
         }
 
@@ -740,7 +740,7 @@ async fn start_runtime(
                         append_lifecycle_log(
                             port_name,
                             crate::tui::status::port::PortLifecyclePhase::Failed,
-                            Some(err_text.clone()),
+                            Some(err_text),
                         );
                         crate::tui::status::write_status(|status| {
                             if let Some(port) = status.ports.map.get_mut(port_name) {
@@ -837,7 +837,7 @@ async fn start_runtime(
                         append_lifecycle_log(
                             port_name,
                             crate::tui::status::port::PortLifecyclePhase::Failed,
-                            Some(err_text.clone()),
+                            Some(err_text),
                         );
 
                         crate::tui::status::write_status(|status| {
