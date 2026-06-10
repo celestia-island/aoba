@@ -130,11 +130,11 @@ where
 /// Format a key / value shortcut hint, e.g. key = "i", value = "Edit" -> "i=Edit".
 /// Provided here so pages / components can register consistent kv-styled hints.
 #[must_use]
+#[allow(clippy::literal_string_with_formatting_args)]
 pub fn format_kv_hint(key: &str, value: &str) -> String {
     // Use localized template, replace {key} and {label}
     let tmpl = lang().hotkeys.hint_kv_template.as_str();
-    tmpl.replace("{key}", key).replace("{label}", value)
-}
+    tmpl.replace("{key}", key).replace("{label}", value)}
 
 /// Render hints into the given `area` using the project's standard hint style and separator.
 pub fn render_hints<'a, I>(frame: &mut Frame, area: Rect, hints: I)

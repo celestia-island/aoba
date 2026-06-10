@@ -67,6 +67,7 @@ pub(crate) fn append_lifecycle_log(
     append_port_log_internal(port_name, summary, Some(metadata));
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn append_modbus_log(
     port_name: &str,
     direction: &str,
@@ -185,48 +186,44 @@ pub(crate) fn append_modbus_log(
     let mut role = StationMode::Master;
     let mut role_confident = false;
     let status_lookup = crate::tui::status::read_status(|status| {
-        if let Some(port) = status.ports.map.get(port_name) {
-            match &port.config {
-                PortConfig::Modbus { mode, stations, .. } => {
-                    let role = if mode.is_master() {
-                        StationMode::Master
-                    } else {
-                        StationMode::Slave
-                    };
+        status.ports.map.get(port_name).map_or(Ok(None), |port| match &port.config {
+            PortConfig::Modbus { mode, stations, .. } => {
+                let role = if mode.is_master() {
+                    StationMode::Master
+                } else {
+                    StationMode::Slave
+                };
 
-                    let matched = if let (Some(sid), Some(reg_mode)) = (station_id, register_mode) {
-                        let mut candidate: Option<(usize, u16, u16)> = None;
+                let matched = if let (Some(sid), Some(reg_mode)) = (station_id, register_mode) {
+                    let mut candidate: Option<(usize, u16, u16)> = None;
 
-                        for (idx, item) in stations.iter().enumerate() {
-                            if item.station_id != sid || item.register_mode != reg_mode {
-                                continue;
-                            }
+                    for (idx, item) in stations.iter().enumerate() {
+                        if item.station_id != sid || item.register_mode != reg_mode {
+                            continue;
+                        }
 
-                            if let Some(start) = register_start {
-                                if item.register_address == start {
-                                    candidate =
-                                        Some((idx, item.register_address, item.register_length));
-                                    break;
-                                }
-                            }
-
-                            if candidate.is_none() {
+                        if let Some(start) = register_start {
+                            if item.register_address == start {
                                 candidate =
                                     Some((idx, item.register_address, item.register_length));
+                                break;
                             }
                         }
 
-                        candidate.map(|(idx, start, length)| (idx as u16 + 1, start, length))
-                    } else {
-                        None
-                    };
+                        if candidate.is_none() {
+                            candidate =
+                                Some((idx, item.register_address, item.register_length));
+                        }
+                    }
 
-                    Ok(Some((role, matched)))
-                }
+                    candidate.map(|(idx, start, length)| (u16::try_from(idx).unwrap_or(u16::MAX) + 1, start, length))
+                } else {
+                    None
+                };
+
+                Ok(Some((role, matched)))
             }
-        } else {
-            Ok(None)
-        }
+        })
     });
 
     match status_lookup {
@@ -269,7 +266,7 @@ pub(crate) fn append_modbus_log(
     let full_payload_hex = crate::utils::format_hex_bytes(&payload);
 
     if failure_reason.is_none() {
-        failure_reason = parse_error.clone();
+        failure_reason.clone_from(&parse_error);
     }
 
     if success_hint == Some(true) {
@@ -479,8 +476,9 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
     let translations = lang();
     let summary = translations.tabs.log.subprocess_exited_summary.clone();
 
-    let (success, mut detail) = match exit_status {
-        Some(status) => {
+    let (success, mut detail) = exit_status.map_or_else(
+        || (None, translations.tabs.log.reason_none.clone()),
+        |status| {
             let success = status.success();
             let detail = if success {
                 translations.tabs.log.subprocess_exit_success.clone()
@@ -491,9 +489,8 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
                 translations.tabs.log.subprocess_exit_signal.clone()
             };
             (Some(success), detail)
-        }
-        None => (None, translations.tabs.log.reason_none.clone()),
-    };
+        },
+    );
 
     // If process exited abnormally, append recent stderr logs to the detail
     if success != Some(true) {

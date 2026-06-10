@@ -197,6 +197,7 @@ async fn boot_serial_loop(
                     if serial.write_all(&bytes).is_ok() && serial.flush().is_ok() {
                         ok = true;
                     }
+                    drop(serial);
                     if ok {
                         evt_tx.send(RuntimeEvent::FrameSent(bytes.into()))?;
                     }
@@ -377,23 +378,23 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> 
     finalize_residual(buf, &mut frames);
     if frames.is_empty() {
         return Ok(());
-    } else {
-        for frame in frames {
-            if log::log_enabled!(log::Level::Info) {
-                let hex = frame
-                    .iter()
-                    .map(|b| format!("{b:02X}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                log::info!("📨 Runtime: assembled frame {hex}");
-            }
-            evt.send(RuntimeEvent::FrameReceived(frame))?;
+    }
+    for frame in frames {
+        if log::log_enabled!(log::Level::Info) {
+            let hex = frame
+                .iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            log::info!("📨 Runtime: assembled frame {hex}");
         }
+        evt.send(RuntimeEvent::FrameReceived(frame))?;
     }
 
     Ok(())
 }
 
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn compute_gap(cfg: &SerialConfig) -> Duration {
     let bits = 1.
         + f32::from(cfg.data_bits)

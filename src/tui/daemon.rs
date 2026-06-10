@@ -33,6 +33,7 @@ use crate::{
 /// # Returns
 /// - `Ok(())` on successful execution
 /// - `Err` if configuration file not found or daemon startup fails
+#[allow(clippy::too_many_lines)]
 pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("🤖 Starting TUI in daemon mode (non-interactive)");
 
@@ -139,7 +140,7 @@ pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
                 PortConfig::Modbus { stations, .. } if !stations.is_empty() => {
                     autostart_ports.push(port_name.clone());
                 }
-                _ => {}
+                PortConfig::Modbus { .. } => {}
             }
         }
         Ok(())
@@ -258,11 +259,10 @@ fn load_config_from_file(path: &std::path::Path) -> Result<HashMap<String, PortC
                     .iter()
                     .map(|s| {
                         let register_mode = match s.register_mode.as_str() {
-                            "Holding" => RegisterMode::Holding,
                             "Input" => RegisterMode::Input,
                             "Coils" => RegisterMode::Coils,
                             "DiscreteInputs" => RegisterMode::DiscreteInputs,
-                            _ => RegisterMode::Holding, // Default fallback
+                            _ => RegisterMode::Holding,
                         };
 
                         ModbusRegisterItem {

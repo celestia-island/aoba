@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use crossterm::event::KeyEvent;
@@ -67,7 +68,7 @@ crossterm::event::KeyCode::Char('h' | 'l') => {
                             }
                         }
                     }
-                    _ => {}
+                    InputRawBuffer::None => {}
                 }
                 Ok(())
             })?;
@@ -123,7 +124,7 @@ crossterm::event::KeyCode::Char('h' | 'l') => {
                         commit_fn(None)?;
                     }
                 }
-                _ => {
+                InputRawBuffer::None | InputRawBuffer::Index(_) => {
                     commit_fn(None)?;
                 }
             }
@@ -147,6 +148,6 @@ crossterm::event::KeyCode::Char('h' | 'l') => {
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        _ => Ok(()),
+            _ => Ok(()),
     }
 }

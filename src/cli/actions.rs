@@ -23,6 +23,7 @@ fn check_port_occupation(port_name: &str) -> bool {
 }
 
 /// Helper to establish IPC connections if requested (bidirectional)
+#[allow(clippy::option_if_let_else)]
 #[must_use]
 pub fn setup_ipc(matches: &ArgMatches) -> Option<IpcConnections> {
     if let Some(channel_id) = matches.get_one::<String>("ipc-channel") {
@@ -34,7 +35,7 @@ pub fn setup_ipc(matches: &ArgMatches) -> Option<IpcConnections> {
                 // Create command listener on the reverse channel
                 let command_channel = ipc::get_command_channel_name(channel_id);
                 log::info!("IPC: Creating command listener on: {command_channel}");
-                match IpcCommandListener::listen(command_channel) {
+                match IpcCommandListener::listen(&command_channel) {
                     Ok(command_listener) => {
                         log::info!("IPC: Command listener created successfully");
                         Some(IpcConnections {
@@ -83,6 +84,8 @@ struct PortInfo<'a> {
     product: Option<String>,
 }
 
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::future_not_send)]
 pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     // Handle check-port command (must be before list-ports)
     if let Some(port_name) = matches.get_one::<String>("check-port") {
@@ -221,7 +224,7 @@ pub async fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave poll (client mode - sends request)
     if let Some(port) = matches.get_one::<String>("slave-poll") {
-        if let Err(err) = super::modbus::slave::handle_slave_poll(matches, port).await {
+        if let Err(err) = super::modbus::slave::handle_slave_poll(matches, port) {
             eprintln!("Error in slave-poll: {err}");
             std::process::exit(1);
         }
@@ -428,7 +431,7 @@ async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> Result<
             // Set initial values for coils
             for range in &station.map.coils {
                 for (i, &val) in range.initial_values.iter().enumerate() {
-                    let addr = range.address_start + i as u16;
+                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                     if let Err(e) = storage_lock.set_coil(addr, val != 0) {
                         log::warn!("Failed to set coil at {addr}: {e}");
                     }
@@ -438,7 +441,7 @@ async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> Result<
             // Set initial values for discrete inputs
             for range in &station.map.discrete_inputs {
                 for (i, &val) in range.initial_values.iter().enumerate() {
-                    let addr = range.address_start + i as u16;
+                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                     if let Err(e) = storage_lock.set_discrete(addr, val != 0) {
                         log::warn!("Failed to set discrete input at {addr}: {e}");
                     }
@@ -448,7 +451,7 @@ async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> Result<
             // Set initial values for holding registers
             for range in &station.map.holding {
                 for (i, &val) in range.initial_values.iter().enumerate() {
-                    let addr = range.address_start + i as u16;
+                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                     if let Err(e) = storage_lock.set_holding(addr, val) {
                         log::warn!("Failed to set holding register at {addr}: {e}");
                     }
@@ -458,7 +461,7 @@ async fn run_config_runtime(config: &super::config::ModbusBootConfig) -> Result<
             // Set initial values for input registers
             for range in &station.map.input {
                 for (i, &val) in range.initial_values.iter().enumerate() {
-                    let addr = range.address_start + i as u16;
+                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                     if let Err(e) = storage_lock.set_input(addr, val) {
                         log::warn!("Failed to set input register at {addr}: {e}");
                     }

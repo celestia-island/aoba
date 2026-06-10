@@ -32,12 +32,13 @@ const MAX_STDERR_LOGS_PER_PORT: usize = 100;
 /// Helper function to get stations configuration from TUI status
 fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
     crate::tui::status::read_status(|status| {
-        if let Some(port) = status.ports.map.get(port_name) {
-            let stations_vec = port_stations_to_config(port);
-            Ok(stations_vec)
-        } else {
-            Ok(vec![])
-        }
+        status.ports.map.get(port_name).map_or_else(
+            || Ok(vec![]),
+            |port| {
+                let stations_vec = port_stations_to_config(port);
+                Ok(stations_vec)
+            },
+        )
     })
 }
 
@@ -73,6 +74,7 @@ async fn send_initial_stations(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
@@ -81,7 +83,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     // Set config file path if specified
     let config_path = matches.get_one::<String>("config-file").map(PathBuf::from);
-    crate::tui::persistence::set_config_path(config_path.clone());
+    crate::tui::persistence::set_config_path(&config_path);
 
     let screen_capture_mode = matches.get_flag("debug-screen-capture");
     if screen_capture_mode {
@@ -99,7 +101,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     // Store config path in status for UI display
     crate::tui::status::write_status(|status| {
-        status.config_file_path = config_path.clone();
+        status.config_file_path.clone_from(&config_path);
         Ok(())
     })?;
 
@@ -140,7 +142,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
                     PortConfig::Modbus { stations, .. } if !stations.is_empty() => {
                         Some(name.clone())
                     }
-                    _ => None,
+                    PortConfig::Modbus { .. } => None,
                 })
                 .collect();
 
@@ -215,11 +217,11 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let input_handle = thread::spawn({
         let bus = bus.clone();
-        move || crate::tui::input::run_input_thread(bus, input_kill_rx)
+        move || crate::tui::input::run_input_thread(&bus, &input_kill_rx)
     });
 
     let render_handle =
-        thread::spawn(move || crate::tui::rendering::run_rendering_loop(bus, thr_rx));
+        thread::spawn(move || crate::tui::rendering::run_rendering_loop(&bus, &thr_rx));
 
     // NOTE: Initial port scan will be triggered automatically by core thread's first loop iteration
     // since last_scan is initialized to (now - scan_interval), making it immediately eligible for scanning.
@@ -252,6 +254,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn run_core_thread(
     ui_rx: flume::Receiver<UiToCore>,
     core_tx: flume::Sender<CoreToUi>,
@@ -259,7 +262,7 @@ pub async fn run_core_thread(
 ) -> Result<()> {
     let mut polling_enabled = true;
     let scan_interval = Duration::from_secs(30);
-    let mut last_scan = std::time::Instant::now() - scan_interval;
+    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap_or_else(std::time::Instant::now);
     let mut scan_in_progress = false;
 
     let mut subprocess_manager = SubprocessManager::new();
@@ -415,12 +418,10 @@ pub async fn run_core_thread(
                             };
 
                             if is_abnormal_exit {
-                                let error_msg = match exit_status {
-                                    Some(status) => {
-                                        format!("Process exited with status: {status}")
-                                    }
-                                    None => "Process was terminated by signal".to_string(),
-                                };
+                                let error_msg = exit_status.as_ref().map_or_else(
+                                    || "Process was terminated by signal".to_string(),
+                                    |status| format!("Process exited with status: {status}"),
+                                );
                                 port.status_indicator =
                                     types::port::PortStatusIndicator::NotStarted;
                                 log::warn!(
@@ -646,6 +647,7 @@ fn stop_runtime(
     Ok(false)
 }
 
+#[allow(clippy::too_many_lines)]
 async fn start_runtime(
     label: &str,
     port_name: &str,
@@ -775,7 +777,7 @@ async fn start_runtime(
                 let cli_config = CliSubprocessConfig {
                     port_name: port_name.to_string(),
                     mode: crate::cli::status::CliMode::MasterProvide,
-                    station_id: merged_station_id as u8,
+                    station_id: u8::try_from(merged_station_id).unwrap_or(u8::MAX),
                     register_address: merged_start_addr,
                     register_length: merged_length,
                     register_mode: crate::tui::cli_data::register_mode_to_cli_arg(

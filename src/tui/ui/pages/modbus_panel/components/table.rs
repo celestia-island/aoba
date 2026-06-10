@@ -34,6 +34,7 @@ pub const fn get_registers_per_row(terminal_width: u16) -> usize {
 
 /// Create a register row line that displays registers per line based on terminal width.
 /// `row_base` is the absolute address of the first slot in this row (aligned to `registers_per_row`).
+#[allow(clippy::too_many_lines)]
 pub fn render_register_row_line(
     label: &str,
     slave_index: usize,
@@ -79,8 +80,8 @@ pub fn render_register_row_line(
     } = current_selection
     {
         if si == slave_index {
-            let sel_addr = item.register_address + (ri as u16);
-            sel_addr >= row_base && sel_addr < row_base + (registers_per_row as u16)
+            let sel_addr = item.register_address + u16::try_from(ri).unwrap_or(u16::MAX);
+            sel_addr >= row_base && sel_addr < row_base + u16::try_from(registers_per_row).unwrap_or(u16::MAX)
         } else {
             false
         }
@@ -98,11 +99,12 @@ pub fn render_register_row_line(
     };
 
     let value_closure = |_: TextState| -> Result<Vec<Span>> {
+        const SWITCH_COL_TOTAL_WIDTH: usize = 4;
+        const NUMERIC_COL_TOTAL_WIDTH: usize = 6;
+
         let mut spans: Vec<Span> = Vec::new();
 
         let row_start = row_base;
-        const SWITCH_COL_TOTAL_WIDTH: usize = 4;
-        const NUMERIC_COL_TOTAL_WIDTH: usize = 6;
 
         let col_width_value = match item.register_mode {
             RegisterMode::Coils | RegisterMode::DiscreteInputs => SWITCH_COL_TOTAL_WIDTH,
@@ -110,7 +112,7 @@ pub fn render_register_row_line(
         };
 
         for slot in 0..registers_per_row {
-            let addr = row_start + slot as u16;
+            let addr = row_start + u16::try_from(slot).unwrap_or(u16::MAX);
             let item_start = item.register_address;
             let item_end = item_start + item.register_length;
 
@@ -124,7 +126,7 @@ pub fn render_register_row_line(
                     register_index: ri,
                 } = current_selection
                 {
-                    si == slave_index && (item.register_address + ri as u16) == addr
+                    si == slave_index && (item.register_address + u16::try_from(ri).unwrap_or(u16::MAX)) == addr
                 } else {
                     false
                 };
@@ -179,7 +181,7 @@ pub fn render_register_row_line(
                             pending_value.unwrap_or(stored_value)
                         };
                         let hex_str = format!("0x{display_value:04X}");
-                        let mut spans = input_spans(hex_str.clone(), state)?;
+                        let mut spans = input_spans(&hex_str, state)?;
 
                         // Apply gray italic style if pending write
                         if has_pending_write {

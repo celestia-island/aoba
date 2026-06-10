@@ -10,6 +10,7 @@ use toml::value::{Table, Value as TomlValue};
 
 use semver::Version;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=build.rs");
@@ -54,7 +55,7 @@ fn main() -> Result<()> {
             let mut workspace_dep_versions: HashMap<String, String> = HashMap::new();
             if let Some(ws_deps) = v.get("workspace").and_then(|ws| ws.get("dependencies")) {
                 if let Some(ws_table) = ws_deps.as_table() {
-                    for (k, val) in ws_table.iter() {
+                    for (k, val) in ws_table {
                         let ws_ver = if val.is_str() {
                             val.as_str().unwrap_or("").to_string()
                         } else if val.is_table() {
@@ -77,7 +78,7 @@ fn main() -> Result<()> {
                     let mut darr = Vec::new();
                     // collect first-level dependency package names (handle rename via `package` key)
                     let mut direct_dep_names: Vec<String> = Vec::new();
-                    for (k, val) in table.iter() {
+                    for (k, val) in table {
                         // Skip local / path dependencies (they are workspace crates and not relevant for external license summary)
                         if val.is_table() && val.get("path").is_some() {
                             // skip this dependency entirely
@@ -92,7 +93,7 @@ fn main() -> Result<()> {
                                 .or_else(|| {
                                     // Fallback to workspace dependency version if workspace = true
                                     val.get("workspace")
-                                        .and_then(|w| w.as_bool())
+                                        .and_then(toml::Value::as_bool)
                                         .filter(|w| *w)
                                         .and_then(|_| {
                                             workspace_dep_versions.get(k).map(String::as_str)
@@ -107,8 +108,7 @@ fn main() -> Result<()> {
                         let actual_name = if val.is_table() {
                             val.get("package")
                                 .and_then(|x| x.as_str())
-                                .map(std::string::ToString::to_string)
-                                .unwrap_or(k.clone())
+                                .map_or_else(|| k.clone(), std::string::ToString::to_string)
                         } else {
                             k.clone()
                         };
@@ -281,8 +281,7 @@ fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
                 .iter()
                 .filter_map(|value| value.as_str())
                 .all(|value| value.trim().is_empty()),
-            Some(_) => true,
-            None => true,
+            Some(_) | None => true,
         };
 
         if should_set {
@@ -302,8 +301,7 @@ fn set_string_field_if_missing(tbl: &mut Table, key: &str, value: &str) {
 
     let should_set = match tbl.get(key) {
         Some(TomlValue::String(existing)) => existing.trim().is_empty(),
-        Some(_) => true,
-        None => true,
+        Some(_) | None => true,
     };
 
     if should_set {

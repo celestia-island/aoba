@@ -51,6 +51,12 @@ pub trait ModbusSlaveHandler: Send + Sync {
     /// - `Ok(())` - Successfully handled, stop processing chain
     /// - `Err(HandlerError::NotHandled)` - Cannot handle, try next handler
     /// - `Err(other)` - Processing error, stop chain with error
+    ///
+    /// # Errors
+    ///
+    /// Implementations may return `HandlerError::NotHandled` to pass to the next
+    /// handler, `HandlerError::ProcessingError` for actual errors, or any other
+    /// error type.
     fn handle_response(&self, response: &ModbusResponse) -> Result<()>;
 
     /// Check if the handler should continue processing
@@ -78,6 +84,12 @@ pub trait ModbusDataSource: Send + Sync {
     /// - `Ok(None)` - No data from this source, try next
     /// - `Err(HandlerError::NotHandled)` - Cannot provide data, try next
     /// - `Err(other)` - Actual error, stop chain
+    ///
+    /// # Errors
+    ///
+    /// Implementations may return `HandlerError::NotHandled` to pass to the next
+    /// source, `HandlerError::ProcessingError` for actual errors, or any other
+    /// error type.
     fn next_data(&mut self) -> Result<Option<Vec<u16>>>;
 }
 
@@ -101,6 +113,12 @@ pub trait ModbusMasterHandler: Send + Sync {
     /// - `Ok(())` - Successfully handled, stop processing chain
     /// - `Err(HandlerError::NotHandled)` - Cannot handle, try next handler
     /// - `Err(other)` - Processing error, stop chain with error
+    ///
+    /// # Errors
+    ///
+    /// Implementations may return `HandlerError::NotHandled` to pass to the next
+    /// handler, `HandlerError::ProcessingError` for actual errors, or any other
+    /// error type.
     fn handle_response(&self, response: &ModbusResponse) -> Result<()>;
 
     /// Check if the handler should continue polling
@@ -163,6 +181,11 @@ impl ModbusMasterHandler for LoggingHandler {
 ///
 /// - `Ok(())` if any handler intercepted (returned Ok)
 /// - `Err` if all handlers passed through (`NotHandled`) or an error occurred
+///
+/// # Errors
+///
+/// Returns an error if all handlers pass through or if any handler returns a
+/// processing error.
 pub fn execute_slave_handler_chain(
     handlers: &[Arc<dyn ModbusSlaveHandler>],
     response: &ModbusResponse,
@@ -202,6 +225,11 @@ pub fn execute_slave_handler_chain(
 }
 
 /// Helper function to execute a middleware chain for master handlers
+///
+/// # Errors
+///
+/// Returns an error if all handlers pass through or if any handler returns a
+/// processing error.
 pub fn execute_master_handler_chain(
     handlers: &[Arc<dyn ModbusMasterHandler>],
     response: &ModbusResponse,
@@ -247,6 +275,10 @@ pub fn execute_master_handler_chain(
 /// - `Ok(Some(data))` if any source provided data
 /// - `Ok(None)` if all sources returned None or `NotHandled`
 /// - `Err` if a processing error occurred
+///
+/// # Errors
+///
+/// Returns an error if any data source returns a processing error.
 pub fn execute_data_source_chain(
     sources: &mut [Arc<Mutex<dyn ModbusDataSource>>],
 ) -> Result<Option<Vec<u16>>> {

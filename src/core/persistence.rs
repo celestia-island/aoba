@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
+    hash::BuildHasher,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -62,7 +63,7 @@ pub fn set_no_cache(enabled: bool) {
 /// let config_path = matches.get_one::<String>("config-file").map(PathBuf::from);
 /// persistence::set_config_path(config_path);
 /// ```
-pub fn set_config_path(path: Option<PathBuf>) {
+pub fn set_config_path(path: &Option<PathBuf>) {
     if CONFIG_FILE_PATH.set(path.clone()).is_err() {
         log::warn!("⚠️ Config path already set, ignoring new value");
         return;
@@ -123,8 +124,8 @@ pub struct SerializableStation {
 /// to avoid communication conflicts.
 ///
 /// Returns the explicitly configured path via --config-file, or None if no path was set.
-fn get_config_path() -> Result<Option<PathBuf>> {
-    Ok(get_config_path_setting())
+fn get_config_path() -> Option<PathBuf> {
+    get_config_path_setting()
 }
 
 /// Save port configurations to disk (TUI-only)
@@ -137,16 +138,13 @@ fn get_config_path() -> Result<Option<PathBuf>> {
 /// # Returns
 /// - `Ok(())` if save succeeded or was skipped
 /// - `Err` if save failed
-pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
+pub fn save_port_configs<S: BuildHasher>(configs: &HashMap<String, PortConfig, S>) -> Result<()> {
     if is_no_cache() {
         return Ok(());
     }
 
-    let path = match get_config_path()? {
-        Some(p) => p,
-        None => {
-            return Ok(());
-        }
+    let Some(path) = get_config_path() else {
+        return Ok(());
     };
 
     let persisted: Vec<PersistedPortConfig> = configs
@@ -228,15 +226,15 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
     // Create parent directory if it doesn't exist
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory {parent:?}"))?;
+            .with_context(|| format!("Failed to create directory {}", parent.display()))?;
     }
 
-    fs::write(&path, json).with_context(|| format!("Failed to write config to {path:?}"))?;
+    fs::write(&path, json).with_context(|| format!("Failed to write config to {}", path.display()))?;
 
     log::info!(
-        "💾 Saved {} port configurations to {:?}",
+        "💾 Saved {} port configurations to {}",
         configs.len(),
-        path
+        path.display()
     );
     Ok(())
 }
@@ -256,20 +254,17 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
         return Ok(HashMap::new());
     }
 
-    let path = match get_config_path()? {
-        Some(p) => p,
-        None => {
-            return Ok(HashMap::new());
-        }
+    let Some(path) = get_config_path() else {
+        return Ok(HashMap::new());
     };
 
     if !path.exists() {
-        log::info!("📂 Config file does not exist yet: {path:?} (will be created on save)");
+        log::info!("📂 Config file does not exist yet: {} (will be created on save)", path.display());
         return Ok(HashMap::new());
     }
 
     let json = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read config from {path:?}"))?;
+        .with_context(|| format!("Failed to read config from {}", path.display()))?;
 
     let persisted: Vec<PersistedPortConfig> =
         serde_json::from_str(&json).context("Failed to deserialize port configs")?;
@@ -322,7 +317,6 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
                     .iter()
                     .map(|s| {
                         let register_mode = match s.register_mode.as_str() {
-                            "Holding" => RegisterMode::Holding,
                             "Input" => RegisterMode::Input,
                             "Coils" => RegisterMode::Coils,
                             "DiscreteInputs" => RegisterMode::DiscreteInputs,
@@ -358,9 +352,9 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     }
 
     log::info!(
-        "📂 Loaded {} port configurations from {:?}",
+        "📂 Loaded {} port configurations from {}",
         configs.len(),
-        path
+        path.display()
     );
     Ok(configs)
 }

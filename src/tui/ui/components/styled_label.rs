@@ -24,13 +24,13 @@ where
             T::iter()
                 .nth(current_index)
                 .map(|item| item.to_string())
-                .ok_or(anyhow!("Index out of bounds"))?,
+                .ok_or_else(|| anyhow!("Index out of bounds"))?,
         )],
         TextState::Selected => vec![Span::styled(
             T::iter()
                 .nth(current_index)
                 .map(|item| item.to_string())
-                .ok_or(anyhow!("Index out of bounds"))?,
+                .ok_or_else(|| anyhow!("Index out of bounds"))?,
             Style::default().fg(Color::Green),
         )],
         TextState::Editing => {
@@ -76,12 +76,12 @@ where
 /// Input spans with placeholder support
 /// When `current_value` is empty and placeholder is provided, displays placeholder in gray italic
 pub fn input_spans_with_placeholder<'a>(
-    current_value: impl ToString,
-    placeholder: Option<impl ToString>,
+    current_value: &str,
+    placeholder: Option<&str>,
     state: TextState,
 ) -> Result<Vec<Span<'a>>> {
     let value_str = current_value.to_string();
-    let placeholder_text = placeholder.as_ref().map(std::string::ToString::to_string);
+    let placeholder_text = placeholder.map(str::to_string);
 
     let mut out: Vec<Span> = Vec::new();
     let show_placeholder = value_str.is_empty() && placeholder_text.is_some();
@@ -133,12 +133,12 @@ pub fn input_spans_with_placeholder<'a>(
                 } else {
                     value_str
                 };
-                let o = s.chars().count() as isize;
+                let o = isize::try_from(s.chars().count()).unwrap_or(isize::MAX);
                 (s, o)
             };
 
             let chars: Vec<char> = editing_string.chars().collect();
-            let len = chars.len() as isize;
+            let len = isize::try_from(chars.len()).unwrap_or(isize::MAX);
             let mut pos_isize = if offset < 0 { len + offset } else { offset };
             if pos_isize < 0 {
                 pos_isize = 0;
@@ -146,7 +146,7 @@ pub fn input_spans_with_placeholder<'a>(
             if pos_isize > len {
                 pos_isize = len;
             }
-            let pos = pos_isize as usize;
+            let pos = usize::try_from(pos_isize).unwrap_or(0);
 
             let left: String = chars.iter().take(pos).collect();
             let right: String = chars.iter().skip(pos).collect();
@@ -176,14 +176,14 @@ pub fn input_spans_with_placeholder<'a>(
     Ok(out)
 }
 
-pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result<Vec<Span<'a>>> {
-    input_spans_with_placeholder(current_value, None::<String>, state)
+pub fn input_spans<'a>(current_value: &str, state: TextState) -> Result<Vec<Span<'a>>> {
+    input_spans_with_placeholder(current_value, None::<&str>, state)
 }
 
 pub fn switch_spans<'a>(
     is_selected: bool,
-    selected_raw: impl ToString,
-    unselected_raw: impl ToString,
+    selected_raw: &str,
+    unselected_raw: &str,
     state: TextState,
 ) -> Result<Vec<Span<'a>>> {
     let mut out: Vec<Span> = Vec::new();
@@ -224,7 +224,7 @@ pub fn switch_spans<'a>(
     Ok(out)
 }
 
-pub fn link_spans<'a>(text: impl ToString, state: TextState) -> Result<Vec<Span<'a>>> {
+pub fn link_spans<'a>(text: &str, state: TextState) -> Result<Vec<Span<'a>>> {
     let mut out: Vec<Span> = Vec::new();
 
     match state {

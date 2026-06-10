@@ -13,7 +13,7 @@ pub fn port_stations_to_config(port_data: &PortData) -> Vec<StationConfig> {
 
     match &port_data.config {
         PortConfig::Modbus { mode, stations, .. } => {
-            register_items_to_stations(stations, mode.clone())
+            register_items_to_stations(stations, mode)
         }
     }
 }

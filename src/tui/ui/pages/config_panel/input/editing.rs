@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 use strum::IntoEnumIterator;
 
@@ -39,6 +40,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_editing_input(
     key: KeyEvent,
     bus: &Bus,
@@ -60,7 +62,7 @@ fn handle_editing_input(
         types::cursor::ConfigPanelCursor::ProtocolMode => {
             Some(1) // Only one option: Modbus RTU for now
         }
-        _ => None,
+            _ => None,
     };
 
     // For BaudRate (custom numeric input) only allow numeric input during editing
@@ -184,6 +186,7 @@ fn handle_editing_input(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_navigation_input(
     key: KeyEvent,
     bus: &Bus,
@@ -248,7 +251,7 @@ fn handle_navigation_input(
                         KeyCode::Down | KeyCode::Char('j') => {
                             *cursor = cursor.next();
                         }
-                        _ => {}
+                                            _ => {}
                     }
                     *view_offset = cursor.view_offset();
                 }
@@ -260,7 +263,6 @@ fn handle_navigation_input(
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Left | KeyCode::Right | KeyCode::Char('h' | 'l') => Ok(()),
         KeyCode::Enter => {
             log::info!("handle_navigation_input: Enter pressed, calling handle_enter_action");
             handle_enter_action(selected_cursor, bus)?;
@@ -302,6 +304,7 @@ fn handle_navigation_input(
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
+        #[allow(clippy::match_wildcard_for_single_variants, clippy::wildcard_enum_match_arm)]
         _ => Ok(()),
     }
 }
@@ -389,7 +392,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
             start_editing_mode(selected_cursor)?;
             Ok(())
         }
-        _ => Ok(()),
+        types::cursor::ConfigPanelCursor::ProtocolMode => Ok(()),
     }
 }
 
@@ -452,7 +455,9 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(0);
                         }
-                        _ => {}
+                        types::cursor::ConfigPanelCursor::EnablePort
+                        | types::cursor::ConfigPanelCursor::ProtocolConfig
+                        | types::cursor::ConfigPanelCursor::ViewCommunicationLog => {}
                     }
                 }
             }
@@ -485,7 +490,7 @@ fn handle_selector_commit(
                     write_status(|status| {
                         status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
                             bytes: current_baud.to_string().into_bytes(),
-                            offset: current_baud.to_string().len() as isize,
+                            offset: isize::try_from(current_baud.to_string().len()).unwrap_or(isize::MAX),
                         };
                         Ok(())
                     })?;
@@ -542,11 +547,10 @@ fn handle_selector_commit(
                     Ok(())
                 })?;
             }
-            types::cursor::ConfigPanelCursor::ProtocolMode => {
+            _ => {
                 // For now only Modbus RTU option - no action needed
                 // Future: When MQTT/TCP support is added, handle protocol switching here
             }
-            _ => {}
         }
 
         write_status(|status| {

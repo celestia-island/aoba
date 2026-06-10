@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use ratatui::prelude::*;
@@ -50,7 +51,7 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
                 crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                     status.ports.order.get(*selected_port).cloned()
                 }
-                _ => None,
+                            _ => None,
             };
             if let Some(port_name) = port_name_opt {
                 if let Some(port) = status.ports.map.get(&port_name) {

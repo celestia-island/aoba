@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use ratatui::{
@@ -119,7 +120,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         crate::tui::status::Page::ConfigPanel { selected_port, .. }
         | crate::tui::status::Page::ModbusDashboard { selected_port, .. }
         | crate::tui::status::Page::LogPanel { selected_port, .. } => Some(selected_port),
-        _ => None,
+            _ => None,
     };
 
     if let Some(selected_port) = selected_port_opt {
@@ -133,7 +134,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
                     let elapsed = Local::now().signed_duration_since(timestamp);
                     elapsed.num_seconds() < 3
                 }
-                _ => true,
+                            _ => true,
             };
 
             if should_show_status {

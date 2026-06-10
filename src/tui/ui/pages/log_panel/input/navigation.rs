@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -66,12 +67,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Up => {
+        KeyCode::Up | KeyCode::Char('k') => {
             crate::tui::ui::pages::log_panel::components::handle_scroll_up(1)?;
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Down => {
+        KeyCode::Down | KeyCode::Char('j') => {
             crate::tui::ui::pages::log_panel::components::handle_scroll_down(1)?;
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
@@ -95,16 +96,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Char('k') => {
-            crate::tui::ui::pages::log_panel::components::handle_scroll_up(1)?;
-            bus::request_refresh(&bus.ui_tx)?;
-            Ok(())
-        }
-        KeyCode::Char('j') => {
-            crate::tui::ui::pages::log_panel::components::handle_scroll_down(1)?;
-            bus::request_refresh(&bus.ui_tx)?;
-            Ok(())
-        }
         KeyCode::Esc | KeyCode::Char('h') => {
             handle_leave_page(bus)?;
             Ok(())
@@ -117,6 +108,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             handle_clear_logs(bus)?;
             Ok(())
         }
-        _ => Ok(()),
+            _ => Ok(()),
     }
 }

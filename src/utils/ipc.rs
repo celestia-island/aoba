@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 //! IPC communication utilities for TUI E2E testing
 //!
 //! This module provides cross-platform IPC for communication between
@@ -25,7 +26,7 @@ struct Pipe {
 }
 
 impl Pipe {
-    fn new(conn: LocalSocketStream) -> Self {
+    const fn new(conn: LocalSocketStream) -> Self {
         Self { conn }
     }
 
@@ -45,6 +46,7 @@ impl Pipe {
 
         let mut len_buf = [0u8; LEN_PREFIX_SIZE];
         self.conn.read_exact(&mut len_buf)?;
+        #[allow(clippy::cast_possible_truncation)]
         let payload_len = u64::from_le_bytes(len_buf) as usize;
 
         if payload_len > 10 * 1024 * 1024 {
@@ -78,6 +80,7 @@ pub struct IpcSender {
 }
 
 impl IpcSender {
+    #[allow(clippy::unused_async)]
     pub async fn new(channel_id: IpcChannelId) -> Result<Self> {
         let (to_tui_name, from_tui_name) = channel_id.socket_names();
 
@@ -148,7 +151,7 @@ impl IpcSender {
 
         match self.receive().await? {
             TuiToE2EMessage::ScreenContent { content, .. } => Ok(content),
-            msg => bail!("Unexpected message: {msg:?}"),
+                    msg => bail!("Unexpected message: {msg:?}"),
         }
     }
 }

@@ -25,9 +25,8 @@ where
         .get()
         .ok_or_else(|| anyhow!("Status not initialized"))?;
     let guard = status.read();
-    // Call user closure with borrowed reference
     let val = f(&guard)?;
-    // Clone once to decouple lifetime
+    drop(guard);
     Ok(val)
 }
 
@@ -48,6 +47,7 @@ where
         .ok_or_else(|| anyhow!("Status not initialized"))?;
     let mut guard = status.write();
     let val = f(&mut guard)?;
+    drop(guard);
     Ok(val)
 }
 

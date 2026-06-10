@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 use chrono::Local;
 use std::time::Duration;
@@ -25,7 +26,7 @@ const fn key_is_ctrl_c(key: &KeyEvent) -> bool {
 }
 
 /// Spawn the input handling thread that processes keyboard and mouse events
-pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
+pub fn run_input_thread(bus: &Bus, kill_rx: &flume::Receiver<()>) -> Result<()> {
     log::info!("🎹 Input thread started");
     loop {
         // Poll for input. Keep this loop tight and avoid toggling mouse
@@ -36,7 +37,7 @@ pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
                 log::info!("⌨️ Received event: {event:?}");
                 // handle_event now returns Result<()> and performs any quit
                 // signaling itself. Propagate errors, otherwise continue.
-                handle_event(event, &bus)?;
+                handle_event(&event, bus)?;
             }
         }
 
@@ -49,34 +50,34 @@ pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
+pub fn handle_event(event: &crossterm::event::Event, bus: &Bus) -> Result<()> {
     match event {
         crossterm::event::Event::Key(key) => {
             // Early catch for Ctrl + C at the top-level so the app can exit immediately.
             if matches!(
                 key.kind,
                 crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
-            ) && key_is_ctrl_c(&key)
+            ) && key_is_ctrl_c(key)
             {
                 log::info!("Global quit: Ctrl+C detected in input thread (pre-handler)");
                 bus.ui_tx.send(UiToCore::Quit)?;
                 return Ok(());
             }
 
-            handle_key_event(key, bus)?;
+            handle_key_event(*key, bus)?;
         }
         crossterm::event::Event::Mouse(event) => {
             match read_status(|status| Ok(status.page.clone())) {
                 Ok(crate::tui::status::Page::Entry { .. }) => {
-                    pages::entry::input::handle_mouse(event, bus)?;
+                    pages::entry::input::handle_mouse(*event, bus)?;
                 }
                 Ok(crate::tui::status::Page::About { .. }) => {
-                    pages::about::handle_mouse(event, bus)?;
+                    pages::about::handle_mouse(*event, bus)?;
                 }
                 _ => {}
             }
         }
-        _ => {}
+            _ => {}
     }
 
     Ok(())
@@ -144,7 +145,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // Check if we have an active edit cursor - simplified check
                 !input_buffer.is_empty() || matches!(key.code, KeyCode::Enter)
             }
-            _ => false,
+                    _ => false,
         };
 
         // If in edit mode, handle character input globally

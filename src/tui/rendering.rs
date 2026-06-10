@@ -10,10 +10,7 @@ use crate::{core::task_manager::spawn_task, tui::status::Status, utils::sleep_1s
 fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
 
-    let mut hints_count = match crate::tui::ui::pages::bottom_hints_for_app() {
-        Ok(h) => h.len(),
-        Err(_) => 0,
-    };
+    let mut hints_count = crate::tui::ui::pages::bottom_hints_for_app().map_or(0, |h| h.len());
 
     let error_visible = crate::tui::ui::bottom::visible_error()?.is_some();
     if error_visible {
@@ -28,7 +25,7 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
         .constraints([
             Constraint::Length(1), // title
             Constraint::Min(3),    // main
-            Constraint::Length(bottom_height as u16),
+            Constraint::Length(u16::try_from(bottom_height).unwrap_or(u16::MAX)),
         ])
         .split(area);
 
@@ -45,8 +42,8 @@ pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
 }
 
 pub(crate) fn run_rendering_loop(
-    bus: crate::core::bus::Bus,
-    thr_rx: flume::Receiver<Result<()>>,
+    bus: &crate::core::bus::Bus,
+    thr_rx: &flume::Receiver<Result<()>>,
 ) -> Result<()> {
     // Initialize terminal inside rendering thread to avoid cross-thread Terminal usage
     let mut stdout = io::stdout();
@@ -145,6 +142,9 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
 }
 
 pub(crate) fn run_screen_capture_mode() -> Result<()> {
+    use crossterm::event::{Event, KeyCode, KeyModifiers};
+    use std::io::Write;
+
     log::info!("📸 Starting screen capture mode");
 
     let app = Arc::new(RwLock::new(Status::default()));
@@ -188,12 +188,10 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
         }
     })?;
 
-    use std::io::Write;
     io::stdout().flush()?;
 
     log::info!("✅ Screen rendered, waiting for termination signal...");
 
-    use crossterm::event::{Event, KeyCode, KeyModifiers};
     loop {
         if crossterm::event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = crossterm::event::read()? {
@@ -218,6 +216,7 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result<()> {
     use ratatui::backend::TestBackend;
 
@@ -270,7 +269,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
             Ok(crate::utils::E2EToTuiMessage::KeyPress { key }) => {
                 log::info!("⌨️  Processing key press: {key}");
                 if let Ok(event) = parse_key_string(&key) {
-                    if let Err(err) = crate::tui::input::handle_event(event, &bus) {
+                    if let Err(err) = crate::tui::input::handle_event(&event, &bus) {
                         log::warn!("Failed to handle key event: {err}");
                     }
                     sleep_1s().await;
@@ -282,7 +281,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                     crossterm::event::KeyCode::Char(ch),
                     crossterm::event::KeyModifiers::NONE,
                 ));
-                if let Err(err) = crate::tui::input::handle_event(event, &bus) {
+                if let Err(err) = crate::tui::input::handle_event(&event, &bus) {
                     log::warn!("Failed to handle char input: {err}");
                 }
                 sleep_1s().await;

@@ -62,17 +62,14 @@ async fn main() -> Result<()> {
         aoba::utils::i18n::init_i18n();
 
         // Initialize dual logger for daemon mode (outputs to both file and terminal)
-        let log_file = if let Ok(log_file) = std::env::var("AOBA_LOG_FILE") {
-            log_file
-        } else {
-            // If no log file specified, set a default one for daemon mode
+        let log_file = std::env::var("AOBA_LOG_FILE").unwrap_or_else(|_| {
             let file = format!(
                 "./aoba_daemon_{}.log",
                 chrono::Local::now().format("%Y%m%d_%H%M%S")
             );
             std::env::set_var("AOBA_LOG_FILE", &file);
             file
-        };
+        });
 
         if let Err(err) = aoba::boot::init_daemon_logger(&log_file) {
             eprintln!("⚠️ Failed to initialize daemon logger: {err}");

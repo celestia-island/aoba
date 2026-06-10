@@ -15,10 +15,10 @@ pub fn generate_pull_get_coils_request(
 
 pub fn parse_pull_get_coils(
     request: &mut ModbusRequest,
-    response: Vec<u8>,
+    response: &[u8],
     count: u16,
 ) -> Result<Vec<bool>> {
-    request.parse_ok(&response)?;
+    request.parse_ok(response)?;
 
     if response.len() < 5 {
         return Err(anyhow::anyhow!("Response too short for coils: {} bytes", response.len()));

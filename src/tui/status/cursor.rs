@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use serde::{Deserialize, Serialize};
 
 use crate::tui::status;
@@ -14,8 +15,10 @@ pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[4, 4];
 /// Cursor trait to unify cursor behaviour across pages.
 pub trait Cursor {
     /// Move to previous cursor position
+    #[must_use]
     fn prev(self) -> Self;
     /// Move to next cursor position
+    #[must_use]
     fn next(self) -> Self;
     /// Compute the view offset (number of rows the page should scroll)
     fn view_offset(&self) -> usize;
@@ -420,7 +423,7 @@ impl Cursor for ModbusDashboardCursor {
                     let cell_row = register_index / registers_per_row;
                     return offset + 1 + config_rows + cell_row;
                 }
-                _ => {
+                            _ => {
                     offset += rows + 1;
                 }
             }
@@ -472,7 +475,7 @@ fn master_source_value_kind() -> Option<status::modbus::ModbusMasterDataSourceVa
                     let kind = master_source.value_kind();
                     return Ok(match kind {
                         status::modbus::ModbusMasterDataSourceValueKind::None => None,
-                        other => Some(other),
+                                            other => Some(other),
                     });
                 }
             }

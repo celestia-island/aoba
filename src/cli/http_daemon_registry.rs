@@ -86,6 +86,7 @@ pub fn is_handle_finished(port: u16) -> Option<bool> {
         let guard = entry.handle.lock();
         return Some(guard.as_ref().is_none_or(tokio::task::JoinHandle::is_finished));
     }
+    drop(reg);
     None
 }
 
@@ -117,5 +118,6 @@ pub fn get_handle_error(port: u16) -> Option<Result<()>> {
             }
         }
     }
+    drop(reg);
     None
 }

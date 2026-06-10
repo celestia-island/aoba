@@ -66,6 +66,7 @@ pub struct SubprocessSnapshot {
 
 impl ManagedSubprocess {
     /// Spawn a new CLI subprocess with the given configuration
+    #[allow(clippy::too_many_lines)]
     pub fn spawn(config: CliSubprocessConfig) -> Result<Self> {
         // Generate unique IPC socket name
         let ipc_socket_name = generate_socket_name();
@@ -236,7 +237,7 @@ impl ManagedSubprocess {
             // Try to connect with retries
             let mut result = Err(anyhow!("No connection attempts made"));
             for attempt in 1..=COMMAND_CHANNEL_CONNECT_RETRIES {
-                match IpcCommandClient::connect(command_channel_name.clone()) {
+                match IpcCommandClient::connect(&command_channel_name) {
                     Ok(client) => {
                         log::info!("Connected to CLI command channel on attempt {attempt}");
                         result = Ok(client);
@@ -245,9 +246,9 @@ impl ManagedSubprocess {
                     Err(_err) if attempt < COMMAND_CHANNEL_CONNECT_RETRIES => {
                         crate::utils::sleep::sleep_1s().await;
                     }
-                    Err(_err) => {
-                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {_err}");
-                        result = Err(_err);
+                    Err(err) => {
+                        log::warn!("Failed to connect to CLI command channel after {attempt} attempts: {err}");
+                        result = Err(err);
                     }
                 }
             }
@@ -268,7 +269,7 @@ impl ManagedSubprocess {
     }
 
     /// Try to complete IPC connection if still pending
-    fn try_complete_ipc_connection(&mut self) -> Result<()> {
+    fn try_complete_ipc_connection(&mut self) {
         if let Some(rx) = self.ipc_accept_result.take() {
             match rx.try_recv() {
                 Ok(conn) => {
@@ -310,8 +311,6 @@ impl ManagedSubprocess {
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Check if subprocess is still running
@@ -327,7 +326,7 @@ impl ManagedSubprocess {
             }
             Ok(None) => {
                 // Child still running; opportunistically finish IPC handshake if ready
-                if let Err(_err) = self.try_complete_ipc_connection() {}
+                self.try_complete_ipc_connection();
                 true
             }
             Err(err) => {
@@ -342,7 +341,7 @@ impl ManagedSubprocess {
 
     /// Try to receive an IPC message from the subprocess
     pub fn try_recv_ipc(&mut self) -> Result<Option<IpcMessage>> {
-        self.try_complete_ipc_connection()?;
+        self.try_complete_ipc_connection();
 
         if let Some(conn) = self.ipc_connection.as_mut() {
             match conn.try_recv() {
@@ -379,7 +378,7 @@ impl ManagedSubprocess {
         stations: &[StationConfig],
         reason: Option<&str>,
     ) -> Result<()> {
-        self.try_complete_ipc_connection()?;
+        self.try_complete_ipc_connection();
 
         if let Some(ref mut client) = self.command_client {
             // Serialize stations using postcard

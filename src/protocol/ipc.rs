@@ -136,10 +136,11 @@ impl IpcMessage {
 
     /// Get current Unix timestamp in seconds
     fn timestamp() -> i64 {
-        std::time::SystemTime::now()
+        let secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or(std::time::Duration::ZERO)
-            .as_secs() as i64
+            .as_secs();
+        i64::try_from(secs).unwrap_or(i64::MAX)
     }
 
     /// Create a `PortOpened` message with current timestamp
@@ -311,9 +312,8 @@ impl IpcServer {
                 Ok(0) => Ok(None),
                 Ok(n) => {
                     let data = &buf[..n];
-                    let line_end = match data.iter().position(|&b| b == b'\n') {
-                        Some(pos) => pos,
-                        None => return Err(anyhow!("IPC message missing newline terminator")),
+                    let Some(line_end) = data.iter().position(|&b| b == b'\n') else {
+                        return Err(anyhow!("IPC message missing newline terminator"));
                     };
                     let trimmed = std::str::from_utf8(&data[..line_end])
                         .map_err(|e| anyhow!("Invalid UTF-8 in IPC message: {e}"))?
@@ -467,9 +467,9 @@ pub struct IpcCommandClient {
 
 impl IpcCommandClient {
     /// Connect to a CLI subprocess's command channel
-    pub fn connect(command_channel_name: String) -> Result<Self> {
+    pub fn connect(command_channel_name: &str) -> Result<Self> {
         let name = command_channel_name
-            .clone()
+            .to_string()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let stream = Stream::connect(name)?;
 
@@ -517,9 +517,9 @@ pub struct IpcCommandListener {
 
 impl IpcCommandListener {
     /// Create a command listener for the CLI subprocess
-    pub fn listen(command_channel_name: String) -> Result<Self> {
+    pub fn listen(command_channel_name: &str) -> Result<Self> {
         let name = command_channel_name
-            .clone()
+            .to_string()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let opts = interprocess::local_socket::ListenerOptions::new().name(name);
 
@@ -553,11 +553,7 @@ impl IpcCommandListener {
 
     /// Try to receive a command message (non-blocking if connection exists)
     pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
-        if let Some(ref mut conn) = self.connection {
-            conn.try_recv()
-        } else {
-            Ok(None)
-        }
+        self.connection.as_mut().map_or(Ok(None), IpcCommandConnection::try_recv)
     }
 }
 

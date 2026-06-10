@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::{anyhow, Result};
 use parking_lot::Mutex;
 use std::{sync::Arc, time::Duration};
@@ -61,7 +62,10 @@ impl ModbusMaster {
     ///     Ok(())
     /// }
     /// ```
-    pub fn new_simple(config: ModbusPortConfig, poll_interval_ms: u64) -> Result<Self> {
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened.
+    pub fn new_simple(config: &ModbusPortConfig, poll_interval_ms: u64) -> Result<Self> {
         let (response_tx, response_rx) = flume::unbounded();
         let (control_tx, control_rx) = flume::unbounded();
 
@@ -110,7 +114,11 @@ impl ModbusMaster {
     ///
     /// This variant provides access to the port handle for manual single-shot operations.
     /// Does NOT start automatic polling - use `poll_once` or `write_coils` methods.
-    pub fn new_manual(config: ModbusPortConfig) -> Result<Self> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened.
+    pub fn new_manual(config: &ModbusPortConfig) -> Result<Self> {
         let (_response_tx, response_rx) = flume::unbounded();
         let (control_tx, control_rx) = flume::unbounded();
 
@@ -151,6 +159,11 @@ impl ModbusMaster {
     /// Execute a single poll operation (manual mode only)
     ///
     /// Returns the response immediately without going through the receiver channel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, or if the underlying
+    /// poll operation fails (port error, invalid response, etc.).
     pub fn poll_once(
         &self,
         register_mode: RegisterMode,
@@ -177,17 +190,23 @@ impl ModbusMaster {
     ///
     /// **Note for 储氢罐 hardware**: The hardware requires byte-swapping for 11-coil writes.
     /// Apply `swap_coils_byte_order()` before calling this method if needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, writing to or reading
+    /// from the port fails, the response is incomplete, or the slave returns an
+    /// exception code.
     pub fn write_coils(&self, address: u16, values: &[bool]) -> Result<()> {
+        use crate::protocol::modbus::generate_pull_set_coils_request;
+        use std::io::{Read, Write};
+
         let port_arc = self
             .port_arc
             .as_ref()
             .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
-        use crate::protocol::modbus::generate_pull_set_coils_request;
-        use std::io::{Read, Write};
-
         // Generate write request
-        let mut request = generate_pull_set_coils_request(self.station_id, values.to_vec())?;
+        let mut request = generate_pull_set_coils_request(self.station_id, values)?;
         let mut frame = Vec::new();
         request.generate_set_coils_bulk(address, values, &mut frame)?;
 
@@ -207,6 +226,7 @@ impl ModbusMaster {
         std::thread::sleep(std::time::Duration::from_millis(100));
         let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
+        drop(port);
 
         if bytes_read < 8 {
             return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
@@ -238,14 +258,20 @@ impl ModbusMaster {
     ///
     /// For a single register, consider using `write_holding` instead (fc 0x06).
     /// Returns Ok(()) if the write was acknowledged successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, writing to or reading
+    /// from the port fails, the response is incomplete, or the slave returns an
+    /// exception code.
     pub fn write_registers(&self, address: u16, values: &[u16]) -> Result<()> {
+        use crate::protocol::modbus::generate_pull_set_holdings_bulk_request;
+        use std::io::{Read, Write};
+
         let port_arc = self
             .port_arc
             .as_ref()
             .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
-
-        use crate::protocol::modbus::generate_pull_set_holdings_bulk_request;
-        use std::io::{Read, Write};
 
         let (_request, frame) =
             generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
@@ -257,6 +283,7 @@ impl ModbusMaster {
         std::thread::sleep(std::time::Duration::from_millis(100));
         let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
+        drop(port);
 
         if bytes_read < 8 {
             return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
@@ -278,14 +305,20 @@ impl ModbusMaster {
     /// Write a single holding register (function code 0x06) to the slave.
     ///
     /// Returns Ok(()) if the write was acknowledged successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, writing to or reading
+    /// from the port fails, the response is incomplete, or the slave returns an
+    /// exception code.
     pub fn write_holding(&self, address: u16, value: u16) -> Result<()> {
+        use crate::protocol::modbus::generate_pull_set_holding_request;
+        use std::io::{Read, Write};
+
         let port_arc = self
             .port_arc
             .as_ref()
             .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
-
-        use crate::protocol::modbus::generate_pull_set_holding_request;
-        use std::io::{Read, Write};
 
         let (_request, frame) = generate_pull_set_holding_request(self.station_id, address, value)?;
 
@@ -296,6 +329,7 @@ impl ModbusMaster {
         std::thread::sleep(std::time::Duration::from_millis(100));
         let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
+        drop(port);
 
         if bytes_read < 8 {
             return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
@@ -339,6 +373,11 @@ impl ModbusMaster {
     /// - `"pause"` - Pause polling (not yet implemented)
     ///
     /// Returns `Ok(())` if command was sent, `Err` if no control channel exists (legacy API)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no control channel is available or if sending the
+    /// command through the channel fails.
     pub fn send_control(&self, command: &str) -> Result<()> {
         if let Some(tx) = &self.control_sender {
             tx.send(command.to_string())
@@ -352,6 +391,11 @@ impl ModbusMaster {
     }
 
     /// Stop the master loop gracefully
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no control channel is available or if sending the
+    /// stop command fails.
     pub fn stop(&self) -> Result<()> {
         self.send_control("stop")
     }
@@ -364,26 +408,30 @@ fn new_master_legacy(
     config: ModbusPortConfig,
     hooks: Vec<Arc<dyn ModbusHook>>,
     data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
-) -> Result<ModbusMaster> {
+) -> ModbusMaster {
     let (sender, receiver) = flume::unbounded();
     let station_id = config.station_id;
 
     let handle =
         tokio::spawn(async move { run_master_loop(config, hooks, data_sources, sender).await });
 
-    Ok(ModbusMaster {
+    ModbusMaster {
         receiver,
         control_sender: None,
         _handle: handle,
         port_arc: None,
         station_id,
-    })
+    }
 }
 
 impl ModbusMaster {
     /// Create and start a multi-register Modbus master (new Builder API)
     ///
     /// Polls multiple register types on the same port with middleware support.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying master construction fails.
     pub fn new_multi_register(
         config: ModbusPortConfig,
         register_polls: Vec<super::RegisterPollConfig>,
@@ -407,12 +455,16 @@ impl ModbusMaster {
     }
 
     /// Legacy constructor using hooks and data sources
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying master construction fails.
     pub fn new(
         config: ModbusPortConfig,
         hooks: Vec<Arc<dyn ModbusHook>>,
         data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
     ) -> Result<Self> {
-        new_master_legacy(config, hooks, data_sources)
+        Ok(new_master_legacy(config, hooks, data_sources))
     }
 }
 
@@ -420,6 +472,12 @@ impl ModbusMaster {
 ///
 /// This function is independent of communication channels.
 /// It calls the handler's methods to process responses.
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during polling.
+#[allow(clippy::too_many_lines)]
 pub async fn run_master_loop_with_handler(
     config: ModbusPortConfig,
     hooks: Option<Arc<dyn ModbusHook>>,
@@ -453,7 +511,8 @@ pub async fn run_master_loop_with_handler(
 
         // Check if data source has new data to write
         if let Some(ds) = &data_source {
-            match ds.lock().next_data() {
+            let data_result = { ds.lock().next_data() };
+            match data_result {
                 Ok(Some(values)) => {
                     log::info!(
                         "Data source provided {} values for write operation (mode={:?})",
@@ -464,7 +523,7 @@ pub async fn run_master_loop_with_handler(
                         RegisterMode::Coils => {
                             let coil_values: Vec<bool> = values.iter().map(|&v| v != 0).collect();
                             crate::api::modbus::core::master_write_coils(
-                                port_arc.clone(),
+                                &port_arc,
                                 config.station_id,
                                 config.register_address,
                                 &coil_values,
@@ -482,9 +541,10 @@ pub async fn run_master_loop_with_handler(
                             let mut port = port_arc.lock();
                             port.write_all(&frame)?;
                             port.flush()?;
+                            drop(port);
                             Ok(())
                         }
-                        other => {
+                                            other => {
                             log::warn!("Write operation not supported for {other:?}");
                             Ok(())
                         }
@@ -626,6 +686,12 @@ pub async fn run_master_loop_with_handler(
 /// Master loop - uses middleware chains for hooks and data sources (Builder API)
 ///
 /// Process hooks and data sources using a middleware chain
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during the polling loop.
+#[allow(clippy::too_many_lines)]
 async fn run_master_loop(
     config: ModbusPortConfig,
     hooks: Vec<Arc<dyn ModbusHook>>,
@@ -671,7 +737,7 @@ async fn run_master_loop(
                             let mut request_frame = Vec::new();
                             match crate::protocol::modbus::generate_pull_set_coils_request(
                                 station_id,
-                                coil_values.clone(),
+                                &coil_values,
                             ) {
                                 Ok(mut request) => {
                                     if let Err(e) = request.generate_set_coils_bulk(
@@ -742,7 +808,7 @@ async fn run_master_loop(
                         RegisterMode::Holding => {
                             log::warn!("Holding register write not yet implemented");
                         }
-                        _ => {
+                                            _ => {
                             log::warn!("Write operation not supported for {register_mode:?}");
                         }
                     }
@@ -864,7 +930,13 @@ async fn run_master_loop(
 
 /// Multi-register master loop - middleware chains (Builder API)
 ///
-/// Polls multiple register types with middleware support
+/// Polls multiple register types with middleware support.
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during the polling loop.
+#[allow(clippy::too_many_lines)]
 async fn run_multi_register_master_loop(
     config: ModbusPortConfig,
     register_polls: Vec<super::RegisterPollConfig>,
@@ -932,7 +1004,7 @@ async fn run_multi_register_master_loop(
                             let mut request_frame = Vec::new();
                             match crate::protocol::modbus::generate_pull_set_coils_request(
                                 station_id,
-                                coil_values.clone(),
+                                &coil_values,
                             ) {
                                 Ok(mut request) => {
                                     if let Err(e) = request.generate_set_coils_bulk(

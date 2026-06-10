@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use ratatui::{
@@ -20,17 +21,16 @@ pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Opti
             selected_item,
             ..
         } => {
-            if let Some(port_name) = status.ports.order.get(*selected_port) {
-                if let Some(port) = status.ports.map.get(port_name) {
-                    Ok(Some((port.logs.clone(), *selected_item)))
-                } else {
-                    Ok(None)
-                }
-            } else {
-                Ok(None)
-            }
+            let port_name = status.ports.order.get(*selected_port).ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+            status.ports.map.get(port_name).map_or_else(
+                || Ok(None),
+                |port| Ok(Some((port.logs.clone(), *selected_item))),
+            )
         }
-        _ => Ok(None),
+        crate::tui::status::Page::Entry { .. }
+        | crate::tui::status::Page::ConfigPanel { .. }
+        | crate::tui::status::Page::ModbusDashboard { .. }
+        | crate::tui::status::Page::About { .. } => Ok(None),
     })?;
     Ok(res)
 }
@@ -48,17 +48,10 @@ pub fn render_log_display(
     let items_visible = std::cmp::max(1, content_height / lines_per_item);
 
     // Calculate which items to show based on selected_item
-    let start_index = if let Some(selected_idx) = selected_item {
-        // Manual mode: show selected item as first item
-        selected_idx
-    } else {
-        // Auto-follow mode: show last items
-        if logs.len() <= items_visible {
-            0
-        } else {
-            logs.len() - items_visible
-        }
-    };
+    let start_index = selected_item.map_or(
+        if logs.len() <= items_visible { 0 } else { logs.len() - items_visible },
+        |selected_idx| selected_idx,
+    );
 
     let mut rendered_lines: Vec<Line> = Vec::new();
 
@@ -66,12 +59,10 @@ pub fn render_log_display(
         let idx = start_index.saturating_add(i);
         if let Some(entry) = logs.get(idx) {
             // Determine if this item is selected
-            let selected = if let Some(sel_idx) = selected_item {
-                sel_idx == idx
-            } else {
-                // Auto-follow mode: select the last item
-                idx == logs.len().saturating_sub(1)
-            };
+            let selected = selected_item.map_or_else(
+                || idx == logs.len().saturating_sub(1),
+                |sel_idx| sel_idx == idx,
+            );
 
             let mut lines = build_log_lines(entry);
             let prefix_span = if selected {
@@ -137,19 +128,15 @@ pub fn render_log_display(
     frame.render_widget(paragraph, padded_area);
 
     // Add position counter at the bottom of the frame
-    let current_pos = if let Some(sel_idx) = selected_item {
-        sel_idx + 1
-    } else {
-        logs.len()
-    };
+    let current_pos = selected_item.map_or(logs.len(), |sel_idx| sel_idx + 1);
     let total_items = logs.len();
     let position_text = format!(" {current_pos} / {total_items} ");
 
     // Render position counter at bottom-right of the frame
     let position_area = Rect {
-        x: area.x + area.width.saturating_sub(position_text.len() as u16 + 2),
+        x: area.x + area.width.saturating_sub(u16::try_from(position_text.len()).unwrap_or(u16::MAX) + 2),
         y: area.y + area.height.saturating_sub(1),
-        width: position_text.len() as u16 + 1,
+        width: u16::try_from(position_text.len()).unwrap_or(u16::MAX) + 1,
         height: 1,
     };
 
@@ -211,8 +198,7 @@ fn build_lifecycle_lines(
     };
 
     let status_color = match lifecycle.phase {
-        types::port::PortLifecyclePhase::Created => Color::Green,
-        types::port::PortLifecyclePhase::Shutdown => Color::Green,
+        types::port::PortLifecyclePhase::Created | types::port::PortLifecyclePhase::Shutdown => Color::Green,
         types::port::PortLifecyclePhase::Restarted => Color::Yellow,
         types::port::PortLifecyclePhase::Failed => Color::Red,
     };
@@ -232,8 +218,9 @@ fn build_lifecycle_lines(
         ),
     ]);
 
-    let line_three = if let Some(note) = &lifecycle.note {
-        Line::from(vec![
+    let line_three = lifecycle.note.as_ref().map_or_else(
+        || Line::from(vec![Span::raw("  ")]),
+        |note| Line::from(vec![
             Span::raw("  "),
             Span::styled(
                 lang.tabs.log.reason_label.clone(),
@@ -241,10 +228,8 @@ fn build_lifecycle_lines(
             ),
             Span::raw(": "),
             Span::raw(note.clone()),
-        ])
-    } else {
-        Line::from(vec![Span::raw("  ")])
-    };
+        ]),
+    );
 
     [time_line, line_two, line_three]
 }
@@ -390,13 +375,13 @@ fn build_comm_success_line(lang: &Lang, comm: &types::port::PortCommunicationLog
     let station_segment = format!("{station_label} {station_value}");
 
     let register_label = lang.tabs.log.comm_register_type_label.clone();
-    let register_segment = match comm.register_mode {
-        Some(mode) => {
+    let register_segment = comm.register_mode.map_or_else(
+        || format!("{register_label} {unknown}"),
+        |mode| {
             let (code, name) = register_mode_descriptor(mode);
             format!("{register_label} {code:02} {name}")
-        }
-        None => format!("{register_label} {unknown}"),
-    };
+        },
+    );
 
     let computed_end = comm.register_end.or_else(|| {
         if let (Some(start), Some(count)) = (comm.register_start, comm.register_quantity) {
@@ -427,6 +412,7 @@ fn register_mode_descriptor(mode: types::modbus::RegisterMode) -> (u8, String) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_management_lines(
     time_line: Line<'static>,
     management: &types::port::PortManagementLog,
@@ -467,11 +453,10 @@ fn build_management_lines(
             spans.push(Span::styled(status_text, Style::default().fg(status_color)));
 
             let line_two = Line::from(spans);
-            let line_three = if let Some(err) = error {
-                reason_line(err.clone())
-            } else {
-                reason_line(lang.tabs.log.reason_none.clone())
-            };
+            let line_three = error.as_ref().map_or_else(
+                || reason_line(lang.tabs.log.reason_none.clone()),
+                |err| reason_line(err.clone()),
+            );
 
             [time_line, line_two, line_three]
         }
@@ -599,21 +584,20 @@ fn build_management_lines(
                 Span::raw(status.clone()),
             ]);
 
-            let line_three = if let Some(detail) = details {
-                Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
-                    Span::raw(": "),
-                    Span::raw(detail.clone()),
-                ])
-            } else {
-                Line::from(vec![
+            let line_three = details.as_ref().map_or_else(
+                || Line::from(vec![
                     Span::raw("  "),
                     Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
                     Span::raw(": "),
                     Span::raw(lang.tabs.log.reason_none.clone()),
-                ])
-            };
+                ]),
+                |detail| Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
+                    Span::raw(": "),
+                    Span::raw(detail.clone()),
+                ]),
+            );
 
             [time_line, line_two, line_three]
         }
@@ -694,11 +678,10 @@ fn build_management_lines(
                 ),
             ]);
 
-            let line_three = if let Some(reason) = reason {
-                reason_line(reason.clone())
-            } else {
-                reason_line(lang.tabs.log.reason_none.clone())
-            };
+            let line_three = reason.as_ref().map_or_else(
+                || reason_line(lang.tabs.log.reason_none.clone()),
+                |r| reason_line(r.clone()),
+            );
 
             [time_line, line_two, line_three]
         }
@@ -710,27 +693,28 @@ fn build_management_lines(
                 Span::raw(detail.clone()),
             ]);
 
-            let line_three = if let Some(is_success) = success {
-                let status_label = if *is_success {
-                    lang.tabs.log.result_success.clone()
-                } else {
-                    lang.tabs.log.result_failure.clone()
-                };
-                let status_color = if *is_success {
-                    Color::Green
-                } else {
-                    Color::Red
-                };
+            let line_three = success.as_ref().map_or_else(
+                || reason_line(lang.tabs.log.reason_none.clone()),
+                |is_success| {
+                    let status_label = if *is_success {
+                        lang.tabs.log.result_success.clone()
+                    } else {
+                        lang.tabs.log.result_failure.clone()
+                    };
+                    let status_color = if *is_success {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    };
 
-                Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(lang.tabs.log.result_label.clone(), label_style),
-                    Span::raw(": "),
-                    Span::styled(status_label, Style::default().fg(status_color)),
-                ])
-            } else {
-                reason_line(lang.tabs.log.reason_none.clone())
-            };
+                    Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(lang.tabs.log.result_label.clone(), label_style),
+                        Span::raw(": "),
+                        Span::styled(status_label, Style::default().fg(status_color)),
+                    ])
+                },
+            );
 
             [time_line, line_two, line_three]
         }

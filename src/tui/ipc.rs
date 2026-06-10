@@ -25,6 +25,7 @@ pub(crate) fn map_register_mode_hint(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     match message {
         IpcMessage::PortOpened { .. } => {
@@ -172,7 +173,7 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                     let pending_val = modbus_stations[idx].pending_writes.get(&station_idx).copied().unwrap_or(0);
                                                     log::info!(
                                                         "  ⏸️  Register addr=0x{:04X} (idx={}): Skipped (pending=0x{pending_val:04X}, incoming=0x{value:04X})",
-                                                        range.address_start + incoming_idx as u16,
+                                                        range.address_start + u16::try_from(incoming_idx).unwrap_or(u16::MAX),
                                                         station_idx
                                                     );
                                                 } else {
@@ -185,14 +186,14 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                         if old != value {
                                                             log::info!(
                                                                 "  📝 Register addr=0x{:04X} (idx={}): 0x{old:04X} → 0x{value:04X}",
-                                                                range.address_start + incoming_idx as u16,
+                                                                range.address_start + u16::try_from(incoming_idx).unwrap_or(u16::MAX),
                                                                 station_idx
                                                             );
                                                         }
                                                     } else {
                                                         log::info!(
                                                             "  📝 Register addr=0x{:04X} (idx={}): <new> → 0x{value:04X}",
-                                                            range.address_start + incoming_idx as u16,
+                                                            range.address_start + u16::try_from(incoming_idx).unwrap_or(u16::MAX),
                                                             station_idx
                                                         );
                                                     }

@@ -28,9 +28,11 @@ pub fn styled_title_span(label: &str, selected: bool, editing: bool) -> Span<'st
     Span::styled(label.to_string(), title_style)
 }
 
-/// Convert label/value pairs into aligned `Line`s. Each pair is (label, value, optional style)
-/// `indent` is prefixed before each label (for example two spaces). `gap` is the number of
-/// spaces between the label column and the value column.
+/// Convert label/value pairs into aligned `Line`s.
+///
+/// Each pair is (label, value, optional style) `indent` is prefixed before each
+/// label (for example two spaces). `gap` is the number of spaces between the
+/// label column and the value column.
 #[must_use]
 pub fn kv_pairs_to_lines(pairs: &[(String, String)], gap: usize) -> Vec<Line<'static>> {
     let max_label_w = pairs

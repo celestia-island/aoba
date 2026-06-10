@@ -34,7 +34,7 @@ pub fn select_field_by_cursor(
 
     input_buffer.clear();
     if matches!(editing_field, Some(EditingField::Baud)) {
-        let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+        let presets: [u32; 8] = [1_200, 2_400, 4_800, 9_600, 19_200, 38_400, 57_600, 115_200];
         let custom_index = presets.len();
         let index = presets
             .iter()
@@ -45,10 +45,9 @@ pub fn select_field_by_cursor(
             *input_buffer = baud.to_string();
         }
         *edit_confirmed = false;
-    } else {
-        *edit_choice_index = None;
-        *edit_confirmed = false;
     }
+    *edit_choice_index = None;
+    *edit_confirmed = false;
 }
 
 /// Begin editing: set `editing = true` and invoke `select_field_by_cursor`.

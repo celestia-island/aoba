@@ -25,12 +25,13 @@ pub struct RepoManifest {
 
 static ABOUT_CACHE: OnceLock<Arc<Mutex<RepoManifest>>> = OnceLock::new();
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
+    const ABOUT_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/res/about_cache.toml"));
+
     if let Some(v) = ABOUT_CACHE.get() {
         return v.clone();
     }
-
-    const ABOUT_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/res/about_cache.toml"));
 
     let mut cache = RepoManifest::default();
 
@@ -170,7 +171,7 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
 ///
 /// Render the about details (label/value pairs) into lines. This can be used both for
 /// the entry preview and the full about subpage.
-pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Result<Vec<Line<'static>>> {
+pub fn render_about_page_manifest_lines(app_snapshot: &RepoManifest) -> Result<Vec<Line<'static>>> {
     let mut out: Vec<Line> = Vec::new();
 
     out.push(Line::from(lang().about.welcome.clone()));

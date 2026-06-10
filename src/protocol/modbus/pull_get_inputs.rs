@@ -15,8 +15,8 @@ pub fn generate_pull_get_inputs_request(
 }
 
 /// Parse a Modbus response for input registers (function 0x04) into u16 values.
-pub fn parse_pull_get_inputs(request: &mut ModbusRequest, response: Vec<u8>) -> Result<Vec<u16>> {
-    request.parse_ok(&response)?;
+pub fn parse_pull_get_inputs(request: &mut ModbusRequest, response: &[u8]) -> Result<Vec<u16>> {
+    request.parse_ok(response)?;
 
     if response.len() < 5 {
         return Err(anyhow::anyhow!("Response too short for inputs: {} bytes", response.len()));

@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -10,6 +11,7 @@ use crate::tui::status::cursor::Cursor;
 use crate::tui::status::{read_status, write_status, Page};
 use crate::tui::ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT};
 
+#[allow(clippy::too_many_lines)]
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Char('q') => {
@@ -155,6 +157,13 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
 
             if in_creation {
+                // Create a new port entry (without starting it)
+                use crate::protocol::status::types::port::{PortType, SerialConfig};
+                use crate::tui::status::modbus::ModbusMasterDataSource;
+                use crate::tui::status::port::{
+                    PortConfig, PortData, PortState, PortStatusIndicator,
+                };
+
                 // Confirm port creation
                 let port_type_index =
                     read_status(|status| Ok(status.temporarily.new_port_creation.port_type_index))?;
@@ -169,25 +178,20 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     "Creating new {port_type_name} port with UUID: {new_port_name}"
                 );
 
-                // Create a new port entry (without starting it)
-                use crate::tui::status::port::{
-                    PortConfig, PortData, PortState, PortStatusIndicator,
-                };
-
                 // Add to ports
                 write_status(|status| {
-                    use crate::protocol::status::types::port::PortType;
                     let new_port = PortData {
                         port_name: new_port_name.clone(),
                         port_type: PortType::IPC,
+                        #[allow(clippy::default_trait_access)]
                         extra: Default::default(),
                         state: PortState::Free,
                         subprocess_info: None,
-                        serial_config: Default::default(),
+                        serial_config: SerialConfig::default(),
                         config: PortConfig::Modbus {
                             mode: crate::tui::status::modbus::ModbusConnectionMode::default_master(
                             ),
-                            master_source: Default::default(),
+                            master_source: ModbusMasterDataSource::default(),
                             stations: Vec::new(),
                         },
                         logs: Vec::new(),
@@ -330,7 +334,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             bus::request_refresh(&bus.ui_tx)?;
         }
-        _ => {}
+            _ => {}
     }
     Ok(())
 }

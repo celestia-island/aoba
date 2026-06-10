@@ -227,8 +227,5 @@ fn get_about_preview_content() -> Vec<Line<'static>> {
         }
     };
 
-    match render_about_page_manifest_lines(snapshot) {
-        Ok(v) => v,
-        Err(_) => vec![Line::from("About (failed to render)")],
-    }
+    render_about_page_manifest_lines(&snapshot).unwrap_or_else(|_| vec![Line::from("About (failed to render)")])
 }

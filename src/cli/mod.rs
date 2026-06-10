@@ -7,8 +7,9 @@ pub mod status;
 
 use clap::{Arg, ArgMatches, Command};
 
-/// Parse command line arguments and return `ArgMatches`.
+/// Parse command line arguments.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_args() -> ArgMatches {
     Command::new("aoba")
         .arg(

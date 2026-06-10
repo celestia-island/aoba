@@ -312,7 +312,7 @@ impl Default for PortData {
         Self {
             port_name: String::new(),
             port_type: PortType::Unknown,
-            extra: Default::default(),
+            extra: PortExtra::default(),
             state: PortState::Free,
             subprocess_info: None,
             serial_config: SerialConfig::default(),

@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::{anyhow, Result};
 
 use ratatui::{prelude::*, text::Line};
@@ -77,7 +78,7 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
                         | types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
                             // First group items are always visible
                         }
-                        _ => {
+                                            _ => {
                             continue;
                         }
                     }
@@ -94,13 +95,13 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
                                 // Skip serial config fields for virtual ports
                                 continue;
                             }
-                            _ => {}
+                                                    _ => {}
                         }
                     }
                 }
 
                 let line = create_line(
-                    get_cursor_label(cursor, is_port_occupied_by_this(port_data.as_ref())),
+                    &get_cursor_label(cursor, is_port_occupied_by_this(port_data.as_ref())),
                     is_selected,
                     port_data.as_ref(),
                     cursor,
@@ -114,8 +115,9 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
 }
 
 /// Create a config line with dynamic spacing between label and value using unicode-width
+#[allow(clippy::too_many_lines)]
 fn create_line(
-    label: impl ToString,
+    label: &str,
     selected: bool,
     port_data: Option<&types::port::PortData>,
     cursor_type: types::cursor::ConfigPanelCursor,
@@ -143,19 +145,14 @@ fn create_line(
             }
             types::cursor::ConfigPanelCursor::ProtocolMode => {
                 // Use selector_spans for protocol mode selection
-                let current_index = if let Some(port) = port_data {
-                    match &port.config {
-                        types::port::PortConfig::Modbus { .. } => 0usize, // Only Modbus RTU for now
-                    }
-                } else {
-                    0usize
-                };
+                let current_index = port_data.map_or(0usize, |port| match &port.config {
+                    types::port::PortConfig::Modbus { .. } => 0usize,
+                });
 
                 let selected_index = if matches!(text_state, TextState::Editing) {
-                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                        *i
-                    } else {
-                        current_index
+                    match &input_raw_buffer {
+                        types::ui::InputRawBuffer::Index(i) => *i,
+                        _ => current_index,
                     }
                 } else {
                     current_index
@@ -167,8 +164,7 @@ fn create_line(
                     .get(selected_index)
                     .ok_or_else(|| anyhow!("Invalid protocol mode index: {selected_index}"))?;
                 Ok(match text_state {
-                    TextState::Editing => input_spans(display_text.clone(), text_state)?,
-                    TextState::Selected => input_spans(display_text.clone(), text_state)?,
+                    TextState::Editing | TextState::Selected => input_spans(display_text, text_state)?,
                     TextState::Normal => {
                         vec![Span::raw(display_text.clone())]
                     }
@@ -202,7 +198,7 @@ fn create_line(
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
                             Ok(input_spans(
-                                format!(
+                                &format!(
                                     "{} baud ({})",
                                     custom_value,
                                     lang().protocol.common.custom
@@ -211,7 +207,7 @@ fn create_line(
                             )?)
                         } else {
                             Ok(input_spans(
-                                format!(
+                                &format!(
                                     "{} baud ({})",
                                     current_baud,
                                     lang().protocol.common.custom
@@ -244,22 +240,17 @@ fn create_line(
                 }
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
-                let current_index = if let Some(port) = port_data {
-                    match port.serial_config.data_bits {
-                        5 => 0usize,
-                        6 => 1usize,
-                        7 => 2usize,
-                        _ => 3usize,
-                    }
-                } else {
-                    3usize
-                };
+                let current_index = port_data.map_or(3usize, |port| match port.serial_config.data_bits {
+                    5 => 0usize,
+                    6 => 1usize,
+                    7 => 2usize,
+                    _ => 3usize,
+                });
 
                 let selected_index = if matches!(text_state, TextState::Editing) {
-                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                        *i
-                    } else {
-                        current_index
+                    match &input_raw_buffer {
+                        types::ui::InputRawBuffer::Index(i) => *i,
+                        _ => current_index,
                     }
                 } else {
                     current_index
@@ -271,20 +262,15 @@ fn create_line(
                 )?)
             }
             types::cursor::ConfigPanelCursor::StopBits => {
-                let current_index = if let Some(port) = port_data {
-                    match port.serial_config.stop_bits {
-                        1 => 0usize,
-                        _ => 1usize,
-                    }
-                } else {
-                    0usize
-                };
+                let current_index = port_data.map_or(0usize, |port| match port.serial_config.stop_bits {
+                    1 => 0usize,
+                    _ => 1usize,
+                });
 
                 let selected_index = if matches!(text_state, TextState::Editing) {
-                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                        *i
-                    } else {
-                        current_index
+                    match &input_raw_buffer {
+                        types::ui::InputRawBuffer::Index(i) => *i,
+                        _ => current_index,
                     }
                 } else {
                     current_index
@@ -296,21 +282,16 @@ fn create_line(
                 )?)
             }
             types::cursor::ConfigPanelCursor::Parity => {
-                let current_index = if let Some(port) = port_data {
-                    match port.serial_config.parity {
-                        types::port::SerialParity::None => 0usize,
-                        types::port::SerialParity::Odd => 1usize,
-                        types::port::SerialParity::Even => 2usize,
-                    }
-                } else {
-                    0usize
-                };
+                let current_index = port_data.map_or(0usize, |port| match port.serial_config.parity {
+                    types::port::SerialParity::None => 0usize,
+                    types::port::SerialParity::Odd => 1usize,
+                    types::port::SerialParity::Even => 2usize,
+                });
 
                 let selected_index = if matches!(text_state, TextState::Editing) {
-                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                        *i
-                    } else {
-                        current_index
+                    match &input_raw_buffer {
+                        types::ui::InputRawBuffer::Index(i) => *i,
+                        _ => current_index,
                     }
                 } else {
                     current_index

@@ -12,7 +12,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{api::utils::open_serial_port, protocol::status::types::modbus::RegisterMode};
 
 /// Default candidate baud rates for Modbus RTU probes.
-pub const DEFAULT_BAUD_RATES: &[u32] = &[2400, 4800, 9600, 19200, 38400, 57600, 115200];
+pub const DEFAULT_BAUD_RATES: &[u32] = &[2400, 4800, 9600, 19_200, 38_400, 57_600, 115_200];
 
 /// Attempt to discover the baud rate of a Modbus RTU slave on `port`.
 ///
@@ -47,10 +47,9 @@ pub fn probe_modbus_rtu_baud(
     for &baud in baud_rates {
         match try_probe_at_baud(port, station_id, baud, timeout) {
             Ok(true) => return Ok(Some(baud)),
-            Ok(false) => continue,
+            Ok(false) => {}
             Err(e) => {
                 log::debug!("probe at {baud} baud failed: {e}");
-                continue;
             }
         }
     }

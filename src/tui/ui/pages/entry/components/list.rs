@@ -37,12 +37,13 @@ pub const fn derive_selection_from_page(
         crate::tui::status::Page::ModbusDashboard { selected_port, .. }
         | crate::tui::status::Page::ConfigPanel { selected_port, .. }
         | crate::tui::status::Page::LogPanel { selected_port, .. } => *selected_port,
-        _ => 0usize,
+        crate::tui::status::Page::About { .. } => 0usize,
     };
     Ok(res)
 }
 
 /// Render the left ports list panel
+#[allow(clippy::too_many_lines)]
 pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Result<()> {
     let res = read_status(|status| {
         let width = area.width as usize;
@@ -131,6 +132,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         // If ports - 4 doesn't fill the screen, add padding to keep last 3 items at bottom
         // If ports - 4 exceeds screen, add only 1 space before last 3 items
         let total_content = used + extras_len;
+        #[allow(clippy::bool_to_int_with_if)]
         let pad_lines = if total_content.saturating_add(4) < inner_h {
             // Case 1: Not enough content to fill screen minus 4
             // Fill middle with padding and keep last 3 items at bottom
@@ -181,27 +183,15 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         Ok((lines, view_offset, show_scrollbar))
     });
 
-    if let Ok((lines, view_offset, show_scrollbar)) = res {
-        render_boxed_paragraph(
-            frame,
-            area,
-            lines,
-            view_offset,
-            Some(lang().index.com_ports.as_str()),
-            false,
-            show_scrollbar,
-        );
-        Ok(())
-    } else {
-        render_boxed_paragraph(
-            frame,
-            area,
-            Vec::<Line>::new(),
-            0,
-            Some(lang().index.com_ports.as_str()),
-            false,
-            false,
-        );
-        Ok(())
-    }
+    let (lines, view_offset, show_scrollbar) = res.unwrap_or((Vec::new(), 0, false));
+    render_boxed_paragraph(
+        frame,
+        area,
+        lines,
+        view_offset,
+        Some(lang().index.com_ports.as_str()),
+        false,
+        show_scrollbar,
+    );
+    Ok(())
 }

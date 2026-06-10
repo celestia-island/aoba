@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 /// TUI status module
 ///
 /// This module provides the TUI-specific status tree and read/write helpers,
@@ -235,7 +236,7 @@ pub mod serializable {
                     }),
                     ..PageState::default()
                 },
-                _ => PageState::default(),
+                            _ => PageState::default(),
             };
 
             let page = match &status.page {
@@ -288,7 +289,7 @@ pub mod serializable {
                 processed.insert(port.name.clone());
             }
 
-            status.page = resolve_page(&self.page, &self.page_state)?;
+            status.page = resolve_page(&self.page, &self.page_state);
             Ok(())
         }
 
@@ -337,7 +338,7 @@ pub mod serializable {
         };
         let status_indicator = match &state {
             PortState::OccupiedByThis => PortStatusIndicator::Running,
-            _ => PortStatusIndicator::NotStarted,
+                    _ => PortStatusIndicator::NotStarted,
         };
 
         let data = PortData {
@@ -387,8 +388,8 @@ pub mod serializable {
         })
     }
 
-    fn resolve_page(page: &TuiPage, state: &PageState) -> Result<super::Page> {
-        let resolved = match page {
+    fn resolve_page(page: &TuiPage, state: &PageState) -> super::Page {
+        match page {
             TuiPage::Entry => super::Page::Entry {
                 cursor: None,
                 view_offset: 0,
@@ -417,9 +418,7 @@ pub mod serializable {
                 selected_item: None,
             },
             TuiPage::About => super::Page::About { view_offset: 0 },
-        };
-
-        Ok(resolved)
+        }
     }
 
     fn deserialize_ports<'de, D>(deserializer: D) -> Result<Vec<TuiPort>, D::Error>
@@ -690,9 +689,9 @@ pub use {ErrorInfo, Page, Status};
 static TUI_STATUS: OnceCell<Arc<RwLock<Status>>> = OnceCell::new();
 
 impl Status {
-    /// Convert the in-memory status into a serializable snapshot. Kept async to
-    /// preserve the existing call sites that await the conversion.
-    pub async fn to_serializable(&self) -> serializable::TuiStatus {
+    /// Convert the in-memory status into a serializable snapshot.
+    #[must_use]
+    pub fn to_serializable(&self) -> serializable::TuiStatus {
         serializable::TuiStatus::from_status(self)
     }
 }

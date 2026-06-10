@@ -56,7 +56,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
 #[must_use]
 pub fn register_items_to_stations(
     items: &[ModbusRegisterItem],
-    mode: ModbusConnectionMode,
+    mode: &ModbusConnectionMode,
 ) -> Vec<StationConfig> {
     use std::collections::HashMap;
 
@@ -85,7 +85,7 @@ pub fn register_items_to_stations(
         .into_iter()
         .map(|(station_id, map)| StationConfig {
             station_id,
-            mode: modbus_connection_mode_to_station_mode(&mode),
+            mode: modbus_connection_mode_to_station_mode(mode),
             map,
         })
         .collect();
@@ -183,7 +183,7 @@ mod tests {
             },
         ];
 
-        let stations = register_items_to_stations(&items, ModbusConnectionMode::Master);
+        let stations = register_items_to_stations(&items, &ModbusConnectionMode::Master);
 
         assert_eq!(stations.len(), 1);
         assert_eq!(stations[0].station_id, 1);

@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use serde::{Deserialize, Serialize};
 
 use crate::tui::status;
@@ -60,7 +61,7 @@ impl InputRawBuffer {
         if let Self::String { bytes, offset } = self {
             // Insert char at current cursor offset (character index semantics)
             let mut s = String::from_utf8_lossy(bytes).into_owned();
-            let len_chars = s.chars().count() as isize;
+            let len_chars = isize::try_from(s.chars().count()).unwrap_or(isize::MAX);
             // compute insertion position
             let mut pos = if *offset >= 0 {
                 *offset
@@ -73,7 +74,7 @@ impl InputRawBuffer {
             if pos > len_chars {
                 pos = len_chars;
             }
-            let insert_pos = pos as usize;
+            let insert_pos = usize::try_from(pos).unwrap_or(0);
             s.insert(insert_pos, c);
             *bytes = s.into_bytes();
             // advance cursor after inserted char
@@ -99,7 +100,7 @@ impl InputRawBuffer {
         match self {
             Self::String { bytes, offset } => {
                 if let Ok(s) = String::from_utf8(bytes.clone()) {
-                    let len_chars = s.chars().count() as isize;
+                    let len_chars = isize::try_from(s.chars().count()).unwrap_or(isize::MAX);
                     // determine deletion index: character before cursor
                     let pos = if *offset >= 0 {
                         *offset
@@ -109,7 +110,7 @@ impl InputRawBuffer {
                     if pos <= 0 {
                         return None;
                     }
-                    let del_pos = (pos - 1) as usize;
+                    let del_pos = usize::try_from(pos - 1).unwrap_or(0);
                     // remove char at del_pos
                     let mut chars: Vec<char> = s.chars().collect();
                     let ch = chars.get(del_pos).copied();
@@ -130,7 +131,7 @@ impl InputRawBuffer {
                     None
                 }
             }
-            _ => None,
+                    _ => None,
         }
     }
 
@@ -154,7 +155,7 @@ impl InputRawBuffer {
     pub fn move_offset(&mut self, delta: isize) {
         if let Self::String { bytes, offset } = self {
             let s = String::from_utf8_lossy(bytes).into_owned();
-            let len_chars = s.chars().count() as isize;
+            let len_chars = isize::try_from(s.chars().count()).unwrap_or(isize::MAX);
             let mut new = *offset + delta;
             // clamp: allow negative values down to -len_chars
             if new < -len_chars {
@@ -169,7 +170,7 @@ impl InputRawBuffer {
 
     /// Set the string buffer from a given String and set cursor offset to end.
     pub fn set_string_and_place_cursor_at_end(&mut self, s: String) {
-        let len_chars = s.chars().count() as isize;
+        let len_chars = isize::try_from(s.chars().count()).unwrap_or(isize::MAX);
         *self = Self::String {
             bytes: s.into_bytes(),
             offset: len_chars,

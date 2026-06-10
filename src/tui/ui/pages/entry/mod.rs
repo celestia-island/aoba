@@ -9,11 +9,11 @@ pub use render::{page_bottom_hints, render};
 /// (Refresh, Manual Specify, About)
 pub const SPECIAL_ITEMS_COUNT: usize = 3;
 
-/// Calculate the appropriate `view_offset` for the last special items
-/// based on the number of ports and viewport height.
+/// Calculate the appropriate `view_offset` for the last special items.
 ///
-/// This function determines whether scrolling is needed by checking if
-/// all content (ports + special items + padding) would fit in the viewport.
+/// Based on the number of ports and viewport height. Determines whether
+/// scrolling is needed by checking if all content (ports + special items +
+/// padding) would fit in the viewport.
 ///
 /// Parameters:
 /// - `ports_count`: Number of serial ports
@@ -37,9 +37,10 @@ pub const fn calculate_special_items_offset(ports_count: usize, viewport_height:
     }
 }
 
-/// Conservative estimate of viewport height for navigation calculations
-/// Most terminals provide at least 24 lines, minus borders (2) and bottom hints (2-3)
-/// leaves about 20 lines available for the port list.
+/// Conservative estimate of viewport height for navigation calculations.
+///
+/// Most terminals provide at least 24 lines, minus borders (2) and bottom
+/// hints (2-3) leaves about 20 lines available for the port list.
 pub const CONSERVATIVE_VIEWPORT_HEIGHT: usize = 20;
 
 /// Check if scrollbar is needed based on content size and viewport height

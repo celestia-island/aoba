@@ -36,6 +36,10 @@ impl ModbusSlave {
     /// Create and start a new Modbus slave listener (new Builder API)
     ///
     /// Accepts hooks as a vector for middleware pattern.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the slave loop fails to start.
     pub fn new(
         config: crate::api::modbus::ModbusPortConfig,
         hooks: Vec<Arc<dyn ModbusHook>>,
@@ -126,6 +130,11 @@ impl ModbusSlaveIterator {
     /// * `station_id` - Modbus station ID
     /// * `register_address` - Starting register address
     /// * `register_length` - Number of registers
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened or if storage
+    /// initialization fails.
     pub fn new(
         port_name: &str,
         baud_rate: u32,
@@ -146,6 +155,11 @@ impl ModbusSlaveIterator {
     }
 
     /// Create a new synchronous slave iterator with custom register mode
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened or if storage
+    /// initialization fails.
     pub fn with_mode(
         port_name: &str,
         baud_rate: u32,
@@ -168,6 +182,11 @@ impl ModbusSlaveIterator {
 
     /// Parameters for creating a `ModbusSlaveIterator`
     /// Create a new synchronous slave iterator with custom register mode and hooks
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened or if storage
+    /// initialization fails.
     pub fn with_mode_and_hooks(params: SlaveIteratorParams) -> Result<Self> {
         let SlaveIteratorParams {
             port_name,
@@ -220,7 +239,7 @@ impl ModbusSlaveIterator {
             residual_buffer: Arc::new(Mutex::new(Vec::new())),
             error_recovery_delay_ms,
             consecutive_parse_failures: Arc::new(Mutex::new(0)),
-            timeout_ms: Duration::from_secs(1).as_millis() as u64, // Default 1 second timeout
+            timeout_ms: u64::try_from(Duration::from_secs(1).as_millis()).unwrap_or(u64::MAX), // Default 1 second timeout
         })
     }
 
@@ -233,6 +252,10 @@ impl ModbusSlaveIterator {
     /// - Fatal errors (e.g., port closed): returned as `Err`
     ///
     /// This ensures the iterator doesn't crash on malformed packets.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only on fatal errors (e.g., port closed).
     pub fn try_process_one_request(&self) -> Result<ModbusResponse> {
         loop {
             let params = SlaveRequestParams {
@@ -389,6 +412,10 @@ impl ModbusSlaveIterator {
     /// Update register values in storage
     ///
     /// This allows updating the mock data that will be sent in responses
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if setting a register value in storage fails.
     pub fn update_registers(&mut self, values: &[u16]) -> Result<()> {
         use rmodbus::server::context::ModbusContext;
         let mut storage_lock = self.storage.lock();
@@ -397,7 +424,7 @@ impl ModbusSlaveIterator {
             if i >= self.register_length as usize {
                 break;
             }
-            let addr = self.register_address + i as u16;
+            let addr = self.register_address + u16::try_from(i).unwrap_or(u16::MAX);
 
             match self.register_mode {
                 RegisterMode::Holding => storage_lock.set_holding(addr, value)?,
@@ -420,6 +447,10 @@ impl ModbusSlaveIterator {
     /// * `start_address` - Starting coil address (e.g., 0x0000)
     /// * `coil_states` - Boolean array where true = coil on, false = coil off
     ///
+    /// # Errors
+    ///
+    /// Returns an error if setting a coil value in storage fails.
+    ///
     /// # Example
     ///
     /// ```no_run
@@ -441,9 +472,10 @@ impl ModbusSlaveIterator {
         let mut storage_lock = self.storage.lock();
 
         for (i, &state) in coil_states.iter().enumerate() {
-            let addr = start_address + i as u16;
+            let addr = start_address + u16::try_from(i).unwrap_or(u16::MAX);
             storage_lock.set_coil(addr, state)?;
         }
+        drop(storage_lock);
 
         Ok(())
     }
@@ -543,6 +575,11 @@ impl Iterator for TryIterator {
 ///
 /// This function is independent of communication channels.
 /// It calls the handler's methods to process responses.
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during the slave loop.
 pub async fn run_slave_loop_with_handler(
     config: ModbusPortConfig,
     hooks: Option<Arc<dyn ModbusHook>>,

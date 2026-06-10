@@ -276,6 +276,7 @@ impl ModbusBuilder {
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[must_use]
     pub fn add_hook(mut self, hook: Arc<dyn ModbusHook>) -> Self {
         self.hooks.push(hook);
         self
@@ -306,12 +307,17 @@ impl ModbusBuilder {
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[must_use]
     pub fn add_data_source(mut self, source: Arc<Mutex<dyn traits::ModbusDataSource>>) -> Self {
         self.data_sources.push(source);
         self
     }
 
     /// Build the configuration (public legacy API).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no port name has been configured.
     pub fn build(self) -> Result<ModbusPortConfig> {
         let port_name = self.port_name.ok_or_else(|| {
             anyhow!("Port name is required. Use with_port() or with_virtual_port()")
@@ -333,6 +339,11 @@ impl ModbusBuilder {
     /// Build and start a Modbus slave
     ///
     /// Uses the hooks and data sources configured with `.add_hook()` and `.add_data_source()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the builder is configured for Master instead of Slave,
+    /// if no port name is set, or if the slave loop fails to start.
     ///
     /// # Example
     ///
@@ -381,6 +392,11 @@ impl ModbusBuilder {
     /// Supports two modes:
     /// 1. Single register polling (using `with_register()`)
     /// 2. Multi-register polling (using `add_register_poll()` multiple times)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the builder is configured for Slave instead of Master,
+    /// if no port name is set, or if the master fails to start.
     ///
     /// # Example
     ///
@@ -444,6 +460,11 @@ impl ModbusBuilder {
     /// Use this when you need fine-grained control over polling timing,
     /// such as implementing a state machine or adaptive polling strategy.
     ///
+    /// # Errors
+    ///
+    /// Returns an error if the builder is configured for Slave instead of Master,
+    /// if no port name is set, or if the master fails to start.
+    ///
     /// # Example
     ///
     /// ```no_run
@@ -484,14 +505,24 @@ impl ModbusBuilder {
             poll_interval_ms: self.poll_interval_ms,
         };
 
-        master::ModbusMaster::new_manual(config)
+        master::ModbusMaster::new_manual(&config)
     }
 }
 
 pub trait ModbusHook: Send + Sync {
+    /// Called before each poll or write request.
+    ///
+    /// # Errors
+    ///
+    /// Return an error to abort the current operation.
     fn on_before_request(&self, _port: &str) -> Result<()> {
         Ok(())
     }
+    /// Called after receiving a successful response.
+    ///
+    /// # Errors
+    ///
+    /// Return an error to signal a processing failure.
     fn on_after_response(&self, _port: &str, _response: &ModbusResponse) -> Result<()> {
         Ok(())
     }
@@ -512,6 +543,10 @@ pub trait ModbusHook: Send + Sync {
     ///
     /// * `Ok(())` - Continue with the write operation
     /// * `Err(_)` - Abort the write operation and report error
+    ///
+    /// # Errors
+    ///
+    /// Return an error to abort the write operation.
     fn on_before_write(
         &self,
         _port: &str,
@@ -535,6 +570,10 @@ pub trait ModbusHook: Send + Sync {
     ///
     /// * `Ok(())` - Continue with request processing
     /// * `Err(_)` - Abort processing and report error
+    ///
+    /// # Errors
+    ///
+    /// Return an error to abort request processing.
     fn on_after_receive_request(&self, _port: &str, _data: &mut [u8]) -> Result<()> {
         Ok(())
     }

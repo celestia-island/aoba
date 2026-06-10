@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum::{EnumIter, FromRepr};
@@ -45,7 +46,6 @@ impl ModbusConnectionMode {
     #[must_use]
     pub const fn from_index(index: usize) -> Self {
         match index {
-            0 => Self::default_master(),
             1 => Self::default_slave(),
             _ => Self::default_master(),
         }
@@ -210,7 +210,7 @@ impl ModbusMasterDataSource {
     pub const fn get_port(&self) -> Option<u16> {
         match self {
             Self::HttpServer { port } => Some(*port),
-            _ => None,
+                    _ => None,
         }
     }
 
@@ -226,7 +226,7 @@ impl ModbusMasterDataSource {
             Self::MqttServer { url } => Some(url.as_str()),
             Self::IpcPipe { path } => Some(path.as_str()),
             Self::PortForwarding { source_port } => Some(source_port.as_str()),
-            _ => None,
+                    _ => None,
         }
     }
 
@@ -241,8 +241,7 @@ impl ModbusMasterDataSource {
             Self::PortForwarding { source_port } => {
                 *source_port = value;
             }
-            Self::Manual => {}
-            Self::HttpServer { .. } => {}
+            Self::Manual | Self::HttpServer { .. } => {}
         }
     }
 }
@@ -647,9 +646,11 @@ impl std::fmt::Display for StopBitsOption {
     }
 }
 
-/// Baud rate presets including a Custom placeholder. Custom does not carry
-/// the numeric value here; the actual runtime baud is stored in the port
-/// configuration as a `u32`. This enum is used for selector rendering.
+/// Baud rate presets including a Custom placeholder.
+///
+/// Custom does not carry the numeric value here; the actual runtime baud
+/// is stored in the port configuration as a `u32`. This enum is used for
+/// selector rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum BaudRateSelector {
     B110,
@@ -676,7 +677,7 @@ impl std::fmt::Display for BaudRateSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Custom { .. } => write!(f, "{}", lang().protocol.common.custom),
-            other => write!(f, "{}", other.as_u32()),
+                    other => write!(f, "{}", other.as_u32()),
         }
     }
 }
@@ -696,12 +697,12 @@ impl BaudRateSelector {
             Self::B19200 => 19200u32,
             Self::B38400 => 38400u32,
             Self::B57600 => 57600u32,
-            Self::B115200 => 115200u32,
-            Self::B230400 => 230400u32,
-            Self::B460800 => 460800u32,
-            Self::B921600 => 921600u32,
-            Self::B1000000 => 1000000u32,
-            Self::B2000000 => 2000000u32,
+            Self::B115200 => 115_200_u32,
+            Self::B230400 => 230_400_u32,
+            Self::B460800 => 460_800_u32,
+            Self::B921600 => 921_600_u32,
+            Self::B1000000 => 1_000_000_u32,
+            Self::B2000000 => 2_000_000_u32,
             Self::Custom { baud } => baud,
         }
     }
@@ -720,12 +721,12 @@ impl BaudRateSelector {
             19200 => Self::B19200,
             38400 => Self::B38400,
             57600 => Self::B57600,
-            115200 => Self::B115200,
-            230400 => Self::B230400,
-            460800 => Self::B460800,
-            921600 => Self::B921600,
-            1000000 => Self::B1000000,
-            2000000 => Self::B2000000,
+            115_200 => Self::B115200,
+            230_400 => Self::B230400,
+            460_800 => Self::B460800,
+            921_600 => Self::B921600,
+            1_000_000 => Self::B1000000,
+            2_000_000 => Self::B2000000,
             _ => Self::Custom { baud: v },
         }
     }
@@ -799,7 +800,7 @@ impl BaudRateOption {
     pub const fn from_u32(v: u32) -> Self {
         match BaudRateSelector::from_u32(v) {
             BaudRateSelector::Custom { .. } => Self::Custom(v),
-            s => Self::Preset(s),
+                    s => Self::Preset(s),
         }
     }
 

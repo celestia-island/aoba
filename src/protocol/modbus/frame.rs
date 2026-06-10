@@ -20,6 +20,7 @@ const MODBUS_RTU_OVERHEAD: usize = 2;
 /// Read a Modbus RTU frame from the provided serial port wrapper.
 /// Returns Ok(Some(Bytes)) when a full frame is read, Ok(None) for timeout / no data,
 /// or Err for unexpected I / O / locking errors.
+#[allow(clippy::too_many_lines)]
 pub async fn read_modbus_frame(
     usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>,
 ) -> Result<Option<Bytes>> {
@@ -198,6 +199,7 @@ pub async fn read_modbus_frame(
     // Flush serial output buffers (optional safety)
     // flush using the same guard
     guard.flush()?;
+    drop(guard);
 
     Ok(Some(Bytes::from(collected)))
 }

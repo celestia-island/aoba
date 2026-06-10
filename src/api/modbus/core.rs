@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::{anyhow, Error, Result};
 use parking_lot::Mutex;
 
@@ -23,12 +24,17 @@ use crate::protocol::status::types::modbus::{ModbusResponse, RegisterMode, Respo
 ///
 /// This is a pure function that handles the Modbus protocol without any channel dependencies.
 /// It reads from the port, processes the request, sends a response, and returns the data.
+///
+/// # Errors
+///
+/// Returns an error if reading from or writing to the port fails, if the Modbus
+/// frame cannot be parsed, or if the request uses an unsupported function code.
 pub fn slave_process_one_request(
     port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     register_address: u16,
     register_length: u16,
-    _reg_mode: RegisterMode,
+    reg_mode: RegisterMode,
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<ModbusResponse> {
     let residual_buffer = Arc::new(Mutex::new(Vec::new()));
@@ -37,7 +43,7 @@ pub fn slave_process_one_request(
         station_id,
         register_address,
         register_length,
-        reg_mode: _reg_mode,
+        reg_mode,
         storage,
         hooks: &[],
         port_name: String::new(),
@@ -60,6 +66,13 @@ pub struct SlaveRequestParams<'a> {
 }
 
 /// Process one slave request with hook support, sliding window parsing, and frame reassembly
+///
+/// # Errors
+///
+/// Returns an error if reading from or writing to the port fails, if no valid
+/// Modbus frame can be found in the received data, or if the request uses an
+/// unsupported function code.
+#[allow(clippy::too_many_lines)]
 pub fn slave_process_one_request_with_hooks(
     params: &SlaveRequestParams<'_>,
 ) -> Result<ModbusResponse> {
@@ -118,8 +131,7 @@ pub fn slave_process_one_request_with_hooks(
         // Lower threshold to 20 bytes to more aggressively filter short response frames
         if total_bytes > MODBUS_RTU_MIN_RESPONSE_SIZE * 2 + 4 {
             // Clear buffer; do not attempt parsing
-            let mut residual = params.residual_buffer.lock();
-            residual.clear();
+            params.residual_buffer.lock().clear();
             return Err(anyhow!(
                 "Skipped response frame echo ({total_bytes} bytes)"
             ));
@@ -181,13 +193,13 @@ pub fn slave_process_one_request_with_hooks(
 
                 // Continue processing this valid frame (rest of the code unchanged)
                 let actual_mode = match frame.func {
-                    rmodbus::consts::ModbusFunction::GetHoldings => RegisterMode::Holding,
+                    rmodbus::consts::ModbusFunction::GetHoldings
+                    | rmodbus::consts::ModbusFunction::SetHoldingsBulk => RegisterMode::Holding,
                     rmodbus::consts::ModbusFunction::GetInputs => RegisterMode::Input,
-                    rmodbus::consts::ModbusFunction::GetCoils => RegisterMode::Coils,
+                    rmodbus::consts::ModbusFunction::GetCoils
+                    | rmodbus::consts::ModbusFunction::SetCoilsBulk => RegisterMode::Coils,
                     rmodbus::consts::ModbusFunction::GetDiscretes => RegisterMode::DiscreteInputs,
-                    rmodbus::consts::ModbusFunction::SetCoilsBulk => RegisterMode::Coils,
-                    rmodbus::consts::ModbusFunction::SetHoldingsBulk => RegisterMode::Holding,
-                    _ => {
+                                    _ => {
                         return Err(anyhow!(
                             "Unsupported function code: 0x{:02X} ({:?})",
                             frame.func as u8,
@@ -262,9 +274,7 @@ pub fn slave_process_one_request_with_hooks(
                 });
             }
             Err(e) => {
-                // Parse failed at this position; try the next offset
                 last_parse_error = Some(anyhow!("{e:?}"));
-                continue;
             }
         }
     }
@@ -289,13 +299,14 @@ pub fn slave_process_one_request_with_hooks(
     }
 
     // Return a special marker error to tell the caller to pause polling
-    if let Some(err) = last_parse_error {
-        Err(anyhow!("PARSE_FAILED: {err}"))
-    } else {
-        Err(anyhow!(
-            "PARSE_FAILED: No valid frame found in {total_bytes} bytes"
-        ))
-    }
+    last_parse_error.map_or_else(
+        || {
+            Err(anyhow!(
+                "PARSE_FAILED: No valid frame found in {total_bytes} bytes"
+            ))
+        },
+        |err| Err(anyhow!("PARSE_FAILED: {err}")),
+    )
 }
 
 /// Parse response values from raw bytes
@@ -366,15 +377,20 @@ fn parse_response_values(
 /// # Returns
 ///
 /// Returns the raw request frame that was sent (before any hook transformations)
+///
+/// # Errors
+///
+/// Returns an error if writing to or reading from the port fails, if the
+/// response is too short, or if the slave returns a Modbus exception code.
 pub fn master_write_coils(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     start_address: u16,
     coil_values: &[bool],
 ) -> Result<Vec<u8>> {
     // Generate write request
     let mut request =
-        crate::protocol::modbus::generate_pull_set_coils_request(station_id, coil_values.to_vec())?;
+        crate::protocol::modbus::generate_pull_set_coils_request(station_id, coil_values)?;
 
     let mut request_frame = Vec::new();
     request.generate_set_coils_bulk(start_address, coil_values, &mut request_frame)?;
@@ -450,6 +466,13 @@ pub(crate) fn extract_values_from_storage(
 ///
 /// This is used internally by deprecated master loop implementations.
 /// New code should use `master_poll_once_and_stop` or `master_poll_loop` directly.
+///
+/// # Errors
+///
+/// Returns an error if generating the request frame fails, writing to or reading
+/// from the port fails, or if the response is invalid (station ID mismatch,
+/// function code mismatch, byte count mismatch, etc.).
+#[allow(clippy::too_many_lines)]
 pub(super) fn execute_single_poll_internal(
     port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
@@ -508,6 +531,7 @@ pub(super) fn execute_single_poll_internal(
     {
         let mut port = port_arc.lock();
         let bytes_read = port.read(&mut buffer[total_bytes..])?;
+        drop(port);
         if bytes_read == 0 {
             return Err(anyhow!("No response received"));
         }
@@ -557,6 +581,7 @@ pub(super) fn execute_single_poll_internal(
                 log::warn!("Flushed {n} residual bytes");
             }
         }
+        drop(port);
         return Err(anyhow!(
             "Function code mismatch: expected {:?} (0x{:02X}), got 0x{:02X}",
             reg_mode,
@@ -664,6 +689,11 @@ pub(super) fn execute_single_poll_internal(
 /// // control_tx.send("stop".to_string()).unwrap();
 /// ```
 ///
+///
+/// # Errors
+///
+/// Returns an error if the poll loop encounters an unrecoverable error.
+///
 /// # Example (One-Shot Request)
 ///
 /// For CLI or single-request scenarios, use `master_poll_once_and_stop` wrapper.
@@ -679,7 +709,15 @@ pub struct MasterPollParams {
     pub poll_interval_ms: u64,
 }
 
+/// Runs the master poll loop, continuously polling the slave at the configured interval.
+///
+/// # Errors
+///
+/// Returns an error if the poll loop encounters an unrecoverable error.
+#[allow(clippy::too_many_lines)]
 pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
+    const MAX_CONSECUTIVE_ERRORS: u32 = 10;
+
     log::info!(
         "Starting master poll loop: station={}, addr=0x{:04X}, len={}, mode={:?}",
         params.station_id,
@@ -690,7 +728,6 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 
     let poll_interval = std::time::Duration::from_millis(params.poll_interval_ms);
     let mut consecutive_errors = 0u32;
-    const MAX_CONSECUTIVE_ERRORS: u32 = 10;
 
     loop {
         // Check for control messages (non-blocking)
@@ -749,6 +786,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                     let mut port = params.port_arc.lock();
                     port.write_all(&request_frame)?;
                     port.flush()?;
+                    drop(port);
                     Ok(())
                 })() {
                     Err(anyhow!("Failed to send request: {e}"))
@@ -879,6 +917,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                                     log::warn!("Flushed {n} residual bytes");
                                 }
                             }
+                            drop(port);
 
                             Err(anyhow!(
                                 "Function code mismatch: expected {:?} (0x{:02X}), got 0x{:02X}",
@@ -946,6 +985,11 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 /// 3. Sends a stop command
 /// 4. Returns the response
 ///
+/// # Errors
+///
+/// Returns an error if the poll loop times out, the channel disconnects, or
+/// the underlying poll operation fails.
+///
 /// ```rust,ignore
 /// // Example usage (requires open serial port):
 /// // use aoba::api::modbus::core::master_poll_once_and_stop;
@@ -968,7 +1012,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 /// // println!("Values: {:?}", response.values);
 /// ```
 pub fn master_poll_once_and_stop(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     register_address: u16,
     register_length: u16,

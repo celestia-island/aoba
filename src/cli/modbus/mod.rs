@@ -160,7 +160,7 @@ pub fn parse_data_line(
                 let mut result = Vec::new();
                 for val in arr {
                     if let Some(num) = val.as_u64() {
-                        result.push(num as u16);
+                        result.push(u16::try_from(num).unwrap_or(u16::MAX));
                     }
                 }
                 return Ok(result);
@@ -218,7 +218,7 @@ pub(crate) fn extract_values_from_station_configs(
     }
 
     let offset = (start_address - range.address_start) as usize;
-    let total_available = range.length.saturating_sub(offset as u16) as usize;
+    let total_available = range.length.saturating_sub(u16::try_from(offset).unwrap_or(u16::MAX)) as usize;
 
     if total_available < register_length as usize {
         return Err(anyhow!(
@@ -260,7 +260,7 @@ pub fn set_registers_in_storage(
 ) -> Result<()> {
     let mut ctx = storage.lock();
     for (i, &val) in values.iter().enumerate() {
-        let addr = start_address + i as u16;
+        let addr = start_address + u16::try_from(i).unwrap_or(u16::MAX);
         match reg_mode {
             RegisterMode::Holding => ctx.set_holding(addr, val)?,
             RegisterMode::Input => ctx.set_input(addr, val)?,
@@ -284,6 +284,7 @@ pub fn record_changed_range(
     while cr.len() > 1000 {
         cr.swap_remove(0);
     }
+    drop(cr);
 }
 
 /// Build a `StationConfig` snapshot by reading current values from `storage`.

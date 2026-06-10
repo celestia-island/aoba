@@ -34,8 +34,9 @@ enum SlavePollTransaction {
 
 /// Execute a single slave polling transaction, returning either a successful response or
 /// the failure reason along with the request frame that was sent.
+#[allow(clippy::too_many_lines)]
 fn run_slave_poll_transaction(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     register_address: u16,
     register_length: u16,
@@ -179,6 +180,7 @@ fn run_slave_poll_transaction(
 }
 
 /// Handle slave listen persist (continuous JSONL output)
+#[allow(clippy::too_many_lines)]
 pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches
         .get_one::<u8>("station-id")
@@ -311,12 +313,12 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
     loop {
         match listen_for_one_request(
-            port_arc.clone(),
+            &port_arc,
             station_id,
             register_address,
             register_length,
             reg_mode,
-            storage.clone(),
+            &storage,
         ) {
             Ok(response) => {
                 let write_this = match &last_written_values {
@@ -379,12 +381,12 @@ pub async fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()>
 
     // Wait for one request and respond
     let response = listen_for_one_request(
-        port_arc.clone(),
+        &port_arc,
         station_id,
         register_address,
         register_length,
         reg_mode,
-        storage,
+        &storage,
     )?;
 
     // Explicitly drop port_arc to close the port
@@ -402,12 +404,12 @@ pub async fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()>
 
 /// Listen for one Modbus request and respond
 fn listen_for_one_request(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     register_address: u16,
     register_length: u16,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
-    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
 
@@ -453,12 +455,13 @@ fn listen_for_one_request(
         let mut port = port_arc.lock();
         port.write_all(&resp)?;
         port.flush()?;
+        drop(port);
         log::info!("Sent response: {resp:02X?}");
     }
 
     // Extract values from storage for response
     let values =
-        extract_values_from_storage(&storage, register_address, register_length, reg_mode)?;
+        extract_values_from_storage(storage, register_address, register_length, reg_mode)?;
 
     Ok(ModbusResponse {
         station_id,
@@ -470,7 +473,7 @@ fn listen_for_one_request(
 }
 
 /// Handle slave poll (act as Modbus Master/Client - send request and wait for response)
-pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
+pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches
         .get_one::<u8>("station-id")
         .context("Missing argument: station-id")?;
@@ -505,7 +508,7 @@ pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 
         // Execute single poll transaction
         let outcome = run_slave_poll_transaction(
-            port_arc.clone(),
+            &port_arc,
             station_id,
             register_address,
             register_length,
@@ -528,6 +531,7 @@ pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 }
 
 /// Handle slave poll persist (continuous polling mode)
+#[allow(clippy::too_many_lines)]
 pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()> {
     let station_id = *matches
         .get_one::<u8>("station-id")
@@ -722,8 +726,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                 // - "sync" or None: Skip 0 values (likely defaults/heartbeat)
                                 // - "read_response": Always apply (actual modbus read data)
                                 let should_process_writes = match update_reason.as_deref() {
-                                    Some("user_edit") => true,     // User explicitly edited, write everything
-                                    Some("read_response") => true, // Actual read data, always apply
+                                    Some("user_edit" | "read_response") => true,
                                     Some("initial_config") => false, // Initial config, skip writes
                                     Some("sync") | None => last_written_values.is_some(), // Sync/unknown: only if we've read before
                                     Some(other) => {
@@ -744,7 +747,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     for range in &first_station.map.holding {
                                         for (idx, &value) in range.initial_values.iter().enumerate()
                                         {
-                                            let addr = range.address_start + idx as u16;
+                                            let addr = range.address_start + u16::try_from(idx).unwrap_or(u16::MAX);
 
                                             // Skip zero values unless this is a user edit
                                             if value == 0 && !allow_zero_writes {
@@ -752,14 +755,12 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                             }
 
                                             let needs_write =
-                                                if let Some(prev_vals) = &last_written_values {
+                                                last_written_values.as_ref().is_some_and(|prev_vals| {
                                                     let relative_idx =
                                                         (addr - current_register_address) as usize;
                                                     relative_idx >= prev_vals.len()
                                                         || prev_vals[relative_idx] != value
-                                                } else {
-                                                    false // Should not happen since we checked above
-                                                };
+                                                });
 
                                             if needs_write {
                                                 log::info!("📤 Queueing write for holding register 0x{addr:04X} = 0x{value:04X}");
@@ -775,7 +776,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     for range in &first_station.map.coils {
                                         for (idx, &value) in range.initial_values.iter().enumerate()
                                         {
-                                            let addr = range.address_start + idx as u16;
+                                            let addr = range.address_start + u16::try_from(idx).unwrap_or(u16::MAX);
 
                                             // Skip zero values unless this is a user edit
                                             if value == 0 && !allow_zero_writes {
@@ -783,14 +784,12 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                             }
 
                                             let needs_write =
-                                                if let Some(prev_vals) = &last_written_values {
+                                                last_written_values.as_ref().is_some_and(|prev_vals| {
                                                     let relative_idx =
                                                         (addr - current_register_address) as usize;
                                                     relative_idx >= prev_vals.len()
                                                         || prev_vals[relative_idx] != value
-                                                } else {
-                                                    false
-                                                };
+                                                });
 
                                             if needs_write {
                                                 log::info!("📤 Queueing write for coil 0x{addr:04X} = 0x{value:04X}");
@@ -901,7 +900,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                             // Parse response
                             match crate::protocol::modbus::parse_pull_set_response(
                                 &mut request,
-                                response.to_vec(),
+                                response,
                             ) {
                                 Ok(()) => {
                                     log::info!("✅ Write successful for 0x{write_addr:04X} = 0x{write_value:04X}");
@@ -917,7 +916,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 let coil_value = write_value != 0;
                 match crate::protocol::modbus::generate_pull_set_coils_request(
                     current_station_id,
-                    vec![coil_value],
+                    &[coil_value],
                 ) {
                     Ok(mut request) => {
                         let mut frame = Vec::new();
@@ -949,7 +948,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                 log::info!("Received coil write response: {response:02X?}");
                                 match crate::protocol::modbus::parse_pull_set_response(
                                     &mut request,
-                                    response.to_vec(),
+                                    response,
                                 ) {
                                     Ok(()) => {
                                         log::info!("✅ Coil write successful for 0x{write_addr:04X} = {write_value}");
@@ -988,7 +987,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         }
 
         match run_slave_poll_transaction(
-            port_arc.clone(),
+            &port_arc,
             current_station_id,
             current_register_address,
             current_register_length,
@@ -1040,7 +1039,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 last_failure_log = None;
 
                 // Wait configured request interval after successful poll
-                tokio::time::sleep(Duration::from_millis(request_interval_ms as u64)).await;
+                tokio::time::sleep(Duration::from_millis(u64::from(request_interval_ms))).await;
             }
             SlavePollTransaction::Failure {
                 request_frame,
@@ -1075,15 +1074,17 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 }
 
                 // Wait configured timeout duration after failure
-                tokio::time::sleep(Duration::from_millis(timeout_ms as u64)).await;
+                tokio::time::sleep(Duration::from_millis(u64::from(timeout_ms))).await;
             }
         }
     }
 }
 
-/// Handle IPC channel mode for slave-listen-persist
-/// Creates a Unix socket server that accepts connections and responds to JSON requests
-/// Each connection is handled in a separate async task to support multiple clients
+/// Handle IPC channel mode for slave-listen-persist.
+///
+/// Creates a Unix socket server that accepts connections and responds to JSON requests.
+/// Each connection is handled in a separate async task to support multiple clients.
+#[allow(clippy::too_many_lines)]
 pub async fn handle_slave_listen_ipc_channel(
     matches: &ArgMatches,
     port: &str,
@@ -1223,7 +1224,7 @@ pub async fn handle_slave_listen_ipc_channel(
 
         // Spawn a task to handle this connection
         crate::core::task_manager::spawn_task(async move {
-            if let Err(e) = handle_ipc_connection(stream, conn_id, ctx.clone()).await {
+            if let Err(e) = handle_ipc_connection(stream, conn_id, &ctx) {
                 log::error!("Connection #{conn_id} error: {e}");
             }
             log::info!("Connection #{conn_id} closed");
@@ -1243,10 +1244,10 @@ struct IpcConnectionContext {
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 }
 
-async fn handle_ipc_connection(
+fn handle_ipc_connection(
     mut stream: interprocess::local_socket::Stream,
     conn_id: usize,
-    ctx: IpcConnectionContext,
+    ctx: &IpcConnectionContext,
 ) -> Result<()> {
     use std::io::{BufRead, BufReader, Write};
 
@@ -1292,12 +1293,12 @@ async fn handle_ipc_connection(
 
         // Process request and generate response
         let response = match listen_for_one_request(
-            ctx.port_arc.clone(),
+            &ctx.port_arc,
             ctx.station_id,
             ctx.register_address,
             ctx.register_length,
             ctx.reg_mode,
-            ctx.storage.clone(),
+            &ctx.storage,
         ) {
             Ok(modbus_response) => {
                 serde_json::json!({

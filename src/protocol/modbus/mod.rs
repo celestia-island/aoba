@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 mod frame;
 mod header;
 mod pull_get_coils;
@@ -38,15 +39,13 @@ pub use slave_discrete_inputs::build_slave_discrete_inputs_response;
 pub use slave_holdings::build_slave_holdings_response;
 pub use slave_inputs::build_slave_inputs_response;
 
+#[allow(clippy::too_many_lines)]
 pub fn boot_modbus_slave_service(
     id: u8,
     mut context: ModbusStorageSmall,
-    request_receiver: Receiver<Bytes>,
-    response_sender: Sender<Bytes>,
+    request_receiver: &Receiver<Bytes>,
+    response_sender: &Sender<Bytes>,
 ) -> Result<()> {
-    // Track last response to optionally suppress exact duplicates emitted too fast
-    let mut last_response: Option<Vec<u8>> = None;
-
     fn crc16_modbus(data: &[u8]) -> u16 {
         super::status::crc16_modbus(data)
     }
@@ -77,7 +76,7 @@ pub fn boot_modbus_slave_service(
         }
 
         if reported_bc == 0 || !data_total.is_multiple_of(reported_bc) {
-            return Err(anyhow!("Data length {} is not a multiple of reported byte count {}", data_total, reported_bc));
+            return Err(anyhow!("Data length {data_total} is not a multiple of reported byte count {reported_bc}"));
         }
         let mult = data_total / reported_bc;
         if mult <= 1 || mult > 3 {
@@ -104,6 +103,9 @@ pub fn boot_modbus_slave_service(
         );
         Ok(())
     }
+
+    // Track last response to optionally suppress exact duplicates emitted too fast
+    let mut last_response: Option<Vec<u8>> = None;
 
     while let Ok(request) = request_receiver.recv() {
         log::info!(
@@ -213,7 +215,7 @@ pub fn boot_modbus_slave_service(
                     log::warn!("Failed to parse slave input registers");
                 }
             }
-            _ => {
+                    _ => {
                 log::warn!("Unsupported function code: {:?}", frame.func);
             }
         }
@@ -231,8 +233,8 @@ pub fn is_virtual_port(port_name: &str) -> bool {
 }
 
 /// Validate and parse a Modbus RTU pull set response.
-pub fn parse_pull_set_response(request: &mut ModbusRequest, response: Vec<u8>) -> Result<()> {
-    request.parse_ok(&response)?;
+pub fn parse_pull_set_response(request: &mut ModbusRequest, response: &[u8]) -> Result<()> {
+    request.parse_ok(response)?;
 
     Ok(())
 }

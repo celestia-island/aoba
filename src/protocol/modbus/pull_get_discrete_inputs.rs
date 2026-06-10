@@ -17,10 +17,10 @@ pub fn generate_pull_get_discrete_inputs_request(
 /// Parse a Modbus response for discrete inputs (function 0x02) into a vector of bools.
 pub fn parse_pull_get_discrete_inputs(
     request: &mut ModbusRequest,
-    response: Vec<u8>,
+    response: &[u8],
     count: u16,
 ) -> Result<Vec<bool>> {
-    request.parse_ok(&response)?;
+    request.parse_ok(response)?;
 
     if response.len() < 5 {
         return Err(anyhow::anyhow!("Response too short for discrete inputs: {} bytes", response.len()));

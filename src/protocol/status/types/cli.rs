@@ -42,6 +42,7 @@ pub enum OutputSink {
 impl std::str::FromStr for OutputSink {
     type Err = Error;
 
+    #[allow(clippy::option_if_let_else)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(path) = s.strip_prefix("file:") {
             Ok(Self::File {
@@ -52,9 +53,6 @@ impl std::str::FromStr for OutputSink {
                 path: name.to_string(),
             })
         } else {
-            // Default to stdout if not specified or invalid?
-            // The original code returned error for invalid format, but handled "stdout" implicitly or via Option.
-            // Here we implement FromStr for the explicit formats.
             Err(anyhow!(
                 "Invalid output format. Use file:<path> or pipe:<name>"
             ))
@@ -130,11 +128,7 @@ impl OutputWriter {
             OutputWriterInner::Stdout => {
                 println!("{data}");
             }
-            OutputWriterInner::File(writer) => {
-                writeln!(writer, "{data}")?;
-                writer.flush()?;
-            }
-            OutputWriterInner::Pipe(writer) => {
+            OutputWriterInner::File(writer) | OutputWriterInner::Pipe(writer) => {
                 writeln!(writer, "{data}")?;
                 writer.flush()?;
             }

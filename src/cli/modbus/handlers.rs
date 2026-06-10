@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn test_flume_slave_handler() {
-        let (handler, receiver) = FlumeSlaveHandler::new();
+        let (handler, rx) = FlumeSlaveHandler::new();
 
         let response = ModbusResponse {
             station_id: 1,
@@ -174,9 +174,9 @@ mod tests {
 
         handler.handle_response(&response).unwrap();
 
-        let received = receiver.recv().unwrap();
-        assert_eq!(received.station_id, response.station_id);
-        assert_eq!(received.values, response.values);
+        let resp = rx.recv().unwrap();
+        assert_eq!(resp.station_id, response.station_id);
+        assert_eq!(resp.values, response.values);
     }
 
     #[test]

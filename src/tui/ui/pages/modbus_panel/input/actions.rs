@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::{anyhow, Result};
 
 use crate::{
@@ -12,6 +13,7 @@ use crate::{
     },
 };
 
+#[allow(clippy::too_many_lines)]
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     log::info!("🔵 handle_enter_action called");
     let current_cursor = read_status(|status| {
@@ -187,7 +189,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 types::modbus::ModbusMasterDataSource::IpcPipe { path } => {
                                     path.clone()
                                 }
-                                _ => String::new(),
+                                                            _ => String::new(),
                             };
                             return Ok(value);
                         }
@@ -196,7 +198,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 Ok(String::new())
             })?;
 
-            let offset = current_text.chars().count() as isize;
+            let offset = isize::try_from(current_text.chars().count()).unwrap_or(isize::MAX);
             let buffer = types::ui::InputRawBuffer::String {
                 bytes: current_text.into_bytes(),
                 offset,
@@ -262,7 +264,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                     Ok(status.ports.order.get(*selected_port).cloned())
                 }
-                _ => Ok(None),
+                            _ => Ok(None),
             })?;
 
             if let Some(port_name) = port_name_opt {
@@ -399,7 +401,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                             .map
                                             .get_mut(&port_name)
                                             .ok_or_else(|| anyhow!("Port not found"))?;
-                                        subprocess_info_snapshot = port.subprocess_info.clone();
+                                        subprocess_info_snapshot.clone_from(&port.subprocess_info);
 
                                         let types::port::PortConfig::Modbus {
                                             mode,
@@ -408,7 +410,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                         } = &mut port.config;
                                         if let Some(item) = stations.get_mut(slave_index) {
                                             let register_addr =
-                                                item.register_address + register_index as u16;
+                                                item.register_address + u16::try_from(register_index).unwrap_or(u16::MAX);
 
                                             let value_index =
                                                 (register_addr - item.register_address) as usize;
@@ -547,50 +549,49 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         let port_name = status.ports.order.get(selected_port).cloned();
         log::info!("🟦 Port name: {port_name:?}");
 
-        let (should_restart, should_auto_enable, has_stations) = if let Some(name) = &port_name {
-            let port_data = status.ports.map.get(name);
-            let port_state = port_data.as_ref().map(|p| {
-                let port = p;
-                log::info!("🟦 Port state: {:?}", port.state);
-                port.state.clone()
-            });
-            let needs_restart = port_data
-                .as_ref()
-                .is_some_and(|p| p.config_modified);
-
-            // Check if port has subprocess info (CLI subprocess)
-            let has_subprocess_info = port_data
-                .as_ref()
-                .is_some_and(|p| p.subprocess_info.is_some());
-
-            // Check if port has any stations configured
-            let has_stations = port_data
-                .as_ref()
-                .is_some_and(|p| {
+        let (should_restart, should_auto_enable, has_stations) = port_name.as_ref().map_or_else(
+            || {
+                log::info!("🟦 No port name, should_restart=false, should_auto_enable=false");
+                (false, false, false)
+            },
+            |name| {
+                let port_data = status.ports.map.get(name);
+                let port_state = port_data.as_ref().map(|p| {
                     let port = p;
-                    let types::port::PortConfig::Modbus { stations, .. } = &port.config;
-                    let _count = stations.len();
-
-                    !stations.is_empty()
+                    log::info!("🟦 Port state: {:?}", port.state);
+                    port.state.clone()
                 });
+                let needs_restart = port_data
+                    .as_ref()
+                    .is_some_and(|p| p.config_modified);
 
-            // TUI only uses CLI subprocesses. Check if port has subprocess info.
-            let should_restart = matches!(port_state, Some(types::port::PortState::OccupiedByThis))
-                && has_subprocess_info
-                && needs_restart;
+                let has_subprocess_info = port_data
+                    .as_ref()
+                    .is_some_and(|p| p.subprocess_info.is_some());
 
-            // Auto-enable if: port is Free AND has stations configured
-            let should_auto_enable =
-                matches!(port_state, Some(types::port::PortState::Free)) && has_stations;
+                let has_stations = port_data
+                    .as_ref()
+                    .is_some_and(|p| {
+                        let port = p;
+                        let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+                        let _count = stations.len();
 
-            log::info!(
-                "🟦 Should restart: {should_restart}, Should auto-enable: {should_auto_enable}, Has stations: {has_stations}, Needs restart: {needs_restart}"
-            );
-            (should_restart, should_auto_enable, has_stations)
-        } else {
-            log::info!("🟦 No port name, should_restart=false, should_auto_enable=false");
-            (false, false, false)
-        };
+                        !stations.is_empty()
+                    });
+
+                let should_restart = matches!(port_state, Some(types::port::PortState::OccupiedByThis))
+                    && has_subprocess_info
+                    && needs_restart;
+
+                let should_auto_enable =
+                    matches!(port_state, Some(types::port::PortState::Free)) && has_stations;
+
+                log::info!(
+                    "🟦 Should restart: {should_restart}, Should auto-enable: {should_auto_enable}, Has stations: {has_stations}, Needs restart: {needs_restart}"
+                );
+                (should_restart, should_auto_enable, has_stations)
+            },
+        );
 
         Ok((port_name, should_restart, should_auto_enable, has_stations))
     })?;

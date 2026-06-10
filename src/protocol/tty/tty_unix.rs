@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -248,6 +249,21 @@ pub fn available_ports_enriched() -> Vec<(SerialPortInfo, PortExtra)> {
 }
 
 pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInfo> {
+    fn priority(name: &str) -> i32 {
+        let n = name.to_lowercase();
+        if n.contains("vcom") || n.contains("tptyv") || n.contains("pts") && n.contains('v') {
+            -1
+        } else if n.contains("ttyusb") || n.contains("usb") {
+            0
+        } else if n.contains("acm") {
+            1
+        } else if n.contains("ttys") || n.contains("serial") {
+            2
+        } else {
+            10
+        }
+    }
+
     let mut seen: HashSet<String> = HashSet::new();
     let mut unique: Vec<SerialPortInfo> = Vec::new();
 
@@ -260,7 +276,7 @@ pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInf
             SerialPortType::UsbPort(info) => {
                 format!("{}:vid={:04x}:pid={:04x}", base, info.vid, info.pid)
             }
-            _ => base,
+                    _ => base,
         };
 
         if seen.insert(key) {
@@ -273,10 +289,7 @@ pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInf
     // Annotate devices sharing same basename with vid / pid so user can distinguish
     let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, p) in ports.iter().enumerate() {
-        let base = match p.port_name.rsplit('/').next() {
-            Some(b) => b.to_lowercase(),
-            None => p.port_name.to_lowercase(),
-        };
+        let base = p.port_name.rsplit('/').next().map_or_else(|| p.port_name.to_lowercase(), str::to_lowercase);
         groups.entry(base).or_default().push(i);
     }
 
@@ -291,23 +304,6 @@ pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInf
                     ports[i].port_name, info.vid, info.pid
                 );
             }
-        }
-    }
-
-    // Priority sort: Virtual ports (socat) first, then USB / ACM, then ttys
-    fn priority(name: &str) -> i32 {
-        let n = name.to_lowercase();
-        if n.contains("vcom") || n.contains("tptyv") || n.contains("pts") && n.contains('v') {
-            // Virtual ports created by socat get highest priority for testing
-            -1
-        } else if n.contains("ttyusb") || n.contains("usb") {
-            0
-        } else if n.contains("acm") {
-            1
-        } else if n.contains("ttys") || n.contains("serial") {
-            2
-        } else {
-            10
         }
     }
 
@@ -327,28 +323,23 @@ pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInf
 /// Try to extract vid / pid / serial from a `SerialPortType` on Unix platforms.
 #[must_use]
 pub fn try_extract_vid_pid_serial(pt: &serialport::SerialPortType) -> Option<VidPidSerial> {
-    match pt {
-        serialport::SerialPortType::UsbPort(info) => {
-            let sn = info.serial_number.clone();
-            let m = info.manufacturer.clone();
-            let p = info.product.clone();
-            Some((info.vid, info.pid, sn, m, p))
-        }
-        // Some serialport versions have different field names; try to fall back
-        // To Debug parsing (best-effort).
-        _ => {
-            let dbg = format!("{pt:?}").to_lowercase();
-            let vid = parse_hex_after(&dbg, "vid");
-            let pid = parse_hex_after(&dbg, "pid");
-            let sn = parse_serial_after(&dbg, "serial")
-                .or_else(|| parse_serial_after(&dbg, "serial_number"))
-                .or_else(|| parse_serial_after(&dbg, "sn"));
-            let manu = parse_string_after(&dbg, "manufacturer");
-            let prod = parse_string_after(&dbg, "product");
-            match (vid, pid) {
-                (Some(v), Some(p)) => Some((v, p, sn, manu, prod)),
-                _ => None,
-            }
+    if let serialport::SerialPortType::UsbPort(info) = pt {
+        let sn = info.serial_number.clone();
+        let m = info.manufacturer.clone();
+        let p = info.product.clone();
+        Some((info.vid, info.pid, sn, m, p))
+    } else {
+        let dbg = format!("{pt:?}").to_lowercase();
+        let vid = parse_hex_after(&dbg, "vid");
+        let pid = parse_hex_after(&dbg, "pid");
+        let sn = parse_serial_after(&dbg, "serial")
+            .or_else(|| parse_serial_after(&dbg, "serial_number"))
+            .or_else(|| parse_serial_after(&dbg, "sn"));
+        let manu = parse_string_after(&dbg, "manufacturer");
+        let prod = parse_string_after(&dbg, "product");
+        match (vid, pid) {
+            (Some(v), Some(p)) => Some((v, p, sn, manu, prod)),
+            _ => None,
         }
     }
 }

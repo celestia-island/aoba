@@ -2,6 +2,11 @@ use anyhow::{anyhow, Result};
 use std::time::Duration;
 
 /// Open a serial port with the requested timeout, enabling exclusive access on Unix systems.
+///
+/// # Errors
+///
+/// Returns an error if the port is virtual, cannot be opened, or exclusive access
+/// cannot be acquired (Unix only).
 pub fn open_serial_port(
     port: &str,
     baud_rate: u32,
@@ -50,6 +55,7 @@ pub fn open_serial_port(
 /// - **Unix**: resolves the canonical device path, then walks `/proc/*/fd`
 ///   comparing device IDs.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn is_port_occupied(port_name: &str) -> bool {
     use crate::protocol::status::types::port::PortType;
 
@@ -113,19 +119,21 @@ pub fn is_port_occupied(port_name: &str) -> bool {
         use std::path::{Path, PathBuf};
 
         fn canonical_device_path(port_path: &str) -> Option<PathBuf> {
-            if let Ok(path) = fs::canonicalize(port_path) { Some(path) } else {
-                let candidate = Path::new(port_path);
-                if candidate.is_absolute() {
-                    Some(candidate.to_path_buf())
-                } else {
-                    std::env::current_dir().ok().map(|cwd| cwd.join(candidate))
-                }
-            }
+            fs::canonicalize(port_path).ok().map_or_else(
+                || {
+                    let candidate = Path::new(port_path);
+                    if candidate.is_absolute() {
+                        Some(candidate.to_path_buf())
+                    } else {
+                        std::env::current_dir().ok().map(|cwd| cwd.join(candidate))
+                    }
+                },
+                Some,
+            )
         }
 
-        let target_path = match canonical_device_path(port_name) {
-            Some(p) => p,
-            None => return false,
+        let Some(target_path) = canonical_device_path(port_name) else {
+            return false;
         };
 
         let target_rdev = match fs::metadata(&target_path) {
@@ -151,9 +159,8 @@ pub fn is_port_occupied(port_name: &str) -> bool {
                 }
 
                 let fd_dir = entry.path().join("fd");
-                let fd_iter = match fs::read_dir(&fd_dir) {
-                    Ok(iter) => iter,
-                    Err(_) => continue,
+                let Ok(fd_iter) = fs::read_dir(&fd_dir) else {
+                    continue;
                 };
 
                 for fd_entry in fd_iter.flatten() {
