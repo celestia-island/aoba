@@ -2,7 +2,11 @@ pub mod handlers;
 pub mod master;
 pub mod slave;
 
+use std::time::Instant;
+
 use anyhow::{anyhow, Result};
+use parking_lot::Mutex as ParkingMutex;
+use rmodbus::{server::context::ModbusContext, server::storage::ModbusStorageSmall};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -246,33 +250,27 @@ pub(crate) fn extract_values_from_station_configs(
 
 /// Extract values from modbus storage
 pub fn extract_values_from_storage(
-    storage: &std::sync::Arc<parking_lot::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &Arc<ParkingMutex<ModbusStorageSmall>>,
     start_addr: u16,
     length: u16,
-    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    reg_mode: RegisterMode,
 ) -> Result<Vec<u16>> {
-    use rmodbus::server::context::ModbusContext;
-
     let storage = storage.lock();
     let mut values = Vec::new();
 
     for i in 0..length {
         let addr = start_addr + i;
         let value = match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                storage.get_holding(addr)?
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                storage.get_input(addr)?
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
+            RegisterMode::Holding => storage.get_holding(addr)?,
+            RegisterMode::Input => storage.get_input(addr)?,
+            RegisterMode::Coils => {
                 if storage.get_coil(addr)? {
                     1
                 } else {
                     0
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            RegisterMode::DiscreteInputs => {
                 if storage.get_discrete(addr)? {
                     1
                 } else {
@@ -286,16 +284,52 @@ pub fn extract_values_from_storage(
     Ok(values)
 }
 
+/// Write values to Modbus storage based on register mode.
+///
+/// This eliminates the repeated `match reg_mode { Holding | Input | Coils | DiscreteInputs }`
+/// pattern that was duplicated ~36 times across the codebase.
+pub fn set_registers_in_storage(
+    storage: &ParkingMutex<ModbusStorageSmall>,
+    reg_mode: RegisterMode,
+    start_address: u16,
+    values: &[u16],
+) -> Result<()> {
+    let mut ctx = storage.lock();
+    for (i, &val) in values.iter().enumerate() {
+        let addr = start_address + i as u16;
+        match reg_mode {
+            RegisterMode::Holding => ctx.set_holding(addr, val)?,
+            RegisterMode::Input => ctx.set_input(addr, val)?,
+            RegisterMode::Coils => ctx.set_coil(addr, val != 0)?,
+            RegisterMode::DiscreteInputs => ctx.set_discrete(addr, val != 0)?,
+        }
+    }
+    Ok(())
+}
+
+/// Record a changed register range for debounce bypass.
+///
+/// Bounds the internal vec to 1000 entries to prevent unbounded growth.
+pub fn record_changed_range(
+    changed_ranges: &ParkingMutex<Vec<(u16, u16, Instant)>>,
+    address: u16,
+    length: u16,
+) {
+    let mut cr = changed_ranges.lock();
+    cr.push((address, length, Instant::now()));
+    while cr.len() > 1000 {
+        cr.remove(0);
+    }
+}
+
 /// Build a StationConfig snapshot by reading current values from `storage`.
 ///
 /// This clones the provided `station` and replaces each `RegisterRange`'s
 /// `initial_values` with the values read from `storage` for that range.
 pub fn build_station_snapshot_from_storage(
-    storage: &std::sync::Arc<parking_lot::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    station: &crate::protocol::status::types::modbus::StationConfig,
-) -> Result<crate::protocol::status::types::modbus::StationConfig> {
-    use crate::protocol::status::types::modbus::RegisterMode;
-
+    storage: &Arc<ParkingMutex<ModbusStorageSmall>>,
+    station: &StationConfig,
+) -> Result<StationConfig> {
     let mut sc = station.clone();
 
     for range in sc.map.holding.iter_mut() {
