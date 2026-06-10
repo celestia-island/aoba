@@ -2,7 +2,7 @@ pub mod handlers;
 pub mod master;
 pub mod slave;
 
-use anyhow::{anyhow, Result, Error};
+use anyhow::{anyhow, Error, Result};
 use parking_lot::Mutex as ParkingMutex;
 use serde::{Deserialize, Serialize};
 use std::{

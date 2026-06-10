@@ -41,7 +41,8 @@ impl CliStatusDumper {
             .to_string();
 
         let task_handle = spawn_task(async move {
-            let status_path = std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
+            let status_path =
+                std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
             loop {
                 if should_stop_clone.load(Ordering::Relaxed) {
                     break;

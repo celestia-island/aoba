@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result, Error};
+use anyhow::{anyhow, Error, Result};
 use parking_lot::Mutex;
 
 /// Core Modbus communication logic - Pure functions without channel dependencies

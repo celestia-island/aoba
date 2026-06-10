@@ -4,7 +4,7 @@ pub mod probe;
 pub mod slave;
 pub mod traits;
 
-use anyhow::{anyhow, Result, Error};
+use anyhow::{anyhow, Error, Result};
 use parking_lot::Mutex;
 use std::sync::Arc;
 

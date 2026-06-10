@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Rendering mode tests (screen-capture-only) - 20 modules
+  # Rendering mode tests (screen-capture-only) - 23 modules
   tui-e2e-rendering:
     name: TUI E2E Rendering - ${{ matrix.module }}
     runs-on: ubuntu-latest
@@ -81,7 +81,7 @@ jobs:
       - name: Run TUI E2E module (rendering mode)
         run: ./scripts/run_ci_locally.sh --workflow tui-rendering --module ${{ matrix.module }}
 
-  # Drill-down mode tests (full integration) - 22 modules
+  # Drill-down mode tests (full integration) - 23 modules
   tui-e2e-drilldown:
     name: TUI E2E Drill-down - ${{ matrix.module }}
     runs-on: ubuntu-latest

@@ -153,9 +153,10 @@ impl ModbusMaster {
         address: u16,
         length: u16,
     ) -> Result<ModbusResponse> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
         core::execute_single_poll_internal(
             port_arc,
@@ -173,9 +174,10 @@ impl ModbusMaster {
     /// **Note for 储氢罐 hardware**: The hardware requires byte-swapping for 11-coil writes.
     /// Apply `swap_coils_byte_order()` before calling this method if needed.
     pub fn write_coils(&self, address: u16, values: &[bool]) -> Result<()> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
         use crate::protocol::modbus::generate_pull_set_coils_request;
         use std::io::{Read, Write};
@@ -203,10 +205,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow!(
-                "Incomplete write response: {} bytes",
-                bytes_read
-            ));
+            return Err(anyhow!("Incomplete write response: {} bytes", bytes_read));
         }
 
         // Check response
@@ -235,9 +234,10 @@ impl ModbusMaster {
     /// For a single register, consider using `write_holding` instead (fc 0x06).
     /// Returns Ok(()) if the write was acknowledged successfully.
     pub fn write_registers(&self, address: u16, values: &[u16]) -> Result<()> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
         use crate::protocol::modbus::generate_pull_set_holdings_bulk_request;
         use std::io::{Read, Write};
@@ -254,10 +254,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow!(
-                "Incomplete write response: {} bytes",
-                bytes_read
-            ));
+            return Err(anyhow!("Incomplete write response: {} bytes", bytes_read));
         }
 
         let response = &buffer[..bytes_read];
@@ -277,9 +274,10 @@ impl ModbusMaster {
     ///
     /// Returns Ok(()) if the write was acknowledged successfully.
     pub fn write_holding(&self, address: u16, value: u16) -> Result<()> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
         use crate::protocol::modbus::generate_pull_set_holding_request;
         use std::io::{Read, Write};
@@ -295,10 +293,7 @@ impl ModbusMaster {
         let bytes_read = port.read(&mut buffer)?;
 
         if bytes_read < 8 {
-            return Err(anyhow!(
-                "Incomplete write response: {} bytes",
-                bytes_read
-            ));
+            return Err(anyhow!("Incomplete write response: {} bytes", bytes_read));
         }
 
         let response = &buffer[..bytes_read];
@@ -703,10 +698,8 @@ async fn run_master_loop(
                                             let mut port = port_arc.lock();
                                             if let Err(e) = port.write_all(&request_frame) {
                                                 log::error!("Failed to send write request: {}", e);
-                                                let err = anyhow!(
-                                                    "Failed to send write request: {}",
-                                                    e
-                                                );
+                                                let err =
+                                                    anyhow!("Failed to send write request: {}", e);
                                                 for hook in &hooks {
                                                     hook.on_error(&port_name, &err);
                                                 }
@@ -988,10 +981,8 @@ async fn run_multi_register_master_loop(
                                                 "Failed to send/flush write request: {}",
                                                 e
                                             );
-                                            let err = anyhow!(
-                                                "Failed to send write request: {}",
-                                                e
-                                            );
+                                            let err =
+                                                anyhow!("Failed to send write request: {}", e);
                                             for hook in &hooks {
                                                 hook.on_error(&port_name, &err);
                                             }

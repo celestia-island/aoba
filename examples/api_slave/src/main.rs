@@ -3,7 +3,7 @@
 /// This example demonstrates the new Builder API with:
 /// - Multiple hooks in a middleware chain
 /// - Interceptor pattern for response processing
-use anyhow::{Result, Error};
+use anyhow::{Error, Result};
 use std::sync::Arc;
 
 use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode};

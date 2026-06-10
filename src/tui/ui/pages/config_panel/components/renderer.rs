@@ -163,9 +163,9 @@ fn create_line(
 
                 // For now only one option: Modbus RTU
                 let protocol_options = [lang().protocol.common.mode_modbus.clone()];
-                let display_text = protocol_options.get(selected_index).ok_or_else(|| {
-                    anyhow!("Invalid protocol mode index: {selected_index}")
-                })?;
+                let display_text = protocol_options
+                    .get(selected_index)
+                    .ok_or_else(|| anyhow!("Invalid protocol mode index: {selected_index}"))?;
                 Ok(match text_state {
                     TextState::Editing => input_spans(display_text.clone(), text_state)?,
                     TextState::Selected => input_spans(display_text.clone(), text_state)?,

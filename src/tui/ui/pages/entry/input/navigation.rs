@@ -14,9 +14,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Char('q') => {
             // Quit the application
-            bus.ui_tx
-                .send(crate::core::bus::UiToCore::Quit)
-                ?;
+            bus.ui_tx.send(crate::core::bus::UiToCore::Quit)?;
         }
         KeyCode::PageUp => {
             // Jump to first cursor position

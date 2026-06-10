@@ -476,7 +476,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                     .ports
                     .map
                     .get_mut(&port_name)
-                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                    .ok_or_else(|| anyhow!("Port not found"))?;
 
                 let is_enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
                 let needs_restart = is_enabled && port.config_modified;
@@ -505,15 +505,11 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             if !is_enabled {
                 // Enable the port if not already enabled
                 log::info!("Port not enabled, triggering enable via ToggleRuntime");
-                bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name.clone()))
-                    ?;
+                bus.ui_tx.send(UiToCore::ToggleRuntime(port_name.clone()))?;
             } else if needs_restart {
                 // Port already enabled, just restart it with new config
                 log::info!("Port already enabled, restarting with new config");
-                bus.ui_tx
-                    .send(UiToCore::RestartRuntime(port_name))
-                    ?;
+                bus.ui_tx.send(UiToCore::RestartRuntime(port_name))?;
             } else {
                 log::info!("Port already enabled and runtime up-to-date; skipping restart");
             }
@@ -790,12 +786,15 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
 
 /// Validate URL format
 fn validate_url(url: &str, expected_scheme: &str) -> Result<()> {
-    let parsed = url::Url::parse(url).map_err(|_| {
-        anyhow!(lang().protocol.modbus.err_invalid_url.replace("{}", url))
-    })?;
+    let parsed = url::Url::parse(url)
+        .map_err(|_| anyhow!(lang().protocol.modbus.err_invalid_url.replace("{}", url)))?;
     if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{}s", expected_scheme) {
         Ok(())
     } else {
-        Err(anyhow!(lang().protocol.modbus.err_invalid_url.replace("{}", url)))
+        Err(anyhow!(lang()
+            .protocol
+            .modbus
+            .err_invalid_url
+            .replace("{}", url)))
     }
 }

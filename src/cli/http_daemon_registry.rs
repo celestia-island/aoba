@@ -111,10 +111,7 @@ pub fn get_handle_error(port: u16) -> Option<Result<()>> {
                 }
                 Poll::Ready(Err(join_err)) => {
                     log::error!("HTTP server thread panicked: {}", join_err);
-                    return Some(Err(anyhow!(
-                        "HTTP server thread panicked: {}",
-                        join_err
-                    )));
+                    return Some(Err(anyhow!("HTTP server thread panicked: {}", join_err)));
                 }
                 Poll::Pending => return None,
             }

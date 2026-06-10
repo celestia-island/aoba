@@ -1,11 +1,10 @@
 use anyhow::Result;
+use parking_lot::Mutex;
 use std::{
     io::{Read, Write},
     sync::Arc,
     time::{Duration, Instant},
 };
-
-use parking_lot::Mutex;
 
 use flume::{Receiver, Sender};
 use serialport::{DataBits, Parity, SerialPort, StopBits};

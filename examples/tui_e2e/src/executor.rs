@@ -2,8 +2,7 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
-use anyhow::{anyhow, bail, Context, Result, Error};
-
+use anyhow::{anyhow, bail, Context, Error, Result};
 
 use crate::{
     mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
@@ -473,9 +472,8 @@ async fn execute_step_group_with_retry(
                 log::error!("📸 Screenshot from first failure:\n{screenshot}");
             }
 
-            return Err(last_error.unwrap_or_else(|| {
-                anyhow!("Step group failed after {max_retries} retries")
-            }));
+            return Err(last_error
+                .unwrap_or_else(|| anyhow!("Step group failed after {max_retries} retries")));
         }
     }
 }
@@ -595,10 +593,17 @@ async fn execute_single_step(
 
         // Verify mock state value
         if let Some(path) = &step.mock_verify_path {
-            let expected = step.mock_verify_value.as_ref().ok_or_else(|| {
-                anyhow!("mock_verify_path specified but no expected value")
-            })?;
+            let expected = step
+                .mock_verify_value
+                .as_ref()
+                .ok_or_else(|| anyhow!("mock_verify_path specified but no expected value"))?;
             verify_mock_state(path, expected)?;
+        }
+
+        // check_status verification (JSONPath-based status check)
+        if let Some(check) = &step.check_status {
+            verify_mock_state(&check.path, &check.expected)
+                .with_context(|| format!("check_status failed: path='{}'", check.path))?;
         }
     }
 
@@ -795,8 +800,7 @@ async fn execute_match_master_registers_trigger(
     // Parse parameters
     let station_id = params["station_id"]
         .as_u64()
-        .ok_or_else(|| anyhow!("station_id parameter required"))?
-        as u8;
+        .ok_or_else(|| anyhow!("station_id parameter required"))? as u8;
 
     let register_type = params["register_type"]
         .as_str()
@@ -804,8 +808,7 @@ async fn execute_match_master_registers_trigger(
 
     let start_address = params["start_address"]
         .as_u64()
-        .ok_or_else(|| anyhow!("start_address parameter required"))?
-        as u16;
+        .ok_or_else(|| anyhow!("start_address parameter required"))? as u16;
 
     let expected_values = params["expected_values"]
         .as_array()
@@ -949,5 +952,3 @@ fn parse_cli_register_output(
 
     Ok(values)
 }
-
-

@@ -13,7 +13,7 @@
 /// - Return `Err(other)` for actual errors (stops processing with error)
 ///
 /// The handler chain stops at the first `Ok`, or returns the last non-NotHandled error.
-use anyhow::{anyhow, Result, Error};
+use anyhow::{anyhow, Error, Result};
 use parking_lot::Mutex;
 use std::sync::Arc;
 

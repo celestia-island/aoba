@@ -61,7 +61,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ matrix.os }}-${{ matrix.rust }}-cargo-${{ github.sha }}
+          key: ${{ matrix.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ matrix.os }}-${{ matrix.rust }}-cargo-
             ${{ matrix.os }}-cargo-

@@ -1,4 +1,5 @@
 use anyhow::Result;
+
 use crate::tui::status::write_status;
 
 /// Scroll up in the LogPanel by moving the selected_item up by `amount` items.

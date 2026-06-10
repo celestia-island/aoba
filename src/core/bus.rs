@@ -1,6 +1,6 @@
+use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use anyhow::Result;
 use flume::{Receiver, Sender};
 
 static REFRESH_PENDING: AtomicBool = AtomicBool::new(false);

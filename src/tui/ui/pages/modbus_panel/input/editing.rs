@@ -70,9 +70,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx)?;
 
             if let Some(port_name) = maybe_restart {
-                bus.ui_tx
-                    .send(UiToCore::RestartRuntime(port_name))
-                    ?;
+                bus.ui_tx.send(UiToCore::RestartRuntime(port_name))?;
             }
             Ok(())
         }
@@ -133,9 +131,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 bus::request_refresh(&bus.ui_tx)?;
 
                 if let Some(port_name) = maybe_restart {
-                    bus.ui_tx
-                        .send(UiToCore::RestartRuntime(port_name))
-                        ?;
+                    bus.ui_tx.send(UiToCore::RestartRuntime(port_name))?;
                 }
             } else {
                 // No pending data, just clear buffer and refresh
@@ -704,8 +700,7 @@ fn commit_text_edit(
                         }
 
                         bus.ui_tx
-                            .send(UiToCore::RestartRuntime(port_name.clone()))
-                            ?;
+                            .send(UiToCore::RestartRuntime(port_name.clone()))?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::StationId { index } => {

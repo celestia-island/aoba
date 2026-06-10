@@ -398,7 +398,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                             .ports
                                             .map
                                             .get_mut(&port_name)
-                                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                            .ok_or_else(|| anyhow!("Port not found"))?;
                                         subprocess_info_snapshot = port.subprocess_info.clone();
 
                                         let types::port::PortConfig::Modbus {
@@ -682,7 +682,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     .ports
                     .map
                     .get_mut(&port_name)
-                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                    .ok_or_else(|| anyhow!("Port not found"))?;
                 log::info!("🟢 Inside write_status closure");
                 // Check if port is currently occupied before adding station
                 // TUI only uses CLI subprocesses

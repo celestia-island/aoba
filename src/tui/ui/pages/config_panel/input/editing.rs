@@ -346,8 +346,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 log::info!("Sending ToggleRuntime for port: {port_name}");
                 log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx
-                    .send(crate::core::bus::UiToCore::ToggleRuntime(port_name.clone()))
-                    ?;
+                    .send(crate::core::bus::UiToCore::ToggleRuntime(port_name.clone()))?;
                 log::info!("✅ ToggleRuntime({port_name}) message sent successfully");
             } else {
                 log::warn!("port_name is None");

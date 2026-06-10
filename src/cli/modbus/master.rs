@@ -299,15 +299,20 @@ async fn run_http_server_daemon(
 
 /// Handle master provide (temporary: output once and exit)
 pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id")
+    let station_id = *matches
+        .get_one::<u8>("station-id")
         .context("Missing argument: station-id")?;
-    let register_address = *matches.get_one::<u16>("register-address")
+    let register_address = *matches
+        .get_one::<u16>("register-address")
         .context("Missing argument: register-address")?;
-    let register_length = *matches.get_one::<u16>("register-length")
+    let register_length = *matches
+        .get_one::<u16>("register-length")
         .context("Missing argument: register-length")?;
-    let register_mode = matches.get_one::<String>("register-mode")
+    let register_mode = matches
+        .get_one::<String>("register-mode")
         .context("Missing argument: register-mode")?;
-    let baud_rate = *matches.get_one::<u32>("baud-rate")
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
         .context("Missing argument: baud-rate")?;
     let data_source_str = matches
         .get_one::<String>("data-source")
@@ -503,15 +508,20 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
 /// Handle master provide persist (continuous JSONL output)
 /// Master mode acts as Modbus Slave/Server - listens for requests and responds with data
 pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id")
+    let station_id = *matches
+        .get_one::<u8>("station-id")
         .context("Missing argument: station-id")?;
-    let register_address = *matches.get_one::<u16>("register-address")
+    let register_address = *matches
+        .get_one::<u16>("register-address")
         .context("Missing argument: register-address")?;
-    let register_length = *matches.get_one::<u16>("register-length")
+    let register_length = *matches
+        .get_one::<u16>("register-length")
         .context("Missing argument: register-length")?;
-    let register_mode = matches.get_one::<String>("register-mode")
+    let register_mode = matches
+        .get_one::<String>("register-mode")
         .context("Missing argument: register-mode")?;
-    let baud_rate = *matches.get_one::<u32>("baud-rate")
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
         .context("Missing argument: baud-rate")?;
     let data_source_str = matches
         .get_one::<String>("data-source")
@@ -544,8 +554,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or(port);
-        let dump_path =
-            std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
+        let dump_path = std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(
@@ -1070,7 +1079,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 ReadAction2::NoData
             } else {
                 let mut port_guard = port_arc.lock();
-                let port_ref = port_guard.as_mut()
+                let port_ref = port_guard
+                    .as_mut()
                     .ok_or_else(|| anyhow!("Serial port not initialized in master loop"))?;
                 let result = match port_ref.read(&mut buffer) {
                     Ok(n) if n > 0 => {
