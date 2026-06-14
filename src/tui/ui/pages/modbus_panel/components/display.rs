@@ -378,7 +378,9 @@ pub fn render_kv_lines_with_indicators(
 
                         let style = match state {
                             TextState::Normal => Style::default().fg(Color::White),
-                            TextState::Selected | TextState::Editing => Style::default().fg(Color::Yellow),
+                            TextState::Selected | TextState::Editing => {
+                                Style::default().fg(Color::Yellow)
+                            }
                         };
 
                         return Ok(vec![Span::styled(display_text, style)]);
@@ -413,11 +415,19 @@ pub fn render_kv_lines_with_indicators(
                             };
                             let custom_value = String::from_utf8_lossy(bytes).into_owned();
                             let placeholder = get_data_source_placeholder(master_source.kind());
-                            return input_spans_with_placeholder(&custom_value, placeholder.as_deref(), state);
+                            return input_spans_with_placeholder(
+                                &custom_value,
+                                placeholder.as_deref(),
+                                state,
+                            );
                         }
 
                         let placeholder = get_data_source_placeholder(master_source.kind());
-                        input_spans_with_placeholder(&port_num.to_string(), placeholder.as_deref(), state)
+                        input_spans_with_placeholder(
+                            &port_num.to_string(),
+                            placeholder.as_deref(),
+                            state,
+                        )
                     } else {
                         // Render as text input for other types (MQTT, IPC, PortForwarding)
                         let current_value = match master_source {
@@ -426,7 +436,7 @@ pub fn render_kv_lines_with_indicators(
                             ModbusMasterDataSource::PortForwarding { source_port } => {
                                 source_port.clone()
                             }
-                                                    _ => String::new(),
+                            _ => String::new(),
                         };
 
                         let editing = selected
@@ -447,7 +457,11 @@ pub fn render_kv_lines_with_indicators(
                             };
                             let custom_value = String::from_utf8_lossy(bytes).into_owned();
                             let placeholder = get_data_source_placeholder(master_source.kind());
-                            return input_spans_with_placeholder(&custom_value, placeholder.as_deref(), state);
+                            return input_spans_with_placeholder(
+                                &custom_value,
+                                placeholder.as_deref(),
+                                state,
+                            );
                         }
 
                         let placeholder = get_data_source_placeholder(master_source.kind());
@@ -607,10 +621,9 @@ pub fn render_kv_lines_with_indicators(
                 ),
                 || -> Result<Vec<Span<'static>>> {
                     let types::port::PortConfig::Modbus { stations, .. } = &port_data.config;
-                    let current_value = stations.get(index).map_or_else(
-                        || "?".to_string(),
-                        |item| item.station_id.to_string(),
-                    );
+                    let current_value = stations
+                        .get(index)
+                        .map_or_else(|| "?".to_string(), |item| item.station_id.to_string());
 
                     let selected = matches!(
                         current_selection,
@@ -776,9 +789,11 @@ pub fn render_kv_lines_with_indicators(
                 // Calculate registers per row dynamically based on terminal width
                 let registers_per_row = super::table::get_registers_per_row(terminal_width);
 
-                let first_row = (item_start / u16::try_from(registers_per_row).unwrap_or(u16::MAX)) * u16::try_from(registers_per_row).unwrap_or(u16::MAX);
-                let last_row =
-                    item_end.div_ceil(u16::try_from(registers_per_row).unwrap_or(u16::MAX)) * u16::try_from(registers_per_row).unwrap_or(u16::MAX);
+                let first_row = (item_start / u16::try_from(registers_per_row).unwrap_or(u16::MAX))
+                    * u16::try_from(registers_per_row).unwrap_or(u16::MAX);
+                let last_row = item_end
+                    .div_ceil(u16::try_from(registers_per_row).unwrap_or(u16::MAX))
+                    * u16::try_from(registers_per_row).unwrap_or(u16::MAX);
 
                 let mut row = first_row;
                 while row < last_row {

@@ -17,10 +17,10 @@ fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {
         read_status(|status| {
             let name = &status.ports.order[selected_port];
-            Ok(status
-                .ports
-                .map
-                .get(name).map_or_else(|| format!("COM{selected_port}"), |port| port.port_name.clone()))
+            Ok(status.ports.map.get(name).map_or_else(
+                || format!("COM{selected_port}"),
+                |port| port.port_name.clone(),
+            ))
         })?
     } else {
         format!("COM{selected_port}")
@@ -120,7 +120,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         crate::tui::status::Page::ConfigPanel { selected_port, .. }
         | crate::tui::status::Page::ModbusDashboard { selected_port, .. }
         | crate::tui::status::Page::LogPanel { selected_port, .. } => Some(selected_port),
-            _ => None,
+        _ => None,
     };
 
     if let Some(selected_port) = selected_port_opt {
@@ -134,7 +134,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
                     let elapsed = Local::now().signed_duration_since(timestamp);
                     elapsed.num_seconds() < 3
                 }
-                            _ => true,
+                _ => true,
             };
 
             if should_show_status {

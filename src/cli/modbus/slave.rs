@@ -256,24 +256,29 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
     };
 
     // Open serial port with configured timeout
-    let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
-            Ok(handle) => handle,
-            Err(err) => {
-                if let Some(ref mut ipc_conns) = ipc {
-                    if let Err(e) = ipc_conns
+    let port_handle = match open_serial_port(
+        port,
+        baud_rate,
+        Duration::from_millis(u64::from(timeout_ms)),
+    ) {
+        Ok(handle) => handle,
+        Err(err) => {
+            if let Some(ref mut ipc_conns) = ipc {
+                if let Err(e) =
+                    ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        }) {
-                        log::warn!("IPC send failed: {e}");
-                    }
+                        })
+                {
+                    log::warn!("IPC send failed: {e}");
                 }
-                return Err(err);
             }
-        };
+            return Err(err);
+        }
+    };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -284,7 +289,8 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            }) {
+            })
+        {
             log::warn!("IPC send failed: {e}");
         }
         log::info!("IPC: Sent PortOpened message for {port}");
@@ -460,8 +466,7 @@ fn listen_for_one_request(
     }
 
     // Extract values from storage for response
-    let values =
-        extract_values_from_storage(storage, register_address, register_length, reg_mode)?;
+    let values = extract_values_from_storage(storage, register_address, register_length, reg_mode)?;
 
     Ok(ModbusResponse {
         station_id,
@@ -501,8 +506,11 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 
     let response = {
         // Open serial port in a scope to ensure it's closed before returning
-        let port_handle =
-            open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms)))?;
+        let port_handle = open_serial_port(
+            port,
+            baud_rate,
+            Duration::from_millis(u64::from(timeout_ms)),
+        )?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -611,24 +619,29 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
     };
 
     // Open serial port with configured timeout
-    let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
-            Ok(handle) => handle,
-            Err(err) => {
-                if let Some(ref mut ipc_conns) = ipc {
-                    if let Err(e) = ipc_conns
+    let port_handle = match open_serial_port(
+        port,
+        baud_rate,
+        Duration::from_millis(u64::from(timeout_ms)),
+    ) {
+        Ok(handle) => handle,
+        Err(err) => {
+            if let Some(ref mut ipc_conns) = ipc {
+                if let Err(e) =
+                    ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        }) {
-                        log::warn!("IPC send failed: {e}");
-                    }
+                        })
+                {
+                    log::warn!("IPC send failed: {e}");
                 }
-                return Err(err);
             }
-        };
+            return Err(err);
+        }
+    };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -639,7 +652,8 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            }) {
+            })
+        {
             log::warn!("IPC send failed: {e}");
         }
         log::info!("IPC: Sent PortOpened message for {port}");
@@ -747,15 +761,17 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     for range in &first_station.map.holding {
                                         for (idx, &value) in range.initial_values.iter().enumerate()
                                         {
-                                            let addr = range.address_start + u16::try_from(idx).unwrap_or(u16::MAX);
+                                            let addr = range.address_start
+                                                + u16::try_from(idx).unwrap_or(u16::MAX);
 
                                             // Skip zero values unless this is a user edit
                                             if value == 0 && !allow_zero_writes {
                                                 continue;
                                             }
 
-                                            let needs_write =
-                                                last_written_values.as_ref().is_some_and(|prev_vals| {
+                                            let needs_write = last_written_values
+                                                .as_ref()
+                                                .is_some_and(|prev_vals| {
                                                     let relative_idx =
                                                         (addr - current_register_address) as usize;
                                                     relative_idx >= prev_vals.len()
@@ -776,15 +792,17 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     for range in &first_station.map.coils {
                                         for (idx, &value) in range.initial_values.iter().enumerate()
                                         {
-                                            let addr = range.address_start + u16::try_from(idx).unwrap_or(u16::MAX);
+                                            let addr = range.address_start
+                                                + u16::try_from(idx).unwrap_or(u16::MAX);
 
                                             // Skip zero values unless this is a user edit
                                             if value == 0 && !allow_zero_writes {
                                                 continue;
                                             }
 
-                                            let needs_write =
-                                                last_written_values.as_ref().is_some_and(|prev_vals| {
+                                            let needs_write = last_written_values
+                                                .as_ref()
+                                                .is_some_and(|prev_vals| {
                                                     let relative_idx =
                                                         (addr - current_register_address) as usize;
                                                     relative_idx >= prev_vals.len()
@@ -974,7 +992,10 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                     write_value,
                     write_type.clone(),
                     write_result.is_ok(),
-                    write_result.as_ref().err().map(std::string::ToString::to_string),
+                    write_result
+                        .as_ref()
+                        .err()
+                        .map(std::string::ToString::to_string),
                 );
 
                 if let Err(e) = ipc_conns.status.send(&msg) {
@@ -1121,24 +1142,29 @@ pub async fn handle_slave_listen_ipc_channel(
     let mut ipc = actions::setup_ipc(matches);
 
     // Open serial port with configured timeout
-    let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
-            Ok(handle) => handle,
-            Err(err) => {
-                if let Some(ref mut ipc_conns) = ipc {
-                    if let Err(e) = ipc_conns
+    let port_handle = match open_serial_port(
+        port,
+        baud_rate,
+        Duration::from_millis(u64::from(timeout_ms)),
+    ) {
+        Ok(handle) => handle,
+        Err(err) => {
+            if let Some(ref mut ipc_conns) = ipc {
+                if let Err(e) =
+                    ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        }) {
-                        log::warn!("IPC send failed: {e}");
-                    }
+                        })
+                {
+                    log::warn!("IPC send failed: {e}");
                 }
-                return Err(err);
             }
-        };
+            return Err(err);
+        }
+    };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -1149,7 +1175,8 @@ pub async fn handle_slave_listen_ipc_channel(
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            }) {
+            })
+        {
             log::warn!("IPC send failed: {e}");
         }
         log::info!("IPC: Sent PortOpened message for {port}");
@@ -1182,13 +1209,15 @@ pub async fn handle_slave_listen_ipc_channel(
         }
     }
 
-    let listener =
-        if let Ok(name) = ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() { ListenerOptions::new().name(name).create_sync() } else {
-            // Fall back to file path
-            let path =
-                ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
-            ListenerOptions::new().name(path).create_sync()
-        }?;
+    let listener = if let Ok(name) =
+        ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>()
+    {
+        ListenerOptions::new().name(name).create_sync()
+    } else {
+        // Fall back to file path
+        let path = ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
+        ListenerOptions::new().name(path).create_sync()
+    }?;
 
     log::info!("IPC socket listener created, waiting for connections...");
 

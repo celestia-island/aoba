@@ -247,7 +247,9 @@ fn main() -> Result<()> {
 }
 
 fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
-    let pkg_tbl = if let Some(TomlValue::Table(tbl)) = out_tbl.get_mut("package") { tbl } else {
+    let pkg_tbl = if let Some(TomlValue::Table(tbl)) = out_tbl.get_mut("package") {
+        tbl
+    } else {
         out_tbl.insert("package".to_string(), TomlValue::Table(Table::new()));
         match out_tbl.get_mut("package") {
             Some(TomlValue::Table(tbl)) => tbl,

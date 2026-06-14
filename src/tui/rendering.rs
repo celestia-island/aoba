@@ -2,7 +2,11 @@ use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use std::{io, sync::Arc, time::Duration};
 
-use ratatui::{backend::CrosstermBackend, layout::{Layout, Direction, Constraint}, prelude::*};
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
+    prelude::*,
+};
 
 use crate::{core::task_manager::spawn_task, tui::status::Status, utils::sleep_1s};
 
@@ -65,8 +69,10 @@ pub(crate) fn run_rendering_loop(
 
             let should_quit = !matches!(
                 bus.core_rx.recv_timeout(Duration::from_millis(100)),
-                Ok(crate::core::bus::CoreToUi::Tick | crate::core::bus::CoreToUi::Refreshed |
-crate::core::bus::CoreToUi::Error) | Err(flume::RecvTimeoutError::Timeout)
+                Ok(crate::core::bus::CoreToUi::Tick
+                    | crate::core::bus::CoreToUi::Refreshed
+                    | crate::core::bus::CoreToUi::Error)
+                    | Err(flume::RecvTimeoutError::Timeout)
             );
 
             if should_quit {
