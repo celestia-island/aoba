@@ -1,4 +1,6 @@
-use anyhow::{anyhow, Result};
+#![allow(clippy::wildcard_enum_match_arm)]
+use anyhow::{anyhow, Context, Error, Result};
+use parking_lot::Mutex;
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::{
@@ -6,7 +8,7 @@ use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hasher,
     io::{BufRead, BufReader, Read, Write},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -40,26 +42,26 @@ pub enum DataSource {
 }
 
 impl std::str::FromStr for DataSource {
-    type Err = anyhow::Error;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "manual" {
-            Ok(DataSource::Manual)
+            Ok(Self::Manual)
         } else if let Some(path) = s.strip_prefix("file:") {
-            Ok(DataSource::File(path.to_string()))
+            Ok(Self::File(path.to_string()))
         } else if let Some(name) = s.strip_prefix("pipe:") {
-            Ok(DataSource::Pipe(name.to_string()))
+            Ok(Self::Pipe(name.to_string()))
         } else if let Some(url) = s.strip_prefix("mqtt://") {
-            Ok(DataSource::MqttServer(format!("mqtt://{}", url)))
+            Ok(Self::MqttServer(format!("mqtt://{url}")))
         } else if let Some(url) = s.strip_prefix("mqtts://") {
-            Ok(DataSource::MqttServer(format!("mqtts://{}", url)))
+            Ok(Self::MqttServer(format!("mqtts://{url}")))
         } else if let Some(port_str) = s.strip_prefix("http://") {
             let port: u16 = port_str
                 .parse()
                 .map_err(|_| anyhow!("Invalid HTTP port number"))?;
-            Ok(DataSource::HttpServer(port))
+            Ok(Self::HttpServer(port))
         } else if let Some(path) = s.strip_prefix("ipc:") {
-            Ok(DataSource::IpcPipe(path.to_string()))
+            Ok(Self::IpcPipe(path.to_string()))
         } else {
             Err(anyhow!("Invalid data source format"))
         }
@@ -79,6 +81,25 @@ use crate::{
 };
 
 const SERIAL_PORT_OPEN_RETRIES: usize = 3;
+
+fn parse_request_range(
+    assembling: &[u8],
+) -> Option<(u16, u16, crate::protocol::status::types::modbus::RegisterMode)> {
+    use crate::protocol::status::types::modbus::RegisterMode;
+    if assembling.len() < 8 {
+        return None;
+    }
+    let func = assembling[1];
+    let start = u16::from_be_bytes([assembling[2], assembling[3]]);
+    let qty = u16::from_be_bytes([assembling[4], assembling[5]]);
+    match func {
+        0x01 => Some((start, qty, RegisterMode::Coils)),
+        0x02 => Some((start, qty, RegisterMode::DiscreteInputs)),
+        0x03 => Some((start, qty, RegisterMode::Holding)),
+        0x04 => Some((start, qty, RegisterMode::Input)),
+        _ => None,
+    }
+}
 
 async fn open_serial_port_with_retry(
     port: &str,
@@ -127,6 +148,8 @@ use crate::protocol::status::types::modbus::StationConfig as ProtocolStationConf
 use crate::protocol::status::types::modbus::StationsResponse;
 use crate::utils::sleep::{sleep_1s, sleep_3s};
 
+type ChangedRanges = Arc<Mutex<Vec<(u16, u16, Instant)>>>;
+
 /// Axum handler for GET / endpoint - retrieve all station data from storage
 async fn handle_stations_get(
     State(state): State<HttpServerState>,
@@ -134,7 +157,7 @@ async fn handle_stations_get(
     log::info!("📤 HTTP Server: Received GET request for all station data");
 
     // Get the currently configured stations
-    let configured_stations = state.stations.lock().unwrap().clone();
+    let configured_stations = state.stations.lock().clone();
 
     let stations_snapshot: Vec<ProtocolStationConfig> = if let Some(ref storage) = state.storage {
         // Build snapshots with current values from storage for each configured station
@@ -186,16 +209,16 @@ async fn handle_stations_post(
 
     // Update the tracked stations
     {
-        let mut tracked = state.stations.lock().unwrap();
-        *tracked = stations.clone();
+        let mut tracked = state.stations.lock();
+        tracked.clone_from(&stations);
     }
 
     // Forward stations to the update thread
     state.tx.send_async(stations_for_send).await.map_err(|e| {
-        log::error!("Failed to send stations to update thread: {}", e);
+        log::error!("Failed to send stations to update thread: {e}");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Internal Server Error: {}", e),
+            format!("Internal Server Error: {e}"),
         )
     })?;
 
@@ -213,12 +236,9 @@ async fn handle_stations_post(
             stations_snapshot.clear();
             let mut ok = true;
             for station in &stations {
-                match crate::cli::modbus::build_station_snapshot_from_storage(storage, station) {
-                    Ok(sc) => stations_snapshot.push(sc),
-                    Err(_) => {
-                        ok = false;
-                        break;
-                    }
+                if let Ok(sc) = crate::cli::modbus::build_station_snapshot_from_storage(storage, station) { stations_snapshot.push(sc) } else {
+                    ok = false;
+                    break;
                 }
             }
 
@@ -251,8 +271,8 @@ async fn run_http_server_daemon(
     shutdown_rx: flume::Receiver<()>,
     storage: Option<Arc<Mutex<ModbusStorageSmall>>>,
 ) -> Result<()> {
-    let addr = format!("127.0.0.1:{}", port);
-    log::info!("Starting HTTP server daemon on {}", addr);
+    let addr = format!("127.0.0.1:{port}");
+    log::info!("Starting HTTP server daemon on {addr}");
 
     let state = HttpServerState {
         tx,
@@ -271,9 +291,9 @@ async fn run_http_server_daemon(
     // Use task_manager to spawn the async HTTP server daemon
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
+        .map_err(|e| anyhow!("Failed to bind HTTP server to {addr}: {e}"))?;
 
-    log::info!("HTTP server daemon listening on {}", addr);
+    log::info!("HTTP server daemon listening on {addr}");
 
     // Create shutdown signal from channel
     let shutdown_signal = async move {
@@ -291,18 +311,32 @@ async fn run_http_server_daemon(
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal)
         .await
-        .map_err(|e| anyhow!("HTTP server error: {}", e))?;
+        .map_err(|e| anyhow!("HTTP server error: {e}"))?;
 
     Ok(())
 }
 
 /// Handle master provide (temporary: output once and exit)
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::future_not_send)]
 pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    use rmodbus::server::storage::ModbusStorageSmall;
+
+    let station_id = *matches
+        .get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches
+        .get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches
+        .get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches
+        .get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
     let data_source_str = matches
         .get_one::<String>("data-source")
         .ok_or_else(|| anyhow!("--data-source is required for master mode"))?;
@@ -329,7 +363,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
         });
 
         // register handle+shutdown sender in global registry for lookup/shutdown
-        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx);
 
         // Ensure cleanup on program exit also shuts down the daemon
         cleanup::register_cleanup(move || {
@@ -352,33 +386,11 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
     .await?;
 
     // Initialize modbus storage with values
-    use rmodbus::server::storage::ModbusStorageSmall;
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
     let storage_clone = storage.clone();
     {
-        let mut context = storage.lock().unwrap();
-        match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                for (i, &val) in values.iter().enumerate() {
-                    context.set_holding(register_address + i as u16, val)?;
-                }
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                for (i, &val) in values.iter().enumerate() {
-                    context.set_coil(register_address + i as u16, val != 0)?;
-                }
-            }
-            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                for (i, &val) in values.iter().enumerate() {
-                    context.set_discrete(register_address + i as u16, val != 0)?;
-                }
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                for (i, &val) in values.iter().enumerate() {
-                    context.set_input(register_address + i as u16, val)?;
-                }
-            }
-        }
+        use crate::cli::modbus::set_registers_in_storage;
+        set_registers_in_storage(&storage, reg_mode, register_address, &values)?;
     }
 
     // If HTTP server mode, check for incoming data before serial port opens
@@ -388,34 +400,34 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
             Ok(stations) => {
                 log::info!("Received HTTP POST with {} stations", stations.len());
                 // Update storage with received data
-                let mut context = storage_clone.lock().unwrap();
+                let mut context = storage_clone.lock();
                 for station in &stations {
                     if station.station_id == station_id {
                         // Update holding registers
                         for range in &station.map.holding {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + i as u16;
+                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_holding(addr, val)?;
                             }
                         }
                         // Update coils
                         for range in &station.map.coils {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + i as u16;
+                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_coil(addr, val != 0)?;
                             }
                         }
                         // Update discrete inputs
                         for range in &station.map.discrete_inputs {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + i as u16;
+                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_discrete(addr, val != 0)?;
                             }
                         }
                         // Update input registers
                         for range in &station.map.input {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + i as u16;
+                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_input(addr, val)?;
                             }
                         }
@@ -423,7 +435,7 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
                 }
             }
             Err(e) => {
-                log::warn!("Timeout waiting for HTTP POST data: {}", e);
+                log::warn!("Timeout waiting for HTTP POST data: {e}");
             }
         }
     }
@@ -439,10 +451,6 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
     let start_time = std::time::Instant::now();
 
     loop {
-        if start_time.elapsed() > Duration::from_secs(10) {
-            return Err(anyhow!("Timeout waiting for request"));
-        }
-
         enum ReadAction {
             Data,
             FrameReady,
@@ -451,43 +459,46 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
             NoData,
         }
 
+        if start_time.elapsed() > Duration::from_secs(10) {
+            return Err(anyhow!("Timeout waiting for request"));
+        }
+
         let action = {
-            let mut port_lock = port_arc.lock().unwrap();
-            if let Some(port) = port_lock.as_mut() {
-                match port.read(&mut buffer) {
+            let mut port_lock = port_arc.lock();
+            port_lock.as_mut().map_or_else(
+                || ReadAction::Error("Port is None".to_string()),
+                |port| match port.read(&mut buffer) {
                     Ok(n) if n > 0 => {
                         assembling.extend_from_slice(&buffer[..n]);
                         ReadAction::Data
                     }
                     Ok(_) => {
-                        if !assembling.is_empty() {
-                            ReadAction::FrameReady
-                        } else {
+                        if assembling.is_empty() {
                             ReadAction::NoData
+                        } else {
+                            ReadAction::FrameReady
                         }
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                        if !assembling.is_empty() {
-                            ReadAction::FrameReady
-                        } else {
+                        if assembling.is_empty() {
                             ReadAction::Timeout
+                        } else {
+                            ReadAction::FrameReady
                         }
                     }
                     Err(err) => ReadAction::Error(err.to_string()),
-                }
-            } else {
-                ReadAction::Error("Port is None".to_string())
-            }
+                },
+            )
         };
 
         match action {
-            ReadAction::Data => {
+            ReadAction::Data | ReadAction::Timeout => {
                 sleep_1s().await;
             }
             ReadAction::FrameReady => {
                 let request = assembling.clone();
                 let (response, _) = respond_to_request(
-                    port_arc.clone(),
+                    &port_arc,
                     &request,
                     station_id,
                     &storage,
@@ -499,9 +510,6 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
                 drop(port_arc);
                 sleep_1s().await;
                 return Ok(());
-            }
-            ReadAction::Timeout => {
-                sleep_1s().await;
             }
             ReadAction::Error(e) => {
                 log::warn!("Error reading from port: {e}");
@@ -517,12 +525,26 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
 
 /// Handle master provide persist (continuous JSONL output)
 /// Master mode acts as Modbus Slave/Server - listens for requests and responds with data
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::future_not_send)]
 pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    use rmodbus::server::storage::ModbusStorageSmall;
+
+    let station_id = *matches
+        .get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches
+        .get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches
+        .get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches
+        .get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
     let data_source_str = matches
         .get_one::<String>("data-source")
         .ok_or_else(|| anyhow!("--data-source is required for master mode"))?;
@@ -554,8 +576,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or(port);
-        let dump_path =
-            std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
+        let dump_path = std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(
@@ -586,12 +607,14 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
         // Notify IPC that virtual port is ready
         if let Some(ref mut ipc_conns) = ipc_connections {
-            let _ = ipc_conns
+            if let Err(e) = ipc_conns
                 .status
                 .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                     port_name: port.to_string(),
                     timestamp: None,
-                });
+                }) {
+                log::warn!("IPC send failed: {e}");
+            }
             log::info!("IPC: Sent PortOpened message for virtual port {port}");
         }
 
@@ -618,12 +641,14 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
         // Notify IPC that port was opened successfully
         if let Some(ref mut ipc_conns) = ipc_connections {
-            let _ = ipc_conns
+            if let Err(e) = ipc_conns
                 .status
                 .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                     port_name: port.to_string(),
                     timestamp: None,
-                });
+                }) {
+                log::warn!("IPC send failed: {e}");
+            }
             log::info!("IPC: Sent PortOpened message for physical port {port}");
         }
 
@@ -640,7 +665,6 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     }
 
     // Initialize modbus storage with values from data source
-    use rmodbus::server::storage::ModbusStorageSmall;
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
 
     // Load initial data into storage
@@ -654,29 +678,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     .await?;
     log::info!("Loaded initial values: {initial_values:?}");
     {
-        let mut context = storage.lock().unwrap();
-        match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                for (i, &val) in initial_values.iter().enumerate() {
-                    context.set_holding(register_address + i as u16, val)?;
-                }
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                for (i, &val) in initial_values.iter().enumerate() {
-                    context.set_coil(register_address + i as u16, val != 0)?;
-                }
-            }
-            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                for (i, &val) in initial_values.iter().enumerate() {
-                    context.set_discrete(register_address + i as u16, val != 0)?;
-                }
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                for (i, &val) in initial_values.iter().enumerate() {
-                    context.set_input(register_address + i as u16, val)?;
-                }
-            }
-        }
+        use crate::cli::modbus::set_registers_in_storage;
+        set_registers_in_storage(&storage, reg_mode, register_address, &initial_values)?;
     }
 
     // Start a background thread to update storage with new values from data source
@@ -688,7 +691,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
     // Track recent changed ranges so the main loop can bypass debounce when a
     // request overlaps a recently-updated register range.
-    let changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>> = Arc::new(Mutex::new(Vec::new()));
+    let changed_ranges: ChangedRanges = Arc::new(Mutex::new(Vec::new()));
     let changed_ranges_clone = changed_ranges.clone();
 
     // Create HTTP server daemon if needed. Keep handle in shared container and
@@ -707,14 +710,14 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                     Ok(())
                 }
                 Err(e) => {
-                    log::error!("HTTP server daemon failed: {}", e);
+                    log::error!("HTTP server daemon failed: {e}");
                     Err(e)
                 }
             }
         });
 
         // Register handle+shutdown sender into global registry
-        let _arc = http_registry::register_handle(port, handle, shutdown_tx.clone());
+        let _arc = http_registry::register_handle(port, handle, shutdown_tx);
 
         // ensure cleanup will shutdown and join
         cleanup::register_cleanup(move || {
@@ -734,7 +737,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
     // Create IPC socket server if --ipc-socket-path is provided
     if let Some(ipc_socket_path) = matches.get_one::<String>("ipc-socket-path") {
-        log::info!("🔌 IPC: Starting IPC socket server at {}", ipc_socket_path);
+        log::info!("🔌 IPC: Starting IPC socket server at {ipc_socket_path}");
 
         let ipc_socket_path = ipc_socket_path.clone();
         let ipc_storage = storage.clone();
@@ -749,18 +752,18 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             log::info!("🔌 IPC: Task spawned, calling run_ipc_socket_server");
             match run_ipc_socket_server_sync(
                 &ipc_socket_path,
-                ipc_storage,
+                &ipc_storage,
                 ipc_station_id,
                 ipc_reg_mode,
                 ipc_register_address,
                 ipc_register_length,
-                ipc_changed_ranges,
+                &ipc_changed_ranges,
             ) {
                 Ok(()) => {
                     log::info!("🔌 IPC: Socket server ended normally");
                 }
                 Err(e) => {
-                    log::error!("🔌 IPC: Socket server error: {}", e);
+                    log::error!("🔌 IPC: Socket server error: {e}");
                 }
             }
         });
@@ -801,7 +804,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
     let debounce_window = if debounce_seconds <= 0.0 {
         Duration::from_secs(0)
     } else {
-        let ms = (debounce_seconds * 1000.0).round() as u64;
+        let ms = (debounce_seconds * 1000.0).round();
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_possible_truncation)]
+        let ms = ms as u64;
         Duration::from_millis(ms)
     };
 
@@ -869,28 +875,40 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 
     log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
+    // Flags to track IPC connection and configuration state
+    let command_accepted = std::sync::atomic::AtomicBool::new(false);
+    let first_config_received = std::sync::atomic::AtomicBool::new(false);
+
     loop {
+        enum ReadAction2 {
+            Data,
+            FrameReady(
+                Option<(
+                    u16,
+                    u16,
+                    crate::protocol::status::types::modbus::RegisterMode,
+                )>,
+            ),
+            Timeout,
+            Error(String),
+            NoData,
+        }
+
         // Check if HTTP server thread has panicked or errored
         if let Some(port) = http_server_thread {
             if let Some(result) = http_registry::get_handle_error(port) {
-                return result.map_err(|e| anyhow!("HTTP server thread failed: {}", e));
+                return result.map_err(|e| anyhow!("HTTP server thread failed: {e}"));
             }
         }
 
         // Accept command connection if not yet connected
         if let Some(ref mut ipc_conns) = ipc_connections {
             // Try to accept command connection - retry on each loop iteration until successful
-            static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
-                std::sync::atomic::AtomicBool::new(false);
-            // Track if we've received the first StationsUpdate (initial configuration)
-            static FIRST_CONFIG_RECEIVED: std::sync::atomic::AtomicBool =
-                std::sync::atomic::AtomicBool::new(false);
-
-            if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+            if !command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
                 match ipc_conns.command_listener.accept() {
                     Ok(()) => {
                         log::info!("Command channel accepted");
-                        COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        command_accepted.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     Err(_e) => {
                         // Don't log every attempt to avoid spam, just keep trying
@@ -899,7 +917,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             }
 
             // Check for incoming commands
-            if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+            if command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Ok(Some(crate::protocol::ipc::IpcMessage::StationsUpdate {
                     stations_data,
                     update_reason,
@@ -907,8 +925,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 })) = ipc_conns.command_listener.try_recv()
                 {
                     let is_first_config =
-                        !FIRST_CONFIG_RECEIVED.load(std::sync::atomic::Ordering::Relaxed);
-                    FIRST_CONFIG_RECEIVED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        !first_config_received.load(std::sync::atomic::Ordering::Relaxed);
+                    first_config_received.store(true, std::sync::atomic::Ordering::Relaxed);
 
                     log::info!(
                         "Received stations update ({} bytes, is_first={}, reason={:?})",
@@ -930,8 +948,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         // - "sync" or None: Skip 0 values on first config only
                         // - "read_response": Always apply (actual modbus read data)
                         let allow_zero_writes = match update_reason.as_deref() {
-                            Some("user_edit") => true,
-                            Some("read_response") => true,
+                            Some("user_edit" | "read_response") => true,
                             Some("initial_config") => false,
                             Some("sync") | None => !is_first_config, // Legacy behavior
                             Some(other) => {
@@ -941,14 +958,11 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         };
 
                         log::info!(
-                            "Master storage decision: reason={:?}, is_first={}, allow_zeros={}",
-                            update_reason,
-                            is_first_config,
-                            allow_zero_writes
+                            "Master storage decision: reason={update_reason:?}, is_first={is_first_config}, allow_zeros={allow_zero_writes}"
                         );
 
                         // Apply the station updates to storage
-                        let mut context = storage.lock().unwrap();
+                        let mut context = storage.lock();
                         for station in &stations {
                             log::info!(
                                 "  Applying Station {}: mode={:?}",
@@ -966,7 +980,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                     allow_zero_writes
                                 );
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + i as u16;
+                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_holding(addr, val) {
@@ -974,10 +988,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                                 "❌ Failed to set holding register at 0x{addr:04X}: {e}"
                                             );
                                         } else {
-                                            log::info!("✅ Updated holding register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
+                                            log::info!("✅ Updated holding register 0x{addr:04X} = 0x{val:04X} (reason={update_reason:?})");
                                         }
                                     } else {
-                                        log::info!("⏭️  Skipped holding register 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        log::info!("⏭️  Skipped holding register 0x{addr:04X} (value=0, reason={update_reason:?})");
                                     }
                                 }
                             }
@@ -985,21 +999,19 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             // Update coils
                             for range in &station.map.coils {
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + i as u16;
+                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_coil(addr, val != 0) {
                                             log::warn!("Failed to set coil at {addr}: {e}");
                                         } else {
                                             log::info!(
-                                                "✏️ Updated coil 0x{addr:04X} = {val} (reason={:?})",
-                                                update_reason
+                                                "✏️ Updated coil 0x{addr:04X} = {val} (reason={update_reason:?})"
                                             );
                                         }
                                     } else {
                                         log::info!(
-                                            "⏭️  Skipped coil 0x{addr:04X} (value=0, reason={:?})",
-                                            update_reason
+                                            "⏭️  Skipped coil 0x{addr:04X} (value=0, reason={update_reason:?})"
                                         );
                                     }
                                 }
@@ -1008,7 +1020,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             // Update discrete inputs
                             for range in &station.map.discrete_inputs {
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + i as u16;
+                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_discrete(addr, val != 0) {
@@ -1016,10 +1028,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                                 "Failed to set discrete input at {addr}: {e}"
                                             );
                                         } else {
-                                            log::info!("✏️ Updated discrete input 0x{addr:04X} = {val} (reason={:?})", update_reason);
+                                            log::info!("✏️ Updated discrete input 0x{addr:04X} = {val} (reason={update_reason:?})");
                                         }
                                     } else {
-                                        log::info!("⏭️  Skipped discrete input 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        log::info!("⏭️  Skipped discrete input 0x{addr:04X} (value=0, reason={update_reason:?})");
                                     }
                                 }
                             }
@@ -1027,7 +1039,7 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             // Update input registers
                             for range in &station.map.input {
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + i as u16;
+                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_input(addr, val) {
@@ -1035,10 +1047,10 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                                 "Failed to set input register at {addr}: {e}"
                                             );
                                         } else {
-                                            log::info!("✏️ Updated input register 0x{addr:04X} = 0x{val:04X} (reason={:?})", update_reason);
+                                            log::info!("✏️ Updated input register 0x{addr:04X} = 0x{val:04X} (reason={update_reason:?})");
                                         }
                                     } else {
-                                        log::info!("⏭️  Skipped input register 0x{addr:04X} (value=0, reason={:?})", update_reason);
+                                        log::info!("⏭️  Skipped input register 0x{addr:04X} (value=0, reason={update_reason:?})");
                                     }
                                 }
                             }
@@ -1073,35 +1085,17 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
             }
         }
 
-        enum ReadAction2 {
-            Data,
-            FrameReady(
-                Option<(
-                    u16,
-                    u16,
-                    crate::protocol::status::types::modbus::RegisterMode,
-                )>,
-            ),
-            Timeout,
-            Error(String),
-            NoData,
-        }
-
         let action2 = {
-            // First check if the port is virtual without holding the lock across an await.
-            let is_virtual = {
-                let port = port_arc.lock().unwrap();
-                port.is_none()
-            };
-
-            // For virtual ports, skip serial port reading entirely
             if is_virtual {
-                // Virtual port: just sleep a bit to avoid busy loop
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 ReadAction2::NoData
             } else {
-                let mut port = port_arc.lock().unwrap();
-                let result = match port.as_mut().unwrap().read(&mut buffer) {
+                #[allow(clippy::significant_drop_tightening)]
+                let mut port_guard = port_arc.lock();
+                let port_ref = port_guard
+                    .as_mut()
+                    .ok_or_else(|| anyhow!("Serial port not initialized in master loop"))?;
+                let result = match port_ref.read(&mut buffer) {
                     Ok(n) if n > 0 => {
                         log::info!(
                             "CLI Master: Read {n} bytes from port: {:02X?}",
@@ -1112,67 +1106,12 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         ReadAction2::Data
                     }
                     Ok(_) => {
-                        if !assembling.is_empty() {
-                            if let Some(last_time) = last_byte_time {
-                                if last_time.elapsed() >= frame_gap {
-                                    // Determine parsed_range without holding lock
-                                    let request_preview = assembling.clone();
-                                    let parsed_range = if request_preview.len() >= 8 {
-                                        let func = request_preview[1];
-                                        match func {
-                                            0x01 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                            }
-                                            0x02 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                            }
-                                            0x03 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                            }
-                                            0x04 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                            }
-                                            _ => None,
-                                        }
-                                    } else {
-                                        None
-                                    };
-                                    ReadAction2::FrameReady(parsed_range)
-                                } else {
-                                    ReadAction2::NoData
-                                }
+                        if assembling.is_empty() {
+                            ReadAction2::NoData
+                        } else if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                let parsed_range = parse_request_range(&assembling);
+                                ReadAction2::FrameReady(parsed_range)
                             } else {
                                 ReadAction2::NoData
                             }
@@ -1181,66 +1120,12 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         }
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                        if !assembling.is_empty() {
-                            if let Some(last_time) = last_byte_time {
-                                if last_time.elapsed() >= frame_gap {
-                                    let request_preview = assembling.clone();
-                                    let parsed_range = if request_preview.len() >= 8 {
-                                        let func = request_preview[1];
-                                        match func {
-                                            0x01 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
-                                            }
-                                            0x02 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
-                                            }
-                                            0x03 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
-                                            }
-                                            0x04 => {
-                                                let start = u16::from_be_bytes([
-                                                    request_preview[2],
-                                                    request_preview[3],
-                                                ]);
-                                                let qty = u16::from_be_bytes([
-                                                    request_preview[4],
-                                                    request_preview[5],
-                                                ]);
-                                                Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
-                                            }
-                                            _ => None,
-                                        }
-                                    } else {
-                                        None
-                                    };
-                                    ReadAction2::FrameReady(parsed_range)
-                                } else {
-                                    ReadAction2::Timeout
-                                }
+                        if assembling.is_empty() {
+                            ReadAction2::Timeout
+                        } else if let Some(last_time) = last_byte_time {
+                            if last_time.elapsed() >= frame_gap {
+                                let parsed_range = parse_request_range(&assembling);
+                                ReadAction2::FrameReady(parsed_range)
                             } else {
                                 ReadAction2::Timeout
                             }
@@ -1250,23 +1135,23 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                     }
                     Err(err) => ReadAction2::Error(err.to_string()),
                 };
+                drop(port_guard);
                 result
             }
         };
 
         match action2 {
-            ReadAction2::Data => {}
+            ReadAction2::Data | ReadAction2::Timeout | ReadAction2::NoData => {}
             ReadAction2::FrameReady(parsed_range) => {
                 log::info!(
                     "CLI Master: Frame complete ({} bytes), processing request",
                     assembling.len()
                 );
-                let request = assembling.clone();
-                assembling.clear();
+                let request = std::mem::take(&mut assembling);
                 last_byte_time = None;
 
                 match respond_to_request(
-                    port_arc.clone(),
+                    &port_arc,
                     &request,
                     station_id,
                     &storage,
@@ -1282,15 +1167,15 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                         let mut force = false;
                         if let Some((start, qty, _mode)) = parsed_range {
                             let now = Instant::now();
-                            let cr = changed_ranges.lock().unwrap();
+                            let cr = changed_ranges.lock();
                             for (cstart, clen, t) in cr.iter() {
                                 if now.duration_since(*t) > cache_ttl {
                                     continue;
                                 }
-                                let a1 = start as u32;
-                                let a2 = (start + qty) as u32;
-                                let b1 = *cstart as u32;
-                                let b2 = (cstart + clen) as u32;
+                                let a1 = u32::from(start);
+                                let a2 = u32::from(start + qty);
+                                let b1 = u32::from(*cstart);
+                                let b2 = u32::from(cstart + clen);
                                 if a1 < b2 && b1 < a2 {
                                     force = true;
                                     break;
@@ -1338,13 +1223,11 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                     }
                 }
             }
-            ReadAction2::Timeout => {}
             ReadAction2::Error(e) => {
                 log::warn!("CLI Master read error: {e}");
                 sleep_1s().await;
                 continue;
             }
-            ReadAction2::NoData => {}
         }
         // No explicit drop needed here; ensure we don't mistakenly drop the `port` parameter (a &str)
 
@@ -1354,8 +1237,9 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
 }
 
 /// Respond to a Modbus request (acting as Slave/Server)
+#[allow(clippy::too_many_lines)]
 fn respond_to_request(
-    port_arc: Arc<Mutex<Option<Box<dyn serialport::SerialPort>>>>,
+    port_arc: &Arc<Mutex<Option<Box<dyn serialport::SerialPort>>>>,
     request: &[u8],
     station_id: u8,
     storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
@@ -1382,7 +1266,7 @@ fn respond_to_request(
     log::info!("respond_to_request: Received request from slave: {request:02X?}");
 
     // Parse and respond to request
-    let mut context = storage.lock().unwrap();
+    let mut context = storage.lock();
     let mut response_buf = Vec::new();
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response_buf);
     frame.parse()?;
@@ -1390,39 +1274,27 @@ fn respond_to_request(
     #[allow(unreachable_patterns)]
     let response = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => {
-            match build_slave_holdings_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build holdings response");
-                    return Err(anyhow!("Failed to build holdings response"));
-                }
+            if let Ok(Some(resp)) = build_slave_holdings_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build holdings response");
+                return Err(anyhow!("Failed to build holdings response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetInputs => {
-            match build_slave_inputs_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build input registers response");
-                    return Err(anyhow!("Failed to build input registers response"));
-                }
+            if let Ok(Some(resp)) = build_slave_inputs_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build input registers response");
+                return Err(anyhow!("Failed to build input registers response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetCoils => {
-            match build_slave_coils_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build coils response");
-                    return Err(anyhow!("Failed to build coils response"));
-                }
+            if let Ok(Some(resp)) = build_slave_coils_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build coils response");
+                return Err(anyhow!("Failed to build coils response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetDiscretes => {
-            match build_slave_discrete_inputs_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => {
-                    log::error!("respond_to_request: Failed to build discrete inputs response");
-                    return Err(anyhow!("Failed to build discrete inputs response"));
-                }
+            if let Ok(Some(resp)) = build_slave_discrete_inputs_response(&mut frame, &mut context) { resp } else {
+                log::error!("respond_to_request: Failed to build discrete inputs response");
+                return Err(anyhow!("Failed to build discrete inputs response"));
             }
         }
         // Write function codes - Modbus allows slaves to write to master's registers
@@ -1436,9 +1308,7 @@ fn respond_to_request(
             let write_addr = u16::from_be_bytes([request[2], request[3]]);
             let write_value = u16::from_be_bytes([request[4], request[5]]);
             log::info!(
-                "respond_to_request: Write Single Holding Register - addr=0x{:04X}, value=0x{:04X}",
-                write_addr,
-                write_value
+                "respond_to_request: Write Single Holding Register - addr=0x{write_addr:04X}, value=0x{write_value:04X}"
             );
 
             // Write to storage
@@ -1506,10 +1376,7 @@ fn respond_to_request(
             }
 
             log::info!(
-                "respond_to_request: Write Multiple Holding Registers - addr=0x{:04X}, count={}, values={:?}",
-                write_addr,
-                write_count,
-                values
+                "respond_to_request: Write Multiple Holding Registers - addr=0x{write_addr:04X}, count={write_count}, values={values:?}"
             );
 
             // Write to storage
@@ -1532,7 +1399,7 @@ fn respond_to_request(
                         if let Err(e) = ipc_conns.status.send(&msg) {
                             log::warn!("Failed to send StationsUpdate via IPC: {e}");
                         } else {
-                            log::info!("📤 Master: Sent StationsUpdate for {} holdings starting at addr=0x{write_addr:04X}", write_count);
+                            log::info!("📤 Master: Sent StationsUpdate for {write_count} holdings starting at addr=0x{write_addr:04X}");
                         }
                     }
                     Err(e) => {
@@ -1560,9 +1427,7 @@ fn respond_to_request(
             let write_value = u16::from_be_bytes([request[4], request[5]]);
             let coil_state = write_value == 0xFF00;
             log::info!(
-                "respond_to_request: Write Single Coil - addr=0x{:04X}, value={}",
-                write_addr,
-                coil_state
+                "respond_to_request: Write Single Coil - addr=0x{write_addr:04X}, value={coil_state}"
             );
 
             // Write to storage
@@ -1577,7 +1442,7 @@ fn respond_to_request(
                     crate::protocol::status::types::modbus::RegisterMode::Coils,
                     write_addr,
                     1,
-                    Some(vec![if coil_state { 1 } else { 0 }]),
+                    Some(vec![u16::from(coil_state)]),
                 );
 
                 match postcard::to_allocvec(&vec![station_config]) {
@@ -1614,9 +1479,7 @@ fn respond_to_request(
             }
 
             log::info!(
-                "respond_to_request: Write Multiple Coils - addr=0x{:04X}, count={}",
-                write_addr,
-                write_count
+                "respond_to_request: Write Multiple Coils - addr=0x{write_addr:04X}, count={write_count}"
             );
 
             // Write to storage
@@ -1630,11 +1493,7 @@ fn respond_to_request(
                     let byte_idx = (i / 8) as usize;
                     let bit_idx = (i % 8) as usize;
                     let coil_value = if byte_idx < byte_count {
-                        if (request[7 + byte_idx] & (1 << bit_idx)) != 0 {
-                            1
-                        } else {
-                            0
-                        }
+                        u16::from((request[7 + byte_idx] & (1 << bit_idx)) != 0)
                     } else {
                         0
                     };
@@ -1656,7 +1515,7 @@ fn respond_to_request(
                         if let Err(e) = ipc_conns.status.send(&msg) {
                             log::warn!("Failed to send StationsUpdate via IPC: {e}");
                         } else {
-                            log::info!("📤 Master: Sent StationsUpdate for {} coils starting at addr=0x{write_addr:04X}", write_count);
+                            log::info!("📤 Master: Sent StationsUpdate for {write_count} coils starting at addr=0x{write_addr:04X}");
                         }
                     }
                     Err(e) => {
@@ -1688,7 +1547,7 @@ fn respond_to_request(
     // Send response (only for physical ports, virtual ports don't need serial write)
     let response_frame = response.clone();
     {
-        let mut port_guard = port_arc.lock().unwrap();
+        let mut port_guard = port_arc.lock();
         if let Some(ref mut port) = *port_guard {
             port.write_all(&response)?;
             port.flush()?;
@@ -1710,7 +1569,7 @@ fn respond_to_request(
         rmodbus::consts::ModbusFunction::GetCoils => ResponseRegisterMode::Coils,
         rmodbus::consts::ModbusFunction::GetDiscretes => ResponseRegisterMode::DiscreteInputs,
         rmodbus::consts::ModbusFunction::GetInputs => ResponseRegisterMode::Input,
-        other => ResponseRegisterMode::Custom {
+            other => ResponseRegisterMode::Custom {
             function_code: other as u8,
         },
     };
@@ -1735,11 +1594,12 @@ struct UpdateStorageArgs {
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     register_address: u16,
     register_length: u16,
-    changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
+    changed_ranges: ChangedRanges,
     http_rx: Option<flume::Receiver<Vec<crate::protocol::status::types::modbus::StationConfig>>>,
 }
 
 /// Update storage loop - continuously reads data from source and updates storage
+#[allow(clippy::too_many_lines)]
 async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
     let UpdateStorageArgs {
         storage,
@@ -1757,18 +1617,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                 // Manual mode: no automatic updates, values are set via IPC or other means
 
                 sleep_3s().await;
-                continue;
             }
             DataSource::MqttServer(url) => {
                 // MQTT: subscribe to broker and continuously update on new messages
-                log::info!("Starting MQTT subscription loop for: {}", url);
+                log::info!("Starting MQTT subscription loop for: {url}");
 
                 // Parse MQTT URL
                 let parsed_url = match url::Url::parse(url) {
                     Ok(u) => u,
                     Err(e) => {
-                        log::error!("Invalid MQTT URL: {}", e);
-                        return Err(anyhow!("Invalid MQTT URL: {}", e));
+                        log::error!("Invalid MQTT URL: {e}");
+                        return Err(anyhow!("Invalid MQTT URL: {e}"));
                     }
                 };
 
@@ -1781,7 +1640,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     return Err(anyhow!("MQTT URL must include a topic path"));
                 }
 
-                log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
+                log::info!("MQTT: connecting to {host}:{port}, topic: {topic}");
 
                 // Create channel to receive MQTT messages from blocking thread
                 let (mqtt_tx, mqtt_rx) = flume::unbounded::<String>();
@@ -1799,17 +1658,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
 
                     // Subscribe to topic
                     if let Err(e) = client.subscribe(&topic, rumqttc::QoS::AtMostOnce) {
-                        log::error!("Failed to subscribe to MQTT topic: {}", e);
-                        return Err(anyhow!("Failed to subscribe: {}", e));
+                        log::error!("Failed to subscribe to MQTT topic: {e}");
+                        return Err(anyhow!("Failed to subscribe: {e}"));
                     }
 
-                    log::info!("MQTT: subscribed to topic '{}'", topic);
+                    log::info!("MQTT: subscribed to topic '{topic}'");
 
                     // Process incoming messages and send via channel
                     for notification in connection.iter() {
                         match notification {
                             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
-                                let payload = String::from_utf8_lossy(&publish.payload).to_string();
+                                let payload = String::from_utf8_lossy(&publish.payload).into_owned();
 
                                 // Send to async loop
                                 if mqtt_tx.send(payload).is_err() {
@@ -1821,14 +1680,14 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 // Other events, ignore
                             }
                             Err(e) => {
-                                log::warn!("MQTT connection error: {}", e);
+                                log::warn!("MQTT connection error: {e}");
                                 break;
                             }
                         }
                     }
 
                     log::warn!("MQTT connection closed");
-                    Ok::<(), anyhow::Error>(())
+                    Ok::<(), Error>(())
                 });
 
                 // Receive MQTT messages and update storage
@@ -1853,39 +1712,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                     values
                                 );
                                 {
-                                    let mut context = storage.lock().unwrap();
-                                    match reg_mode {
-                                        crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_holding(register_address + i as u16, val)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_coil(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_discrete(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_input(register_address + i as u16, val)?;
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Record changed range
-                                {
-                                    let len = values.len() as u16;
-                                    let mut cr = changed_ranges.lock().unwrap();
-                                    cr.push((register_address, len, Instant::now()));
-                                    while cr.len() > 1000 {
-                                        cr.remove(0);
-                                    }
+                                    use crate::cli::modbus::{
+                                        record_changed_range, set_registers_in_storage,
+                                    };
+                                    set_registers_in_storage(
+                                        &storage,
+                                        reg_mode,
+                                        register_address,
+                                        &values,
+                                    )?;
+                                    let len = u16::try_from(values.len()).unwrap_or(u16::MAX);
+                                    record_changed_range(&changed_ranges, register_address, len);
                                 }
                             } else {
                                 log::warn!("Failed to parse MQTT message data");
@@ -1899,7 +1736,6 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 break;
                             }
                             // Continue waiting
-                            continue;
                         }
                         Err(flume::RecvTimeoutError::Disconnected) => {
                             log::warn!("MQTT connection lost, will retry...");
@@ -1940,49 +1776,30 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                         values
                                     );
                                     {
-                                        let mut context = storage.lock().unwrap();
-                                        match reg_mode {
-                                            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_holding(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_coil(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_discrete(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_input(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Record changed range
-                                    {
-                                        let len = values.len() as u16;
-                                        let mut cr = changed_ranges.lock().unwrap();
-                                        cr.push((register_address, len, Instant::now()));
-                                        while cr.len() > 1000 {
-                                            cr.remove(0);
-                                        }
+                                        use crate::cli::modbus::{
+                                            record_changed_range, set_registers_in_storage,
+                                        };
+                                        set_registers_in_storage(
+                                            &storage,
+                                            reg_mode,
+                                            register_address,
+                                            &values,
+                                        )?;
+                                        let len = u16::try_from(values.len()).unwrap_or(u16::MAX);
+                                        record_changed_range(
+                                            &changed_ranges,
+                                            register_address,
+                                            len,
+                                        );
                                     }
                                 }
                                 Err(e) => {
-                                    log::warn!("Failed to extract values from HTTP data: {}", e);
+                                    log::warn!("Failed to extract values from HTTP data: {e}");
                                 }
                             }
                         }
                         Err(flume::RecvTimeoutError::Timeout) => {
                             // Timeout is normal, just continue
-                            continue;
                         }
                         Err(flume::RecvTimeoutError::Disconnected) => {
                             log::error!("HTTP server channel disconnected");
@@ -1993,7 +1810,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::IpcPipe(path) => {
                 // IPC pipe: similar to regular Pipe
-                log::info!("📂 IPC: Opening IPC pipe at: {}", path);
+                log::info!("📂 IPC: Opening IPC pipe at: {path}");
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -2014,39 +1831,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         Ok(values) => {
                             log::info!("✅ IPC: Updating storage with values from IPC: {values:?}");
                             {
-                                let mut context = storage.lock().unwrap();
-                                match reg_mode {
-                                            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_holding(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_coil(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_discrete(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_input(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                        }
-                            }
-
-                            // Record changed range
-                            {
-                                let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock().unwrap();
-                                cr.push((register_address, len, Instant::now()));
-                                while cr.len() > 1000 {
-                                    cr.remove(0);
-                                }
+                                use crate::cli::modbus::{
+                                    record_changed_range, set_registers_in_storage,
+                                };
+                                set_registers_in_storage(
+                                    &storage,
+                                    reg_mode,
+                                    register_address,
+                                    &values,
+                                )?;
+                                let len = u16::try_from(values.len()).unwrap_or(u16::MAX);
+                                record_changed_range(&changed_ranges, register_address, len);
                             }
 
                             sleep_1s().await;
@@ -2061,7 +1856,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
-                log::info!("📂 File: Opening file data source at: {}", path);
+                log::info!("📂 File: Opening file data source at: {path}");
                 let file = match std::fs::File::open(path) {
                     Ok(f) => f,
                     Err(err) => {
@@ -2108,40 +1903,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                                 values
                             );
                             {
-                                let mut context = storage.lock().unwrap();
-                                match reg_mode {
-                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_holding(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_coil(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_discrete(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_input(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Record changed range for other thread to detect overlap
-                            {
-                                let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock().unwrap();
-                                cr.push((register_address, len, Instant::now()));
-                                // Keep size bounded: trim old entries
-                                while cr.len() > 1000 {
-                                    cr.remove(0);
-                                }
+                                use crate::cli::modbus::{
+                                    record_changed_range, set_registers_in_storage,
+                                };
+                                set_registers_in_storage(
+                                    &storage,
+                                    reg_mode,
+                                    register_address,
+                                    &values,
+                                )?;
+                                let len = u16::try_from(values.len()).unwrap_or(u16::MAX);
+                                record_changed_range(&changed_ranges, register_address, len);
                             }
 
                             // Wait a bit before next update to avoid overwhelming
@@ -2157,7 +1929,7 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it
-                log::info!("📂 Pipe: Opening named pipe at: {}", path);
+                log::info!("📂 Pipe: Opening named pipe at: {path}");
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
@@ -2178,39 +1950,17 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                         Ok(values) => {
                             log::info!("✅ Pipe: Updating storage with values: {values:?}");
                             {
-                                let mut context = storage.lock().unwrap();
-                                match reg_mode {
-                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_holding(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_coil(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_discrete(register_address + i as u16, val != 0)?;
-                                        }
-                                    }
-                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                        for (i, &val) in values.iter().enumerate() {
-                                            context.set_input(register_address + i as u16, val)?;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Record changed range for other thread to detect overlap
-                            {
-                                let len = values.len() as u16;
-                                let mut cr = changed_ranges.lock().unwrap();
-                                cr.push((register_address, len, Instant::now()));
-                                while cr.len() > 1000 {
-                                    cr.remove(0);
-                                }
+                                use crate::cli::modbus::{
+                                    record_changed_range, set_registers_in_storage,
+                                };
+                                set_registers_in_storage(
+                                    &storage,
+                                    reg_mode,
+                                    register_address,
+                                    &values,
+                                )?;
+                                let len = u16::try_from(values.len()).unwrap_or(u16::MAX);
+                                record_changed_range(&changed_ranges, register_address, len);
                             }
 
                             // Wait a bit before next update
@@ -2234,7 +1984,7 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
         return Ok(vec![]);
     }
 
-    let _station_id = response[0];
+    let _ = response[0];
     let function_code = response[1];
     let byte_count = response[2] as usize;
 
@@ -2262,7 +2012,7 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
             for byte_idx in 0..byte_count {
                 let byte = response[3 + byte_idx];
                 for bit_idx in 0..8 {
-                    let coil_val = if (byte & (1 << bit_idx)) != 0 { 1 } else { 0 };
+                    let coil_val = u16::from((byte & (1 << bit_idx)) != 0);
                     values.push(coil_val);
                 }
             }
@@ -2282,20 +2032,7 @@ async fn read_one_data_update(
 ) -> Result<Vec<u16>> {
     match source {
         DataSource::Manual => Ok(vec![]),
-        DataSource::File(path) => {
-            let file = std::fs::File::open(path)?;
-            let mut reader = BufReader::new(file);
-            let mut line = String::new();
-            reader.read_line(&mut line)?;
-            parse_data_line(
-                &line,
-                station_id,
-                reg_mode,
-                register_address,
-                register_length,
-            )
-        }
-        DataSource::Pipe(path) => {
+        DataSource::File(path) | DataSource::Pipe(path) | DataSource::IpcPipe(path) => {
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();
@@ -2314,7 +2051,7 @@ async fn read_one_data_update(
             let url = url.clone();
             let join_result = tokio::task::spawn_blocking(move || {
                 let parsed_url =
-                    url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
+                    url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {e}"))?;
                 let host = parsed_url
                     .host_str()
                     .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
@@ -2329,7 +2066,7 @@ async fn read_one_data_update(
                 let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
                 client
                     .subscribe(topic, rumqttc::QoS::AtMostOnce)
-                    .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
+                    .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {e}"))?;
 
                 for notification in connection.iter() {
                     if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
@@ -2349,7 +2086,7 @@ async fn read_one_data_update(
                 Err(anyhow!("MQTT connection closed before receiving a message"))
             })
             .await
-            .map_err(|e| anyhow!("MQTT task panicked: {}", e))?;
+            .map_err(|e| anyhow!("MQTT task panicked: {e}"))?;
 
             join_result
         }
@@ -2358,32 +2095,20 @@ async fn read_one_data_update(
 
             Ok(vec![])
         }
-        DataSource::IpcPipe(path) => {
-            let file = std::fs::File::open(path)?;
-            let mut reader = BufReader::new(file);
-            let mut line = String::new();
-            reader.read_line(&mut line)?;
-            parse_data_line(
-                &line,
-                station_id,
-                reg_mode,
-                register_address,
-                register_length,
-            )
-        }
     }
 }
 
-/// Run IPC socket server for master mode (synchronous, blocking)
-/// Accepts connections from clients and updates the modbus storage with received data
+/// Run IPC socket server for master mode (synchronous, blocking).
+///
+/// Accepts connections from clients and updates the modbus storage with received data.
 fn run_ipc_socket_server_sync(
     socket_path: &str,
-    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     station_id: u8,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     register_address: u16,
     register_length: u16,
-    changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
+    changed_ranges: &ChangedRanges,
 ) -> Result<()> {
     log::info!("Creating IPC socket listener at {socket_path}");
 
@@ -2392,7 +2117,7 @@ fn run_ipc_socket_server_sync(
         #[cfg(unix)]
         IpcSocketTarget::File { name, path } => {
             if path.exists() {
-                log::warn!("Removing existing socket file: {path:?}");
+                log::warn!("Removing existing socket file: {}", path.display());
                 let _ = std::fs::remove_file(path);
             }
             ListenerOptions::new().name(name.clone()).create_sync()
@@ -2436,7 +2161,7 @@ fn run_ipc_socket_server_sync(
 
         // Handle connection in a separate thread (synchronous)
         std::thread::spawn(move || {
-            if let Err(e) = handle_ipc_connection_sync(stream, conn_id, ipc_ctx.clone()) {
+            if let Err(e) = handle_ipc_connection_sync(stream, conn_id, &ipc_ctx) {
                 log::error!("Connection #{conn_id} error: {e}");
             }
             log::info!("Connection #{conn_id} closed");
@@ -2495,7 +2220,7 @@ struct IpcConnectionContext {
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     register_address: u16,
     register_length: u16,
-    changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
+    changed_ranges: ChangedRanges,
 }
 
 /// Handle a single IPC connection for master mode (synchronous)
@@ -2503,7 +2228,7 @@ struct IpcConnectionContext {
 fn handle_ipc_connection_sync(
     mut stream: interprocess::local_socket::Stream,
     conn_id: usize,
-    ctx: Arc<IpcConnectionContext>,
+    ctx: &IpcConnectionContext,
 ) -> Result<()> {
     use std::io::{BufRead, BufReader, Write};
 
@@ -2577,34 +2302,13 @@ fn handle_ipc_connection_sync(
 
         // Update storage with new values
         {
-            let mut context = ctx.storage.lock().unwrap();
-            match ctx.reg_mode {
-                crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_holding(ctx.register_address + i as u16, val)?;
-                    }
-                }
-                crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_coil(ctx.register_address + i as u16, val != 0)?;
-                    }
-                }
-                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_discrete(ctx.register_address + i as u16, val != 0)?;
-                    }
-                }
-                crate::protocol::status::types::modbus::RegisterMode::Input => {
-                    for (i, &val) in values.iter().enumerate() {
-                        context.set_input(ctx.register_address + i as u16, val)?;
-                    }
-                }
-            }
+            use crate::cli::modbus::set_registers_in_storage;
+            set_registers_in_storage(&ctx.storage, ctx.reg_mode, ctx.register_address, &values)?;
         }
 
         // Update changed ranges to bypass debounce
         {
-            let mut ranges = ctx.changed_ranges.lock().unwrap();
+            let mut ranges = ctx.changed_ranges.lock();
             let end_addr = ctx.register_address + ctx.register_length;
             ranges.push((ctx.register_address, end_addr, Instant::now()));
         }

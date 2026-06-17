@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::{anyhow, Result};
 
 use crate::{
@@ -12,6 +13,7 @@ use crate::{
     },
 };
 
+#[allow(clippy::too_many_lines)]
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     log::info!("🔵 handle_enter_action called");
     let current_cursor = read_status(|status| {
@@ -62,7 +64,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             })?;
 
             log::info!("🔵 Sending refresh");
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             log::info!("🔵 Refresh sent");
         }
         types::cursor::ModbusDashboardCursor::ModbusMode => {
@@ -75,7 +77,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
                             let types::port::PortConfig::Modbus { mode, .. } = &port.config;
-                            return Ok(if mode.is_master() { 0 } else { 1 });
+                            return Ok(usize::from(!mode.is_master()));
                         }
                     }
                 }
@@ -87,7 +89,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_mode);
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::MasterSourceKind => {
             let current_index = read_status(|status| {
@@ -110,7 +112,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_index);
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::MasterSourceValue => {
             // Check if it's PortForwarding - use Index selector, otherwise use text input
@@ -164,7 +166,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(current_index);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -187,7 +189,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 types::modbus::ModbusMasterDataSource::IpcPipe { path } => {
                                     path.clone()
                                 }
-                                _ => String::new(),
+                                                            _ => String::new(),
                             };
                             return Ok(value);
                         }
@@ -196,7 +198,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 Ok(String::new())
             })?;
 
-            let offset = current_text.chars().count() as isize;
+            let offset = isize::try_from(current_text.chars().count()).unwrap_or(isize::MAX);
             let buffer = types::ui::InputRawBuffer::String {
                 bytes: current_text.into_bytes(),
                 offset,
@@ -207,7 +209,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 Ok(())
             })?;
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
             // Get the current register mode value from port config
@@ -238,7 +240,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_value);
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::StationId { .. }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { .. }
@@ -252,7 +254,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         types::cursor::ModbusDashboardCursor::Register {
             slave_index,
@@ -262,7 +264,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                     Ok(status.ports.order.get(*selected_port).cloned())
                 }
-                _ => Ok(None),
+                            _ => Ok(None),
             })?;
 
             if let Some(port_name) = port_name_opt {
@@ -398,8 +400,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                             .ports
                                             .map
                                             .get_mut(&port_name)
-                                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-                                        subprocess_info_snapshot = port.subprocess_info.clone();
+                                            .ok_or_else(|| anyhow!("Port not found"))?;
+                                        subprocess_info_snapshot.clone_from(&port.subprocess_info);
 
                                         let types::port::PortConfig::Modbus {
                                             mode,
@@ -408,7 +410,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                         } = &mut port.config;
                                         if let Some(item) = stations.get_mut(slave_index) {
                                             let register_addr =
-                                                item.register_address + register_index as u16;
+                                                item.register_address + u16::try_from(register_index).unwrap_or(u16::MAX);
 
                                             let value_index =
                                                 (register_addr - item.register_address) as usize;
@@ -419,7 +421,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                             let current = item.last_values[value_index] != 0;
                                             let new_value_flag = !current;
                                             item.last_values[value_index] =
-                                                if new_value_flag { 1 } else { 0 };
+                                                u16::from(new_value_flag);
 
                                             match mode {
                                                 types::modbus::ModbusConnectionMode::Master => {
@@ -440,10 +442,10 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                     );
 
                                                     if should_queue {
-                                                        let coil_value = if new_value_flag {
-                                                            0xFF00
+                                                    let coil_value = if new_value_flag {
+                                                            crate::api::modbus::core::MODBUS_COIL_ON
                                                         } else {
-                                                            0x0000
+                                                            crate::api::modbus::core::MODBUS_COIL_OFF
                                                         };
 
                                                         if let Ok((_request, raw_frame)) =
@@ -491,7 +493,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     {
                                         if let Err(err) =
                                             bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                                port_name: port_name.clone(),
+                                                port_name,
                                                 station_id: update.1,
                                                 register_type: update.0,
                                                 start_address: update.2,
@@ -505,7 +507,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     }
                                 }
                             }
-                            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                            bus::request_refresh(&bus.ui_tx)?;
                         }
                         types::modbus::RegisterMode::Holding
                         | types::modbus::RegisterMode::Input => {
@@ -519,7 +521,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     };
                                 Ok(())
                             })?;
-                            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                            bus::request_refresh(&bus.ui_tx)?;
                         }
                     }
                 }
@@ -547,53 +549,49 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         let port_name = status.ports.order.get(selected_port).cloned();
         log::info!("🟦 Port name: {port_name:?}");
 
-        let (should_restart, should_auto_enable, has_stations) = if let Some(name) = &port_name {
-            let port_data = status.ports.map.get(name);
-            let port_state = port_data.as_ref().map(|p| {
-                let port = p;
-                log::info!("🟦 Port state: {:?}", port.state);
-                port.state.clone()
-            });
-            let needs_restart = port_data
-                .as_ref()
-                .map(|p| p.config_modified)
-                .unwrap_or(false);
-
-            // Check if port has subprocess info (CLI subprocess)
-            let has_subprocess_info = port_data
-                .as_ref()
-                .map(|p| p.subprocess_info.is_some())
-                .unwrap_or(false);
-
-            // Check if port has any stations configured
-            let has_stations = port_data
-                .as_ref()
-                .map(|p| {
+        let (should_restart, should_auto_enable, has_stations) = port_name.as_ref().map_or_else(
+            || {
+                log::info!("🟦 No port name, should_restart=false, should_auto_enable=false");
+                (false, false, false)
+            },
+            |name| {
+                let port_data = status.ports.map.get(name);
+                let port_state = port_data.as_ref().map(|p| {
                     let port = p;
-                    let types::port::PortConfig::Modbus { stations, .. } = &port.config;
-                    let _count = stations.len();
+                    log::info!("🟦 Port state: {:?}", port.state);
+                    port.state.clone()
+                });
+                let needs_restart = port_data
+                    .as_ref()
+                    .is_some_and(|p| p.config_modified);
 
-                    !stations.is_empty()
-                })
-                .unwrap_or(false);
+                let has_subprocess_info = port_data
+                    .as_ref()
+                    .is_some_and(|p| p.subprocess_info.is_some());
 
-            // TUI only uses CLI subprocesses. Check if port has subprocess info.
-            let should_restart = matches!(port_state, Some(types::port::PortState::OccupiedByThis))
-                && has_subprocess_info
-                && needs_restart;
+                let has_stations = port_data
+                    .as_ref()
+                    .is_some_and(|p| {
+                        let port = p;
+                        let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+                        let _count = stations.len();
 
-            // Auto-enable if: port is Free AND has stations configured
-            let should_auto_enable =
-                matches!(port_state, Some(types::port::PortState::Free)) && has_stations;
+                        !stations.is_empty()
+                    });
 
-            log::info!(
-                "🟦 Should restart: {should_restart}, Should auto-enable: {should_auto_enable}, Has stations: {has_stations}, Needs restart: {needs_restart}"
-            );
-            (should_restart, should_auto_enable, has_stations)
-        } else {
-            log::info!("🟦 No port name, should_restart=false, should_auto_enable=false");
-            (false, false, false)
-        };
+                let should_restart = matches!(port_state, Some(types::port::PortState::OccupiedByThis))
+                    && has_subprocess_info
+                    && needs_restart;
+
+                let should_auto_enable =
+                    matches!(port_state, Some(types::port::PortState::Free)) && has_stations;
+
+                log::info!(
+                    "🟦 Should restart: {should_restart}, Should auto-enable: {should_auto_enable}, Has stations: {has_stations}, Needs restart: {needs_restart}"
+                );
+                (should_restart, should_auto_enable, has_stations)
+            },
+        );
 
         Ok((port_name, should_restart, should_auto_enable, has_stations))
     })?;
@@ -642,7 +640,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         };
         Ok(())
     })?;
-    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx)?;
     Ok(())
 }
 
@@ -682,7 +680,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     .ports
                     .map
                     .get_mut(&port_name)
-                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                    .ok_or_else(|| anyhow!("Port not found"))?;
                 log::info!("🟢 Inside write_status closure");
                 // Check if port is currently occupied before adding station
                 // TUI only uses CLI subprocesses
@@ -712,7 +710,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     last_values: vec![0],
                     req_success: 0,
                     req_total: 0,
-                    next_poll_at: std::time::Instant::now() - std::time::Duration::from_secs(1), // Start immediately
+                    next_poll_at: std::time::Instant::now(),
                     last_request_time: None,
                     last_response_time: None,
                     pending_requests: Vec::new(),

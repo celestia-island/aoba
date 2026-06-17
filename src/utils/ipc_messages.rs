@@ -43,6 +43,7 @@ pub struct IpcChannelId(pub String);
 impl IpcChannelId {
     /// Create IPC socket names for the given ID
     /// Uses platform-appropriate naming (paths on Unix, namespaced on Linux with abstract sockets)
+    #[must_use]
     pub fn socket_names(&self) -> (String, String) {
         let to_tui = format!("aoba_e2e_to_tui_{}", self.0);
         let from_tui = format!("aoba_tui_to_e2e_{}", self.0);

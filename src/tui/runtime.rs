@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use parking_lot::RwLock;
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, thread, time::Duration};
+use std::{fs, path::PathBuf, sync::Arc, thread, time::Duration};
 
 use crate::{
     cli::config::StationConfig,
@@ -17,7 +17,7 @@ use crate::{
     tui::{
         cli_data::initialize_cli_data_source,
         ipc::handle_cli_ipc_message,
-        logs::*,
+        logs::{append_subprocess_exited_log, append_subprocess_stopped_log, append_subprocess_spawned_log, append_lifecycle_log},
         status::{
             self as types,
             port::{PortConfig, PortData, PortState, PortStatusIndicator, PortSubprocessInfo},
@@ -27,21 +27,54 @@ use crate::{
     utils::{i18n::lang, sleep::sleep_1s},
 };
 
+const MAX_STDERR_LOGS_PER_PORT: usize = 100;
+
 /// Helper function to get stations configuration from TUI status
 fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
     crate::tui::status::read_status(|status| {
-        if let Some(port) = status.ports.map.get(port_name) {
-            let stations_vec = port_stations_to_config(port);
-            Ok(stations_vec)
-        } else {
-            Ok(vec![])
-        }
+        status.ports.map.get(port_name).map_or_else(
+            || Ok(vec![]),
+            |port| {
+                let stations_vec = port_stations_to_config(port);
+                Ok(stations_vec)
+            },
+        )
     })
 }
 
 // Named constant for initial stations send retries to avoid magic numbers
 const INITIAL_STATIONS_SEND_RETRIES: usize = 3;
 
+async fn send_initial_stations(
+    port_name: &str,
+    subprocess_manager: &mut SubprocessManager,
+) {
+    log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
+    let mut stations_sent = false;
+    for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
+        match subprocess_manager.send_stations_update_for_port(
+            port_name,
+            get_stations_from_status,
+            Some("initial_config"),
+        ) {
+            Ok(()) => {
+                stations_sent = true;
+                break;
+            }
+            Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
+                sleep_1s().await;
+            }
+            Err(err) => {
+                log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
+            }
+        }
+    }
+    if !stations_sent {
+        log::error!("❌ Could not send initial stations configuration to {port_name}");
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
@@ -50,7 +83,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     // Set config file path if specified
     let config_path = matches.get_one::<String>("config-file").map(PathBuf::from);
-    crate::tui::persistence::set_config_path(config_path.clone());
+    crate::tui::persistence::set_config_path(&config_path);
 
     let screen_capture_mode = matches.get_flag("debug-screen-capture");
     if screen_capture_mode {
@@ -68,7 +101,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     // Store config path in status for UI display
     crate::tui::status::write_status(|status| {
-        status.config_file_path = config_path.clone();
+        status.config_file_path.clone_from(&config_path);
         Ok(())
     })?;
 
@@ -78,7 +111,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
         enable_debug_dump();
 
         let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let dump_path = PathBuf::from("/tmp/ci_tui_status.json");
+        let dump_path = std::env::temp_dir().join("ci_tui_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
         start_status_dump_thread(
@@ -109,7 +142,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
                     PortConfig::Modbus { stations, .. } if !stations.is_empty() => {
                         Some(name.clone())
                     }
-                    _ => None,
+                    PortConfig::Modbus { .. } => None,
                 })
                 .collect();
 
@@ -184,11 +217,11 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     let input_handle = thread::spawn({
         let bus = bus.clone();
-        move || crate::tui::input::run_input_thread(bus, input_kill_rx)
+        move || crate::tui::input::run_input_thread(&bus, &input_kill_rx)
     });
 
     let render_handle =
-        thread::spawn(move || crate::tui::rendering::run_rendering_loop(bus, thr_rx));
+        thread::spawn(move || crate::tui::rendering::run_rendering_loop(&bus, &thr_rx));
 
     // NOTE: Initial port scan will be triggered automatically by core thread's first loop iteration
     // since last_scan is initialized to (now - scan_interval), making it immediately eligible for scanning.
@@ -221,6 +254,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn run_core_thread(
     ui_rx: flume::Receiver<UiToCore>,
     core_tx: flume::Sender<CoreToUi>,
@@ -228,10 +262,9 @@ pub async fn run_core_thread(
 ) -> Result<()> {
     let mut polling_enabled = true;
     let scan_interval = Duration::from_secs(30);
-    let mut last_scan = std::time::Instant::now() - scan_interval;
+    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap_or_else(std::time::Instant::now);
     let mut scan_in_progress = false;
 
-    let _last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
     let mut subprocess_manager = SubprocessManager::new();
     loop {
         let msg_count_before = ui_rx.len();
@@ -365,14 +398,14 @@ pub async fn run_core_thread(
 
         let dead_processes = subprocess_manager.reap_dead_processes();
         if !dead_processes.is_empty() {
-            let mut cleanup_paths: HashMap<String, Option<String>> = HashMap::new();
+            let mut cleanup_paths: Vec<(String, Option<String>)> = Vec::new();
             crate::tui::status::write_status(|status| {
                 for (port_name, exit_status) in &dead_processes {
                     if let Some(port) = status.ports.map.get_mut(port_name) {
                         if port.state.is_occupied_by_this() {
                             if let Some(info) = &port.subprocess_info {
                                 cleanup_paths
-                                    .insert(port_name.clone(), info.data_source_path.clone());
+                                    .push((port_name.clone(), info.data_source_path.clone()));
                             }
                             port.state = PortState::Free;
                             port.subprocess_info = None;
@@ -385,12 +418,10 @@ pub async fn run_core_thread(
                             };
 
                             if is_abnormal_exit {
-                                let error_msg = match exit_status {
-                                    Some(status) => {
-                                        format!("Process exited with status: {}", status)
-                                    }
-                                    None => "Process was terminated by signal".to_string(),
-                                };
+                                let error_msg = exit_status.as_ref().map_or_else(
+                                    || "Process was terminated by signal".to_string(),
+                                    |status| format!("Process exited with status: {status}"),
+                                );
                                 port.status_indicator =
                                     types::port::PortStatusIndicator::NotStarted;
                                 log::warn!(
@@ -415,8 +446,14 @@ pub async fn run_core_thread(
             })?;
 
             for (port_name, exit_status) in dead_processes {
-                if let Some(Some(path)) = cleanup_paths.remove(&port_name) {
-                    if let Err(_err) = fs::remove_file(&path) {}
+                if let Some(pos) = cleanup_paths
+                    .iter()
+                    .position(|(name, _)| name == &port_name)
+                {
+                    let (_, path) = cleanup_paths.swap_remove(pos);
+                    if let Some(path) = path {
+                        if let Err(_err) = fs::remove_file(&path) {}
+                    }
                 }
                 append_subprocess_exited_log(&port_name, exit_status);
                 if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
@@ -449,14 +486,14 @@ pub async fn run_core_thread(
                         }
 
                         // Keep only the most recent 100 stderr logs per port
-                        if port.cli_stderr_logs.len() > 100 {
-                            let start = port.cli_stderr_logs.len() - 100;
+                        if port.cli_stderr_logs.len() > MAX_STDERR_LOGS_PER_PORT {
+                            let start = port.cli_stderr_logs.len() - MAX_STDERR_LOGS_PER_PORT;
                             port.cli_stderr_logs.drain(0..start);
                         }
                     }
                     Ok(())
                 }) {
-                    log::warn!("Failed to store stderr logs for {}: {}", port_name, err);
+                    log::warn!("Failed to store stderr logs for {port_name}: {err}");
                 }
             }
         }
@@ -537,7 +574,7 @@ async fn restart_runtime(
             log::warn!("{label}: failed to stop CLI subprocess for {port_name}: {err}");
         }
 
-        if let Some(path) = info.data_source_path.clone() {
+        if let Some(path) = info.data_source_path {
             if let Err(_err) = fs::remove_file(&path) {}
         }
 
@@ -552,7 +589,7 @@ async fn restart_runtime(
             Ok(())
         })?;
 
-        append_subprocess_stopped_log(port_name, Some("重启中 - 停止旧进程".to_string()));
+        append_subprocess_stopped_log(port_name, Some(crate::utils::i18n::lang().tabs.log.runtime_restart_stopping_old_process.clone()));
     }
 
     // Start the new subprocess
@@ -579,7 +616,7 @@ fn stop_runtime(
             log::warn!("{label}: failed to stop CLI subprocess for {port_name}: {err}");
         }
 
-        if let Some(path) = info.data_source_path.clone() {
+        if let Some(path) = info.data_source_path {
             if let Err(_err) = fs::remove_file(&path) {}
         }
 
@@ -610,6 +647,7 @@ fn stop_runtime(
     Ok(false)
 }
 
+#[allow(clippy::too_many_lines)]
 async fn start_runtime(
     label: &str,
     port_name: &str,
@@ -702,29 +740,7 @@ async fn start_runtime(
                             append_subprocess_spawned_log(port_name, &snapshot.mode, snapshot.pid);
                             cli_started = true;
 
-                            log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
-                            let mut stations_sent = false;
-                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
-                                match subprocess_manager.send_stations_update_for_port(
-                                    port_name,
-                                    get_stations_from_status,
-                                    Some("initial_config"),
-                                ) {
-                                    Ok(()) => {
-                                        stations_sent = true;
-                                        break;
-                                    }
-                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
-                                        sleep_1s().await;
-                                    }
-                                    Err(err) => {
-                                        log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
-                                    }
-                                }
-                            }
-                            if !stations_sent {
-                                log::error!("❌ Could not send initial stations configuration to {port_name}");
-                            }
+                            send_initial_stations(port_name, subprocess_manager).await;
                         }
                     }
                     Err(err) => {
@@ -734,7 +750,7 @@ async fn start_runtime(
                         append_lifecycle_log(
                             port_name,
                             crate::tui::status::port::PortLifecyclePhase::Failed,
-                            Some(err_text.clone()),
+                            Some(err_text),
                         );
                         crate::tui::status::write_status(|status| {
                             if let Some(port) = status.ports.map.get_mut(port_name) {
@@ -761,7 +777,7 @@ async fn start_runtime(
                 let cli_config = CliSubprocessConfig {
                     port_name: port_name.to_string(),
                     mode: crate::cli::status::CliMode::MasterProvide,
-                    station_id: merged_station_id as u8,
+                    station_id: u8::try_from(merged_station_id).unwrap_or(u8::MAX),
                     register_address: merged_start_addr,
                     register_length: merged_length,
                     register_mode: crate::tui::cli_data::register_mode_to_cli_arg(
@@ -799,29 +815,7 @@ async fn start_runtime(
                             append_subprocess_spawned_log(port_name, &snapshot.mode, snapshot.pid);
                             cli_started = true;
 
-                            log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
-                            let mut stations_sent = false;
-                            for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
-                                match subprocess_manager.send_stations_update_for_port(
-                                    port_name,
-                                    get_stations_from_status,
-                                    Some("initial_config"),
-                                ) {
-                                    Ok(()) => {
-                                        stations_sent = true;
-                                        break;
-                                    }
-                                    Err(_err) if attempt < INITIAL_STATIONS_SEND_RETRIES => {
-                                        sleep_1s().await;
-                                    }
-                                    Err(err) => {
-                                        log::warn!("⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}");
-                                    }
-                                }
-                            }
-                            if !stations_sent {
-                                log::error!("❌ Could not send initial stations configuration to {port_name}");
-                            }
+                            send_initial_stations(port_name, subprocess_manager).await;
                         }
                     }
                     Err(err) => {
@@ -831,7 +825,7 @@ async fn start_runtime(
                         append_lifecycle_log(
                             port_name,
                             crate::tui::status::port::PortLifecyclePhase::Failed,
-                            Some(err_text.clone()),
+                            Some(err_text),
                         );
 
                         crate::tui::status::write_status(|status| {

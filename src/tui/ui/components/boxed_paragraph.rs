@@ -40,7 +40,7 @@ pub fn render_boxed_paragraph(
 
     let mut para = Paragraph::new(content)
         .block(block)
-        .scroll((offset as u16, 0));
+        .scroll((u16::try_from(offset).unwrap_or(u16::MAX), 0));
 
     if wrap {
         para = para.wrap(ratatui::widgets::Wrap { trim: true });

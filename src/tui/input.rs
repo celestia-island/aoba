@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Result};
+#![allow(clippy::wildcard_enum_match_arm)]
+use anyhow::Result;
 use chrono::Local;
 use std::time::Duration;
 
@@ -10,7 +11,7 @@ use crate::tui::{
     utils::bus::{self, Bus, UiToCore},
 };
 
-fn key_is_ctrl_c(key: &KeyEvent) -> bool {
+const fn key_is_ctrl_c(key: &KeyEvent) -> bool {
     if let KeyCode::Char(ch) = key.code {
         if ch == '\u{3}' {
             return true;
@@ -25,18 +26,18 @@ fn key_is_ctrl_c(key: &KeyEvent) -> bool {
 }
 
 /// Spawn the input handling thread that processes keyboard and mouse events
-pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
+pub fn run_input_thread(bus: &Bus, kill_rx: &flume::Receiver<()>) -> Result<()> {
     log::info!("🎹 Input thread started");
     loop {
         // Poll for input. Keep this loop tight and avoid toggling mouse
         // capture here — constantly enabling/disabling mouse capture
         // interferes with terminal selection and adds latency.
-        if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
+        if matches!(crossterm::event::poll(Duration::from_millis(100)), Ok(true)) {
             if let Ok(event) = crossterm::event::read() {
                 log::info!("⌨️ Received event: {event:?}");
                 // handle_event now returns Result<()> and performs any quit
                 // signaling itself. Propagate errors, otherwise continue.
-                handle_event(event, &bus)?;
+                handle_event(&event, bus)?;
             }
         }
 
@@ -49,34 +50,34 @@ pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
+pub fn handle_event(event: &crossterm::event::Event, bus: &Bus) -> Result<()> {
     match event {
         crossterm::event::Event::Key(key) => {
             // Early catch for Ctrl + C at the top-level so the app can exit immediately.
             if matches!(
                 key.kind,
                 crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
-            ) && key_is_ctrl_c(&key)
+            ) && key_is_ctrl_c(key)
             {
                 log::info!("Global quit: Ctrl+C detected in input thread (pre-handler)");
-                bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
+                bus.ui_tx.send(UiToCore::Quit)?;
                 return Ok(());
             }
 
-            handle_key_event(key, bus)?;
+            handle_key_event(*key, bus)?;
         }
         crossterm::event::Event::Mouse(event) => {
             match read_status(|status| Ok(status.page.clone())) {
                 Ok(crate::tui::status::Page::Entry { .. }) => {
-                    pages::entry::input::handle_mouse(event, bus)?;
+                    pages::entry::input::handle_mouse(*event, bus)?;
                 }
                 Ok(crate::tui::status::Page::About { .. }) => {
-                    pages::about::handle_mouse(event, bus)?;
+                    pages::about::handle_mouse(*event, bus)?;
                 }
                 _ => {}
             }
         }
-        _ => {}
+            _ => {}
     }
 
     Ok(())
@@ -87,19 +88,12 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         key.kind,
         crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
     ) {
-        return Ok(()); // Ignore key release events
-    }
-
-    // Handle global quit with Ctrl + C
-    if key_is_ctrl_c(&key) {
-        log::info!("Global quit: Ctrl+C detected in handle_key_event");
-        bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
         return Ok(());
     }
 
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         // Handle Ctrl + Esc for "force return without saving"
-        if let KeyCode::Esc = key.code {
+        if key.code == KeyCode::Esc {
             log::info!("⚠️ Ctrl+Esc detected: force return without saving");
             // This will be handled by page-specific handlers
             // The modifier flag will be checked in the page handlers
@@ -132,9 +126,9 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
     }
 
-    if !has_ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
+    if !has_ctrl && matches!(key.code, KeyCode::Char('q' | 'Q')) {
         log::info!("Global quit: q/Q detected (no modifiers)");
-        bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
+        bus.ui_tx.send(UiToCore::Quit)?;
         return Ok(());
     }
 
@@ -151,7 +145,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // Check if we have an active edit cursor - simplified check
                 !input_buffer.is_empty() || matches!(key.code, KeyCode::Enter)
             }
-            _ => false,
+                    _ => false,
         };
 
         // If in edit mode, handle character input globally
@@ -161,7 +155,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer.push(c);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
         }

@@ -10,12 +10,18 @@ use toml::value::{Table, Value as TomlValue};
 
 use semver::Version;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
-    // Build a TOML table as cache
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=build.rs");
+
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
+    let cargo_toml_path = Path::new(&manifest_dir).join("Cargo.toml");
+
     let mut out_tbl: Table = Table::new();
 
     // Try to read Cargo.toml package and dependencies
-    if let Ok(s) = fs::read_to_string("Cargo.toml") {
+    if let Ok(s) = fs::read_to_string(&cargo_toml_path) {
         if let Ok(v) = toml::from_str::<toml::Value>(&s) {
             if let Some(pkg) = v.get("package") {
                 if let Some(t) = pkg.as_table() {
@@ -45,12 +51,34 @@ fn main() -> Result<()> {
                     out_tbl.insert("package".to_string(), TomlValue::Table(pj));
                 }
             }
+            // Pre-parse workspace dependency versions for fallback resolution
+            let mut workspace_dep_versions: HashMap<String, String> = HashMap::new();
+            if let Some(ws_deps) = v.get("workspace").and_then(|ws| ws.get("dependencies")) {
+                if let Some(ws_table) = ws_deps.as_table() {
+                    for (k, val) in ws_table {
+                        let ws_ver = if val.is_str() {
+                            val.as_str().unwrap_or("").to_string()
+                        } else if val.is_table() {
+                            val.get("version")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .to_string()
+                        } else {
+                            String::new()
+                        };
+                        if !ws_ver.is_empty() {
+                            workspace_dep_versions.insert(k.clone(), ws_ver);
+                        }
+                    }
+                }
+            }
+
             if let Some(deps) = v.get("dependencies") {
                 if let Some(table) = deps.as_table() {
                     let mut darr = Vec::new();
                     // collect first-level dependency package names (handle rename via `package` key)
                     let mut direct_dep_names: Vec<String> = Vec::new();
-                    for (k, val) in table.iter().take(500) {
+                    for (k, val) in table {
                         // Skip local / path dependencies (they are workspace crates and not relevant for external license summary)
                         if val.is_table() && val.get("path").is_some() {
                             // skip this dependency entirely
@@ -62,26 +90,34 @@ fn main() -> Result<()> {
                         } else if val.is_table() {
                             val.get("version")
                                 .and_then(|x| x.as_str())
+                                .or_else(|| {
+                                    // Fallback to workspace dependency version if workspace = true
+                                    val.get("workspace")
+                                        .and_then(toml::Value::as_bool)
+                                        .filter(|w| *w)
+                                        .and_then(|_| {
+                                            workspace_dep_versions.get(k).map(String::as_str)
+                                        })
+                                })
                                 .unwrap_or("")
                                 .to_string()
                         } else {
-                            "".to_string()
+                            String::new()
                         };
                         // determine the actual package name used in registry (if renamed, `package` field holds real name)
                         let actual_name = if val.is_table() {
                             val.get("package")
                                 .and_then(|x| x.as_str())
-                                .map(|s| s.to_string())
-                                .unwrap_or(k.to_string())
+                                .map_or_else(|| k.clone(), std::string::ToString::to_string)
                         } else {
-                            k.to_string()
+                            k.clone()
                         };
                         direct_dep_names.push(actual_name.clone());
 
                         let mut dep_t = Table::new();
                         dep_t.insert("name".to_string(), TomlValue::String(actual_name.clone()));
                         if actual_name != k.as_str() {
-                            dep_t.insert("alias".to_string(), TomlValue::String(k.to_string()));
+                            dep_t.insert("alias".to_string(), TomlValue::String(k.clone()));
                         }
                         dep_t.insert("version".to_string(), TomlValue::String(ver));
                         darr.push(TomlValue::Table(dep_t));
@@ -114,7 +150,7 @@ fn main() -> Result<()> {
                     // build a set of direct dependency names from the earlier parsed Cargo.toml
                     let mut direct_set: HashSet<String> = HashSet::new();
                     if let Some(TomlValue::Array(arr)) = out_tbl.get("direct_dependency_names") {
-                        for v in arr.iter() {
+                        for v in arr {
                             if let TomlValue::String(s) = v {
                                 direct_set.insert(s.clone());
                             }
@@ -125,7 +161,7 @@ fn main() -> Result<()> {
 
                     // for each package name, keep only the entry with the highest semver version
                     let mut best_map: HashMap<String, (Version, String)> = HashMap::new();
-                    for p in pkgs.iter() {
+                    for p in pkgs {
                         if let Some(n) = p.get("name").and_then(|x| x.as_str()) {
                             // only include first-level direct dependencies
                             if !direct_set.contains(n) {
@@ -177,7 +213,7 @@ fn main() -> Result<()> {
                     }
 
                     let mut map_tbl = Table::new();
-                    for (name, (_ver, lic)) in best_map.into_iter() {
+                    for (name, (_ver, lic)) in best_map {
                         // only write a single key per package: `name` -> license
                         map_tbl.insert(name, TomlValue::String(lic));
                     }
@@ -198,8 +234,11 @@ fn main() -> Result<()> {
 
         // Also write to source tree when possible (for local development convenience)
         let _ = (|| -> std::io::Result<()> {
-            fs::create_dir_all("res")?;
-            fs::write("res/about_cache.toml", &content)?;
+            fs::create_dir_all(Path::new(&manifest_dir).join("res"))?;
+            fs::write(
+                Path::new(&manifest_dir).join("res/about_cache.toml"),
+                &content,
+            )?;
             Ok(())
         })();
     }
@@ -208,14 +247,11 @@ fn main() -> Result<()> {
 }
 
 fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
-    let pkg_tbl = match out_tbl.get_mut("package") {
-        Some(TomlValue::Table(tbl)) => tbl,
-        _ => {
-            out_tbl.insert("package".to_string(), TomlValue::Table(Table::new()));
-            match out_tbl.get_mut("package") {
-                Some(TomlValue::Table(tbl)) => tbl,
-                _ => return,
-            }
+    let pkg_tbl = if let Some(TomlValue::Table(tbl)) = out_tbl.get_mut("package") { tbl } else {
+        out_tbl.insert("package".to_string(), TomlValue::Table(Table::new()));
+        match out_tbl.get_mut("package") {
+            Some(TomlValue::Table(tbl)) => tbl,
+            _ => return,
         }
     };
 
@@ -236,7 +272,7 @@ fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
         .split(':')
         .map(str::trim)
         .filter(|entry| !entry.is_empty())
-        .map(|entry| entry.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     if !authors.is_empty() {
@@ -245,8 +281,7 @@ fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
                 .iter()
                 .filter_map(|value| value.as_str())
                 .all(|value| value.trim().is_empty()),
-            Some(_) => true,
-            None => true,
+            Some(_) | None => true,
         };
 
         if should_set {
@@ -266,8 +301,7 @@ fn set_string_field_if_missing(tbl: &mut Table, key: &str, value: &str) {
 
     let should_set = match tbl.get(key) {
         Some(TomlValue::String(existing)) => existing.trim().is_empty(),
-        Some(_) => true,
-        None => true,
+        Some(_) | None => true,
     };
 
     if should_set {

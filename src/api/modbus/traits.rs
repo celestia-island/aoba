@@ -13,30 +13,22 @@
 /// - Return `Err(other)` for actual errors (stops processing with error)
 ///
 /// The handler chain stops at the first `Ok`, or returns the last non-NotHandled error.
-use anyhow::{anyhow, Result};
-use std::sync::{Arc, Mutex};
+use anyhow::{anyhow, Error, Result};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 use crate::protocol::status::types::modbus::ModbusResponse;
 
 /// Error types for middleware-style handlers
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum HandlerError {
     /// This handler cannot process the request - pass to next handler in chain
+    #[error("Not handled: {0}")]
     NotHandled(String),
     /// Actual processing error - stop the chain
+    #[error("Processing error: {0}")]
     ProcessingError(String),
 }
-
-impl std::fmt::Display for HandlerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HandlerError::NotHandled(msg) => write!(f, "Not handled: {}", msg),
-            HandlerError::ProcessingError(msg) => write!(f, "Processing error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for HandlerError {}
 
 /// Trait for handling Modbus slave responses (middleware pattern)
 ///
@@ -59,6 +51,12 @@ pub trait ModbusSlaveHandler: Send + Sync {
     /// - `Ok(())` - Successfully handled, stop processing chain
     /// - `Err(HandlerError::NotHandled)` - Cannot handle, try next handler
     /// - `Err(other)` - Processing error, stop chain with error
+    ///
+    /// # Errors
+    ///
+    /// Implementations may return `HandlerError::NotHandled` to pass to the next
+    /// handler, `HandlerError::ProcessingError` for actual errors, or any other
+    /// error type.
     fn handle_response(&self, response: &ModbusResponse) -> Result<()>;
 
     /// Check if the handler should continue processing
@@ -86,6 +84,12 @@ pub trait ModbusDataSource: Send + Sync {
     /// - `Ok(None)` - No data from this source, try next
     /// - `Err(HandlerError::NotHandled)` - Cannot provide data, try next
     /// - `Err(other)` - Actual error, stop chain
+    ///
+    /// # Errors
+    ///
+    /// Implementations may return `HandlerError::NotHandled` to pass to the next
+    /// source, `HandlerError::ProcessingError` for actual errors, or any other
+    /// error type.
     fn next_data(&mut self) -> Result<Option<Vec<u16>>>;
 }
 
@@ -109,6 +113,12 @@ pub trait ModbusMasterHandler: Send + Sync {
     /// - `Ok(())` - Successfully handled, stop processing chain
     /// - `Err(HandlerError::NotHandled)` - Cannot handle, try next handler
     /// - `Err(other)` - Processing error, stop chain with error
+    ///
+    /// # Errors
+    ///
+    /// Implementations may return `HandlerError::NotHandled` to pass to the next
+    /// handler, `HandlerError::ProcessingError` for actual errors, or any other
+    /// error type.
     fn handle_response(&self, response: &ModbusResponse) -> Result<()>;
 
     /// Check if the handler should continue polling
@@ -170,7 +180,12 @@ impl ModbusMasterHandler for LoggingHandler {
 /// # Returns
 ///
 /// - `Ok(())` if any handler intercepted (returned Ok)
-/// - `Err` if all handlers passed through (NotHandled) or an error occurred
+/// - `Err` if all handlers passed through (`NotHandled`) or an error occurred
+///
+/// # Errors
+///
+/// Returns an error if all handlers pass through or if any handler returns a
+/// processing error.
 pub fn execute_slave_handler_chain(
     handlers: &[Arc<dyn ModbusSlaveHandler>],
     response: &ModbusResponse,
@@ -179,7 +194,7 @@ pub fn execute_slave_handler_chain(
         return Err(anyhow!("No handlers configured"));
     }
 
-    let mut last_error: Option<anyhow::Error> = None;
+    let mut last_error: Option<Error> = None;
 
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {
@@ -193,25 +208,28 @@ pub fn execute_slave_handler_chain(
 
                             // Continue to next handler
                         }
-                        HandlerError::ProcessingError(msg) => {
-                            log::error!("Handler {} processing error: {}", i, msg);
-                            return Err(anyhow!(msg.clone()));
+                        HandlerError::ProcessingError(_) => {
+                            log::error!("Handler {i} error: {e}");
+                            return Err(e);
                         }
                     }
                 } else {
-                    // Other error types are treated as processing errors
-                    log::error!("Handler {} error: {}", i, e);
+                    log::error!("Handler {i} error: {e}");
                     last_error = Some(e);
                 }
             }
         }
     }
 
-    // All handlers passed through
     Err(last_error.unwrap_or_else(|| anyhow!("All handlers passed through (NotHandled)")))
 }
 
 /// Helper function to execute a middleware chain for master handlers
+///
+/// # Errors
+///
+/// Returns an error if all handlers pass through or if any handler returns a
+/// processing error.
 pub fn execute_master_handler_chain(
     handlers: &[Arc<dyn ModbusMasterHandler>],
     response: &ModbusResponse,
@@ -220,7 +238,7 @@ pub fn execute_master_handler_chain(
         return Err(anyhow!("No handlers configured"));
     }
 
-    let mut last_error: Option<anyhow::Error> = None;
+    let mut last_error: Option<Error> = None;
 
     for (i, handler) in handlers.iter().enumerate() {
         match handler.handle_response(response) {
@@ -230,17 +248,17 @@ pub fn execute_master_handler_chain(
             Err(e) => {
                 if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
                     match handler_err {
-                        HandlerError::NotHandled(_msg) => {
+                        HandlerError::NotHandled(_) => {
 
                             // Continue to next handler
                         }
-                        HandlerError::ProcessingError(msg) => {
-                            log::error!("Handler {} processing error: {}", i, msg);
-                            return Err(anyhow!(msg.clone()));
+                        HandlerError::ProcessingError(_) => {
+                            log::error!("Handler {i} error: {e}");
+                            return Err(e);
                         }
                     }
                 } else {
-                    log::error!("Handler {} error: {}", i, e);
+                    log::error!("Handler {i} error: {e}");
                     last_error = Some(e);
                 }
             }
@@ -255,8 +273,12 @@ pub fn execute_master_handler_chain(
 /// # Returns
 ///
 /// - `Ok(Some(data))` if any source provided data
-/// - `Ok(None)` if all sources returned None or NotHandled
+/// - `Ok(None)` if all sources returned None or `NotHandled`
 /// - `Err` if a processing error occurred
+///
+/// # Errors
+///
+/// Returns an error if any data source returns a processing error.
 pub fn execute_data_source_chain(
     sources: &mut [Arc<Mutex<dyn ModbusDataSource>>],
 ) -> Result<Option<Vec<u16>>> {
@@ -265,7 +287,7 @@ pub fn execute_data_source_chain(
     }
 
     for (i, source) in sources.iter_mut().enumerate() {
-        let mut src = source.lock().unwrap();
+        let mut src = source.lock();
         match src.next_data() {
             Ok(Some(data)) => {
                 return Ok(Some(data)); // First data source intercepts
@@ -281,13 +303,13 @@ pub fn execute_data_source_chain(
 
                             // Continue to next source
                         }
-                        HandlerError::ProcessingError(msg) => {
-                            log::error!("Data source {} processing error: {}", i, msg);
-                            return Err(anyhow!(msg.clone()));
+                        HandlerError::ProcessingError(_) => {
+                            log::error!("Data source {i} error: {e}");
+                            return Err(e);
                         }
                     }
                 } else {
-                    log::error!("Data source {} error: {}", i, e);
+                    log::error!("Data source {i} error: {e}");
                     return Err(e);
                 }
             }

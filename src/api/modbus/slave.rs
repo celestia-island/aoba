@@ -1,8 +1,6 @@
 use anyhow::Result;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 
 use super::{
     core::{slave_process_one_request, SlaveRequestParams},
@@ -11,7 +9,7 @@ use super::{
 };
 use crate::{api::utils::open_serial_port, protocol::status::types::modbus::ModbusResponse};
 
-/// Parameters for creating a ModbusSlaveIterator
+/// Parameters for creating a `ModbusSlaveIterator`
 pub struct SlaveIteratorParams {
     pub port_name: String,
     pub baud_rate: u32,
@@ -38,6 +36,10 @@ impl ModbusSlave {
     /// Create and start a new Modbus slave listener (new Builder API)
     ///
     /// Accepts hooks as a vector for middleware pattern.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the slave loop fails to start.
     pub fn new(
         config: crate::api::modbus::ModbusPortConfig,
         hooks: Vec<Arc<dyn ModbusHook>>,
@@ -65,17 +67,20 @@ impl ModbusSlave {
     }
 
     /// Try to receive a response without blocking (Iterator-like interface)
+    #[must_use]
     pub fn try_recv(&self) -> Option<ModbusResponse> {
         self.receiver.try_recv().ok()
     }
 
     /// Receive a response with timeout
+    #[must_use]
     pub fn recv_timeout(&self, timeout: Duration) -> Option<ModbusResponse> {
         self.receiver.recv_timeout(timeout).ok()
     }
 
     /// Get the underlying receiver for advanced usage
-    pub fn receiver(&self) -> &flume::Receiver<ModbusResponse> {
+    #[must_use]
+    pub const fn receiver(&self) -> &flume::Receiver<ModbusResponse> {
         &self.receiver
     }
 }
@@ -125,6 +130,11 @@ impl ModbusSlaveIterator {
     /// * `station_id` - Modbus station ID
     /// * `register_address` - Starting register address
     /// * `register_length` - Number of registers
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened or if storage
+    /// initialization fails.
     pub fn new(
         port_name: &str,
         baud_rate: u32,
@@ -145,6 +155,11 @@ impl ModbusSlaveIterator {
     }
 
     /// Create a new synchronous slave iterator with custom register mode
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened or if storage
+    /// initialization fails.
     pub fn with_mode(
         port_name: &str,
         baud_rate: u32,
@@ -165,8 +180,13 @@ impl ModbusSlaveIterator {
         })
     }
 
-    /// Parameters for creating a ModbusSlaveIterator
+    /// Parameters for creating a `ModbusSlaveIterator`
     /// Create a new synchronous slave iterator with custom register mode and hooks
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened or if storage
+    /// initialization fails.
     pub fn with_mode_and_hooks(params: SlaveIteratorParams) -> Result<Self> {
         let SlaveIteratorParams {
             port_name,
@@ -191,7 +211,7 @@ impl ModbusSlaveIterator {
         // Pre-fill storage with mock data (optional, can be customized later)
         {
             use rmodbus::server::context::ModbusContext;
-            let mut storage_lock = storage.lock().unwrap();
+            let mut storage_lock = storage.lock();
 
             for i in 0..register_length {
                 let addr = register_address + i;
@@ -214,12 +234,12 @@ impl ModbusSlaveIterator {
             register_address,
             register_length,
             register_mode,
-            port_name: port_name.to_string(),
+            port_name: port_name.clone(),
             hooks,
             residual_buffer: Arc::new(Mutex::new(Vec::new())),
             error_recovery_delay_ms,
             consecutive_parse_failures: Arc::new(Mutex::new(0)),
-            timeout_ms: Duration::from_secs(1).as_millis() as u64, // Default 1 second timeout
+            timeout_ms: u64::try_from(Duration::from_secs(1).as_millis()).unwrap_or(u64::MAX), // Default 1 second timeout
         })
     }
 
@@ -232,6 +252,10 @@ impl ModbusSlaveIterator {
     /// - Fatal errors (e.g., port closed): returned as `Err`
     ///
     /// This ensures the iterator doesn't crash on malformed packets.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only on fatal errors (e.g., port closed).
     pub fn try_process_one_request(&self) -> Result<ModbusResponse> {
         loop {
             let params = SlaveRequestParams {
@@ -249,7 +273,7 @@ impl ModbusSlaveIterator {
                 Ok(response) => {
                     // Successfully received and parsed request, reset consecutive failure counter
                     {
-                        let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                        let mut counter = self.consecutive_parse_failures.lock();
                         if *counter > 0 {
                             *counter = 0;
                         }
@@ -271,23 +295,22 @@ impl ModbusSlaveIterator {
                     // Special handling: PARSE_FAILED indicates need to detect consecutive failures
                     if err_msg.contains("parse_failed") {
                         // Increment consecutive failure counter
-                        let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                        let mut counter = self.consecutive_parse_failures.lock();
                         *counter += 1;
                         let current_count = *counter;
                         drop(counter); // Release the lock
 
                         log::warn!(
-                            "⚠️  Frame parsing failed (consecutive failures: {})",
-                            current_count
+                            "⚠️  Frame parsing failed (consecutive failures: {current_count})"
                         );
 
                         // Consecutive 2 failures trigger forced recovery
                         if current_count >= 2 {
-                            log::error!("🚨 Consecutive parse failures detected ({}), triggering FORCED RECOVERY", current_count);
+                            log::error!("🚨 Consecutive parse failures detected ({current_count}), triggering FORCED RECOVERY");
 
                             // 1. Clear residual buffer
                             {
-                                let mut residual = self.residual_buffer.lock().unwrap();
+                                let mut residual = self.residual_buffer.lock();
                                 if !residual.is_empty() {
                                     log::warn!(
                                         "🗑️  FORCED: Clearing {} residual bytes",
@@ -303,7 +326,7 @@ impl ModbusSlaveIterator {
 
                             // 3. Reset counter, start completely from scratch
                             {
-                                let mut counter = self.consecutive_parse_failures.lock().unwrap();
+                                let mut counter = self.consecutive_parse_failures.lock();
                                 *counter = 0;
                             }
 
@@ -322,19 +345,19 @@ impl ModbusSlaveIterator {
                         || err_msg.contains("malformed")
                         || err_msg.contains("incomplete")
                     {
-                        log::warn!("⚠️  Modbus protocol error (ignoring): {}", e);
+                        log::warn!("⚠️  Modbus protocol error (ignoring): {e}");
                         continue;
                     }
 
                     // Fatal errors (port closed, permission denied, etc.)
-                    log::error!("❌ Fatal serial port error: {}", e);
+                    log::error!("❌ Fatal serial port error: {e}");
                     return Err(e);
                 }
             }
         }
     }
 
-    /// Process one request without error recovery (for TryIterator)
+    /// Process one request without error recovery (for `TryIterator`)
     ///
     /// This function returns ALL errors (including parse errors) to the caller.
     /// Unlike `try_process_one_request()`, it does NOT auto-retry on parse errors.
@@ -389,15 +412,19 @@ impl ModbusSlaveIterator {
     /// Update register values in storage
     ///
     /// This allows updating the mock data that will be sent in responses
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if setting a register value in storage fails.
     pub fn update_registers(&mut self, values: &[u16]) -> Result<()> {
         use rmodbus::server::context::ModbusContext;
-        let mut storage_lock = self.storage.lock().unwrap();
+        let mut storage_lock = self.storage.lock();
 
         for (i, &value) in values.iter().enumerate() {
             if i >= self.register_length as usize {
                 break;
             }
-            let addr = self.register_address + i as u16;
+            let addr = self.register_address + u16::try_from(i).unwrap_or(u16::MAX);
 
             match self.register_mode {
                 RegisterMode::Holding => storage_lock.set_holding(addr, value)?,
@@ -420,6 +447,10 @@ impl ModbusSlaveIterator {
     /// * `start_address` - Starting coil address (e.g., 0x0000)
     /// * `coil_states` - Boolean array where true = coil on, false = coil off
     ///
+    /// # Errors
+    ///
+    /// Returns an error if setting a coil value in storage fails.
+    ///
     /// # Example
     ///
     /// ```no_run
@@ -438,12 +469,13 @@ impl ModbusSlaveIterator {
     /// ```
     pub fn init_coils(&mut self, start_address: u16, coil_states: &[bool]) -> Result<()> {
         use rmodbus::server::context::ModbusContext;
-        let mut storage_lock = self.storage.lock().unwrap();
+        let mut storage_lock = self.storage.lock();
 
         for (i, &state) in coil_states.iter().enumerate() {
-            let addr = start_address + i as u16;
+            let addr = start_address + u16::try_from(i).unwrap_or(u16::MAX);
             storage_lock.set_coil(addr, state)?;
         }
+        drop(storage_lock);
 
         Ok(())
     }
@@ -452,6 +484,7 @@ impl ModbusSlaveIterator {
     ///
     /// This allows manual manipulation of the Modbus storage including
     /// holdings, inputs, coils, and discrete inputs.
+    #[must_use]
     pub fn storage(&self) -> Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>> {
         Arc::clone(&self.storage)
     }
@@ -474,7 +507,7 @@ impl Iterator for ModbusSlaveIterator {
         match self.try_process_one_request() {
             Ok(response) => Some(response),
             Err(e) => {
-                log::error!("❌ Fatal error, terminating iterator: {}", e);
+                log::error!("❌ Fatal error, terminating iterator: {e}");
                 // Only fatal errors terminate the iterator
                 None
             }
@@ -507,7 +540,8 @@ impl ModbusSlaveIterator {
     /// }
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn try_iter(self) -> TryIterator {
+    #[must_use]
+    pub const fn try_iter(self) -> TryIterator {
         TryIterator { inner: self }
     }
 }
@@ -541,6 +575,11 @@ impl Iterator for TryIterator {
 ///
 /// This function is independent of communication channels.
 /// It calls the handler's methods to process responses.
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during the slave loop.
 pub async fn run_slave_loop_with_handler(
     config: ModbusPortConfig,
     hooks: Option<Arc<dyn ModbusHook>>,
@@ -572,7 +611,7 @@ pub async fn run_slave_loop_with_handler(
 
         if let Some(h) = &hooks {
             if let Err(e) = h.on_before_request(&config.port_name) {
-                log::warn!("Hook on_before_request failed: {}", e);
+                log::warn!("Hook on_before_request failed: {e}");
             }
         }
 
@@ -587,13 +626,13 @@ pub async fn run_slave_loop_with_handler(
             Ok(response) => {
                 if let Some(h) = &hooks {
                     if let Err(e) = h.on_after_response(&config.port_name, &response) {
-                        log::warn!("Hook on_after_response failed: {}", e);
+                        log::warn!("Hook on_after_response failed: {e}");
                     }
                 }
 
                 // Use handler to process response
                 if let Err(e) = handler.handle_response(&response) {
-                    log::error!("Handler failed to process response: {}", e);
+                    log::error!("Handler failed to process response: {e}");
                     if let Some(h) = &hooks {
                         h.on_error(&config.port_name, &e);
                     }
@@ -631,7 +670,7 @@ async fn run_slave_loop(
         poll_interval_ms: _,        // Slave does not use this field (Master only)
     } = config;
 
-    log::info!("Starting slave loop (middleware) for {}", port_name);
+    log::info!("Starting slave loop (middleware) for {port_name}");
 
     // Create our own owned hooks vector to solve lifetime issues
 
@@ -650,7 +689,7 @@ async fn run_slave_loop(
         // Check for external stop request (non-blocking)
         if let Some(ctrl) = &control {
             if ctrl.try_recv().is_ok() {
-                log::info!("Stop requested for {}", port_name);
+                log::info!("Stop requested for {port_name}");
                 break;
             }
         }
@@ -658,7 +697,7 @@ async fn run_slave_loop(
         // Execute hook chain: on_before_request
         for hook in &hooks {
             if let Err(e) = hook.on_before_request(&port_name) {
-                log::warn!("Hook on_before_request failed: {}", e);
+                log::warn!("Hook on_before_request failed: {e}");
             }
         }
 
@@ -670,7 +709,7 @@ async fn run_slave_loop(
             register_length,
             reg_mode: register_mode,
             storage: storage.clone(),
-            hooks: &[], // Temporarily use empty hooks array
+            hooks: &hooks,
             port_name: port_name.clone(),
             residual_buffer: residual_buffer.clone(),
         };
@@ -679,7 +718,7 @@ async fn run_slave_loop(
                 // Execute hook chain: on_after_response
                 for hook in &hooks {
                     if let Err(e) = hook.on_after_response(&port_name, &response) {
-                        log::warn!("Hook on_after_response failed: {}", e);
+                        log::warn!("Hook on_after_response failed: {e}");
                     }
                 }
 
@@ -690,7 +729,7 @@ async fn run_slave_loop(
                 }
             }
             Err(err) => {
-                log::warn!("Error processing request on {}: {}", port_name, err);
+                log::warn!("Error processing request on {port_name}: {err}");
                 // Execute hook chain: on_error
                 for hook in &hooks {
                     hook.on_error(&port_name, &err);
