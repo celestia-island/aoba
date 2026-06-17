@@ -186,44 +186,50 @@ pub(crate) fn append_modbus_log(
     let mut role = StationMode::Master;
     let mut role_confident = false;
     let status_lookup = crate::tui::status::read_status(|status| {
-        status.ports.map.get(port_name).map_or(Ok(None), |port| match &port.config {
-            PortConfig::Modbus { mode, stations, .. } => {
-                let role = if mode.is_master() {
-                    StationMode::Master
-                } else {
-                    StationMode::Slave
-                };
+        status
+            .ports
+            .map
+            .get(port_name)
+            .map_or(Ok(None), |port| match &port.config {
+                PortConfig::Modbus { mode, stations, .. } => {
+                    let role = if mode.is_master() {
+                        StationMode::Master
+                    } else {
+                        StationMode::Slave
+                    };
 
-                let matched = if let (Some(sid), Some(reg_mode)) = (station_id, register_mode) {
-                    let mut candidate: Option<(usize, u16, u16)> = None;
+                    let matched = if let (Some(sid), Some(reg_mode)) = (station_id, register_mode) {
+                        let mut candidate: Option<(usize, u16, u16)> = None;
 
-                    for (idx, item) in stations.iter().enumerate() {
-                        if item.station_id != sid || item.register_mode != reg_mode {
-                            continue;
-                        }
+                        for (idx, item) in stations.iter().enumerate() {
+                            if item.station_id != sid || item.register_mode != reg_mode {
+                                continue;
+                            }
 
-                        if let Some(start) = register_start {
-                            if item.register_address == start {
+                            if let Some(start) = register_start {
+                                if item.register_address == start {
+                                    candidate =
+                                        Some((idx, item.register_address, item.register_length));
+                                    break;
+                                }
+                            }
+
+                            if candidate.is_none() {
                                 candidate =
                                     Some((idx, item.register_address, item.register_length));
-                                break;
                             }
                         }
 
-                        if candidate.is_none() {
-                            candidate =
-                                Some((idx, item.register_address, item.register_length));
-                        }
-                    }
+                        candidate.map(|(idx, start, length)| {
+                            (u16::try_from(idx).unwrap_or(u16::MAX) + 1, start, length)
+                        })
+                    } else {
+                        None
+                    };
 
-                    candidate.map(|(idx, start, length)| (u16::try_from(idx).unwrap_or(u16::MAX) + 1, start, length))
-                } else {
-                    None
-                };
-
-                Ok(Some((role, matched)))
-            }
-        })
+                    Ok(Some((role, matched)))
+                }
+            })
     });
 
     match status_lookup {

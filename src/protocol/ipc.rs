@@ -553,7 +553,9 @@ impl IpcCommandListener {
 
     /// Try to receive a command message (non-blocking if connection exists)
     pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
-        self.connection.as_mut().map_or(Ok(None), IpcCommandConnection::try_recv)
+        self.connection
+            .as_mut()
+            .map_or(Ok(None), IpcCommandConnection::try_recv)
     }
 }
 

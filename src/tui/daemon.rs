@@ -237,9 +237,7 @@ fn load_config_from_file(path: &std::path::Path) -> Result<HashMap<String, PortC
                                     url: value.unwrap_or_default(),
                                 }),
                                 "http" => Some(ModbusMasterDataSource::HttpServer {
-                                    port: value
-                                        .and_then(|v| v.parse::<u16>().ok())
-                                        .unwrap_or(8080),
+                                    port: value.and_then(|v| v.parse::<u16>().ok()).unwrap_or(8080),
                                 }),
                                 "ipc" => Some(ModbusMasterDataSource::IpcPipe {
                                     path: value.unwrap_or_default(),

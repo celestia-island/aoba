@@ -84,7 +84,11 @@ const SERIAL_PORT_OPEN_RETRIES: usize = 3;
 
 fn parse_request_range(
     assembling: &[u8],
-) -> Option<(u16, u16, crate::protocol::status::types::modbus::RegisterMode)> {
+) -> Option<(
+    u16,
+    u16,
+    crate::protocol::status::types::modbus::RegisterMode,
+)> {
     use crate::protocol::status::types::modbus::RegisterMode;
     if assembling.len() < 8 {
         return None;
@@ -236,7 +240,11 @@ async fn handle_stations_post(
             stations_snapshot.clear();
             let mut ok = true;
             for station in &stations {
-                if let Ok(sc) = crate::cli::modbus::build_station_snapshot_from_storage(storage, station) { stations_snapshot.push(sc) } else {
+                if let Ok(sc) =
+                    crate::cli::modbus::build_station_snapshot_from_storage(storage, station)
+                {
+                    stations_snapshot.push(sc)
+                } else {
                     ok = false;
                     break;
                 }
@@ -406,28 +414,32 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
                         // Update holding registers
                         for range in &station.map.holding {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                let addr =
+                                    range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_holding(addr, val)?;
                             }
                         }
                         // Update coils
                         for range in &station.map.coils {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                let addr =
+                                    range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_coil(addr, val != 0)?;
                             }
                         }
                         // Update discrete inputs
                         for range in &station.map.discrete_inputs {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                let addr =
+                                    range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_discrete(addr, val != 0)?;
                             }
                         }
                         // Update input registers
                         for range in &station.map.input {
                             for (i, &val) in range.initial_values.iter().enumerate() {
-                                let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                let addr =
+                                    range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                 context.set_input(addr, val)?;
                             }
                         }
@@ -497,14 +509,8 @@ pub async fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<(
             }
             ReadAction::FrameReady => {
                 let request = assembling.clone();
-                let (response, _) = respond_to_request(
-                    &port_arc,
-                    &request,
-                    station_id,
-                    &storage,
-                    &mut None,
-                    "",
-                )?;
+                let (response, _) =
+                    respond_to_request(&port_arc, &request, station_id, &storage, &mut None, "")?;
                 let json = serde_json::to_string(&response)?;
                 println!("{json}");
                 drop(port_arc);
@@ -612,7 +618,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                     port_name: port.to_string(),
                     timestamp: None,
-                }) {
+                })
+            {
                 log::warn!("IPC send failed: {e}");
             }
             log::info!("IPC: Sent PortOpened message for virtual port {port}");
@@ -646,7 +653,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                 .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                     port_name: port.to_string(),
                     timestamp: None,
-                }) {
+                })
+            {
                 log::warn!("IPC send failed: {e}");
             }
             log::info!("IPC: Sent PortOpened message for physical port {port}");
@@ -980,7 +988,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                                     allow_zero_writes
                                 );
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                    let addr =
+                                        range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_holding(addr, val) {
@@ -999,7 +1008,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             // Update coils
                             for range in &station.map.coils {
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                    let addr =
+                                        range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_coil(addr, val != 0) {
@@ -1020,7 +1030,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             // Update discrete inputs
                             for range in &station.map.discrete_inputs {
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                    let addr =
+                                        range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_discrete(addr, val != 0) {
@@ -1039,7 +1050,8 @@ pub async fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> 
                             // Update input registers
                             for range in &station.map.input {
                                 for (i, &val) in range.initial_values.iter().enumerate() {
-                                    let addr = range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
+                                    let addr =
+                                        range.address_start + u16::try_from(i).unwrap_or(u16::MAX);
                                     // Apply based on update reason
                                     if allow_zero_writes || val != 0 {
                                         if let Err(e) = context.set_input(addr, val) {
@@ -1274,25 +1286,33 @@ fn respond_to_request(
     #[allow(unreachable_patterns)]
     let response = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => {
-            if let Ok(Some(resp)) = build_slave_holdings_response(&mut frame, &mut context) { resp } else {
+            if let Ok(Some(resp)) = build_slave_holdings_response(&mut frame, &mut context) {
+                resp
+            } else {
                 log::error!("respond_to_request: Failed to build holdings response");
                 return Err(anyhow!("Failed to build holdings response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetInputs => {
-            if let Ok(Some(resp)) = build_slave_inputs_response(&mut frame, &mut context) { resp } else {
+            if let Ok(Some(resp)) = build_slave_inputs_response(&mut frame, &mut context) {
+                resp
+            } else {
                 log::error!("respond_to_request: Failed to build input registers response");
                 return Err(anyhow!("Failed to build input registers response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetCoils => {
-            if let Ok(Some(resp)) = build_slave_coils_response(&mut frame, &mut context) { resp } else {
+            if let Ok(Some(resp)) = build_slave_coils_response(&mut frame, &mut context) {
+                resp
+            } else {
                 log::error!("respond_to_request: Failed to build coils response");
                 return Err(anyhow!("Failed to build coils response"));
             }
         }
         rmodbus::consts::ModbusFunction::GetDiscretes => {
-            if let Ok(Some(resp)) = build_slave_discrete_inputs_response(&mut frame, &mut context) { resp } else {
+            if let Ok(Some(resp)) = build_slave_discrete_inputs_response(&mut frame, &mut context) {
+                resp
+            } else {
                 log::error!("respond_to_request: Failed to build discrete inputs response");
                 return Err(anyhow!("Failed to build discrete inputs response"));
             }
@@ -1569,7 +1589,7 @@ fn respond_to_request(
         rmodbus::consts::ModbusFunction::GetCoils => ResponseRegisterMode::Coils,
         rmodbus::consts::ModbusFunction::GetDiscretes => ResponseRegisterMode::DiscreteInputs,
         rmodbus::consts::ModbusFunction::GetInputs => ResponseRegisterMode::Input,
-            other => ResponseRegisterMode::Custom {
+        other => ResponseRegisterMode::Custom {
             function_code: other as u8,
         },
     };
@@ -1668,7 +1688,8 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     for notification in connection.iter() {
                         match notification {
                             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
-                                let payload = String::from_utf8_lossy(&publish.payload).into_owned();
+                                let payload =
+                                    String::from_utf8_lossy(&publish.payload).into_owned();
 
                                 // Send to async loop
                                 if mqtt_tx.send(payload).is_err() {
