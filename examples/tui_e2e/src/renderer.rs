@@ -37,13 +37,9 @@ pub async fn render_tui_via_ipc(sender: &mut IpcSender) -> Result<(String, u16, 
 
 /// Render the TUI to a TestBackend with specified dimensions
 ///
-/// This function ensures the TUI global state is initialized (if not already)
-/// and renders the current page to a TestBackend, returning the rendered buffer as a string.
-///
-/// **Current Limitation**: Mock state synchronization is not yet implemented.
-/// The renderer will render the default TUI state. For workflows that need specific state,
-/// mock state manipulation must be implemented through direct TUI status writes using
-/// `_main::tui::status::write_status()`.
+/// This function ensures the TUI global state is initialized (if not already),
+/// synchronizes the mock JSON state into the live status tree, and renders the
+/// current page to a TestBackend, returning the rendered buffer as a string.
 ///
 /// # Arguments
 /// * `width` - Terminal width in characters

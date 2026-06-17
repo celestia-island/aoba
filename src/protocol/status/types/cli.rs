@@ -3,7 +3,7 @@
 /// These types originated in `src/cli/status/serializable.rs` but are now
 /// part of the shared protocol layer so both CLI and test utilities can
 /// reuse them without duplicating definitions.
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error, Result};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 
@@ -40,21 +40,19 @@ pub enum OutputSink {
 }
 
 impl std::str::FromStr for OutputSink {
-    type Err = anyhow::Error;
+    type Err = Error;
 
+    #[allow(clippy::option_if_let_else)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(path) = s.strip_prefix("file:") {
-            Ok(OutputSink::File {
+            Ok(Self::File {
                 path: path.to_string(),
             })
         } else if let Some(name) = s.strip_prefix("pipe:") {
-            Ok(OutputSink::Pipe {
+            Ok(Self::Pipe {
                 path: name.to_string(),
             })
         } else {
-            // Default to stdout if not specified or invalid?
-            // The original code returned error for invalid format, but handled "stdout" implicitly or via Option.
-            // Here we implement FromStr for the explicit formats.
             Err(anyhow!(
                 "Invalid output format. Use file:<path> or pipe:<name>"
             ))
@@ -67,11 +65,11 @@ impl OutputSink {
     pub fn write(&self, data: &str) -> Result<()> {
         use std::io::Write;
         match self {
-            OutputSink::Stdout => {
+            Self::Stdout => {
                 println!("{data}");
                 Ok(())
             }
-            OutputSink::File { path } => {
+            Self::File { path } => {
                 let mut file = std::fs::OpenOptions::new()
                     .create(true)
                     .append(true)
@@ -79,17 +77,69 @@ impl OutputSink {
                 writeln!(file, "{data}")?;
                 Ok(())
             }
-            OutputSink::Pipe { path } => {
+            Self::Pipe { path } => {
                 let mut file = std::fs::OpenOptions::new().write(true).open(path)?;
                 writeln!(file, "{data}")?;
                 Ok(())
             }
         }
     }
+
+    /// Create a buffered writer that caches the file handle for repeated writes
+    pub fn writer(&self) -> Result<OutputWriter> {
+        match self {
+            Self::Stdout => Ok(OutputWriter {
+                inner: OutputWriterInner::Stdout,
+            }),
+            Self::File { path } => {
+                let file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)?;
+                Ok(OutputWriter {
+                    inner: OutputWriterInner::File(std::io::BufWriter::new(file)),
+                })
+            }
+            Self::Pipe { path } => {
+                let file = std::fs::OpenOptions::new().write(true).open(path)?;
+                Ok(OutputWriter {
+                    inner: OutputWriterInner::Pipe(std::io::BufWriter::new(file)),
+                })
+            }
+        }
+    }
+}
+
+/// Buffered output writer that caches the file handle for repeated writes
+pub enum OutputWriterInner {
+    Stdout,
+    File(std::io::BufWriter<std::fs::File>),
+    Pipe(std::io::BufWriter<std::fs::File>),
+}
+
+pub struct OutputWriter {
+    inner: OutputWriterInner,
+}
+
+impl OutputWriter {
+    pub fn write(&mut self, data: &str) -> Result<()> {
+        use std::io::Write;
+        match &mut self.inner {
+            OutputWriterInner::Stdout => {
+                println!("{data}");
+            }
+            OutputWriterInner::File(writer) | OutputWriterInner::Pipe(writer) => {
+                writeln!(writer, "{data}")?;
+                writer.flush()?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl CliStatus {
     /// Create a new CLI status for slave listen mode
+    #[must_use]
     pub fn new_slave_listen(
         port_name: String,
         station_id: u8,
@@ -109,6 +159,7 @@ impl CliStatus {
     }
 
     /// Create a new CLI status for slave poll mode
+    #[must_use]
     pub fn new_slave_poll(
         port_name: String,
         station_id: u8,
@@ -128,6 +179,7 @@ impl CliStatus {
     }
 
     /// Create a new CLI status for master provide mode
+    #[must_use]
     pub fn new_master_provide(
         port_name: String,
         station_id: u8,

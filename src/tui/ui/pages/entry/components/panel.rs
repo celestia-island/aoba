@@ -49,11 +49,11 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
                     Ok(lines)
                 }
                 None => {
-                    if !app.ports.order.is_empty() {
+                    if app.ports.order.is_empty() {
+                        Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
+                    } else {
                         let lines = render_port_basic_info_lines(0);
                         Ok(lines)
-                    } else {
-                        Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
                     }
                 }
             }
@@ -130,7 +130,7 @@ fn get_refresh_content() -> Vec<Line<'static>> {
 }
 
 /// Render a simplified, local-only port basic info block for the entry page.
-/// This intentionally does not depend on the full ConfigPanel renderer to
+/// This intentionally does not depend on the full `ConfigPanel` renderer to
 /// avoid cursor/selection coupling issues. It shows enabled state and common
 /// serial parameters in a compact layout.
 fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
@@ -144,13 +144,11 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     .unwrap_or(None);
 
     if let Some(port) = port_opt {
-        let _pn = port.port_name.clone();
-        let st = port.state.clone();
         let cfg = &port.serial_config;
 
         let mut lines: Vec<Line<'static>> = Vec::new();
 
-        let enabled = matches!(st, types::port::PortState::OccupiedByThis);
+        let enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
         let val_enabled = lang().protocol.common.port_enabled.clone();
         let val_disabled = lang().protocol.common.port_disabled.clone();
         let enable_text = if enabled { val_enabled } else { val_disabled };
@@ -229,8 +227,5 @@ fn get_about_preview_content() -> Vec<Line<'static>> {
         }
     };
 
-    match render_about_page_manifest_lines(snapshot) {
-        Ok(v) => v,
-        Err(_) => vec![Line::from("About (failed to render)")],
-    }
+    render_about_page_manifest_lines(&snapshot).unwrap_or_else(|_| vec![Line::from("About (failed to render)")])
 }

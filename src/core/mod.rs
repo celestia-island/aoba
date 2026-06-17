@@ -9,7 +9,7 @@
 /// - Configuration persistence
 /// - Helper utilities
 ///
-/// This separation allows multiple UI frontends (TUI, GUI, WebUI) to share
+/// This separation allows multiple UI frontends (TUI, GUI, `WebUI`) to share
 /// the same core functionality.
 pub mod bus;
 pub mod cli_data;

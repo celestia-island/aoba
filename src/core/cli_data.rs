@@ -53,6 +53,7 @@ pub fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -
     Ok(())
 }
 
+#[must_use]
 pub fn station_values_for_cli(station: &ModbusRegisterItem) -> Vec<u16> {
     let target_len = station.register_length as usize;
     if target_len == 0 {
@@ -64,7 +65,8 @@ pub fn station_values_for_cli(station: &ModbusRegisterItem) -> Vec<u16> {
     values
 }
 
-pub fn register_mode_to_cli_arg(mode: RegisterMode) -> &'static str {
+#[must_use]
+pub const fn register_mode_to_cli_arg(mode: RegisterMode) -> &'static str {
     match mode {
         RegisterMode::Coils => "coils",
         RegisterMode::DiscreteInputs => "discrete",
@@ -73,7 +75,8 @@ pub fn register_mode_to_cli_arg(mode: RegisterMode) -> &'static str {
     }
 }
 
-pub fn cli_mode_to_port_mode(
+#[must_use]
+pub const fn cli_mode_to_port_mode(
     mode: &crate::cli::status::CliMode,
 ) -> crate::protocol::status::types::port::PortSubprocessMode {
     use crate::protocol::status::types::port::PortSubprocessMode;
@@ -177,5 +180,5 @@ pub fn initialize_cli_data_source(
         total_length
     );
 
-    Ok((path, station_id as u16, min_addr, total_length))
+    Ok((path, u16::from(station_id), min_addr, total_length))
 }

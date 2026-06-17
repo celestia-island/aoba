@@ -180,6 +180,7 @@ declare -a TUI_RENDERING_MODULES=(
     "data_source_http_server"
     "data_source_ipc_pipe"
     "data_source_mqtt_client"
+    "data_source_port_forwarding"
     "data_source_virtual_port_slave"
     "data_source_virtual_port_ipc_master"
     "data_source_virtual_port_http_master"
