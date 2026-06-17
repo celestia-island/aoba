@@ -15,7 +15,7 @@ env:
 jobs:
   build:
     name: Build
-    runs-on: ${{ startsWith(matrix.platform.os, 'windows') && matrix.platform.os || startsWith(matrix.platform.os, 'macos') && matrix.platform.os || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       matrix:
         platform:
@@ -45,7 +45,7 @@ jobs:
             kind: cross
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Install openssl on macOS
         if: matrix.platform.os == 'macos-latest' || matrix.platform.os == 'macos-13'
@@ -167,7 +167,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: "true"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build release binary (native)
         if: matrix.platform.os != 'ubuntu-24.04-arm'

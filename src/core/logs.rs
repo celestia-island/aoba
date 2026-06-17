@@ -66,6 +66,7 @@ pub enum ManagementEvent {
 
 impl LogEntry {
     /// Create a new log entry with the current timestamp
+    #[must_use]
     pub fn new(message: String, level: LogLevel) -> Self {
         Self {
             timestamp: Local::now(),
@@ -76,6 +77,7 @@ impl LogEntry {
     }
 
     /// Create a new log entry with metadata
+    #[must_use]
     pub fn with_metadata(message: String, level: LogLevel, metadata: LogMetadata) -> Self {
         Self {
             timestamp: Local::now(),
@@ -86,16 +88,19 @@ impl LogEntry {
     }
 
     /// Create an info-level log entry
+    #[must_use]
     pub fn info(message: String) -> Self {
         Self::new(message, LogLevel::Info)
     }
 
     /// Create a warning-level log entry
+    #[must_use]
     pub fn warning(message: String) -> Self {
         Self::new(message, LogLevel::Warning)
     }
 
     /// Create an error-level log entry
+    #[must_use]
     pub fn error(message: String) -> Self {
         Self::new(message, LogLevel::Error)
     }
@@ -109,7 +114,8 @@ pub struct LogBuffer {
 
 impl LogBuffer {
     /// Create a new log buffer with a maximum number of entries
-    pub fn new(max_entries: usize) -> Self {
+    #[must_use]
+    pub const fn new(max_entries: usize) -> Self {
         Self {
             entries: Vec::new(),
             max_entries,
@@ -128,17 +134,20 @@ impl LogBuffer {
     }
 
     /// Get all log entries
+    #[must_use]
     pub fn entries(&self) -> &[LogEntry] {
         &self.entries
     }
 
     /// Get the number of log entries
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Check if the buffer is empty
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 

@@ -2,11 +2,16 @@ pub mod handlers;
 pub mod master;
 pub mod slave;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error, Result};
+use parking_lot::Mutex as ParkingMutex;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use clap::ArgMatches;
+use rmodbus::server::{context::ModbusContext, storage::ModbusStorageSmall};
 
 use crate::{
     api::modbus::{ModbusHook, ModbusResponse},
@@ -40,10 +45,10 @@ pub(crate) fn emit_modbus_ipc_log(
             .send(&crate::protocol::ipc::IpcMessage::ModbusData {
                 port_name: payload.port.to_string(),
                 direction: payload.direction.to_string(),
-                data: format_hex_bytes(payload.frame),
+                data: crate::utils::format_hex_bytes(payload.frame),
                 timestamp: None,
                 station_id: payload.station_id,
-                register_mode: payload.register_mode.map(|m| format!("{:?}", m)),
+                register_mode: payload.register_mode.map(|m| format!("{m:?}")),
                 start_address: payload.start_address,
                 quantity: payload.quantity,
                 success: payload.success,
@@ -53,24 +58,13 @@ pub(crate) fn emit_modbus_ipc_log(
     }
 }
 
-/// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
-pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
-    if bytes.is_empty() {
-        return String::new();
-    }
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02X}"))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 pub struct CliModbusHook {
     ipc: Arc<Mutex<Option<crate::cli::actions::IpcConnections>>>,
     output_sink: Option<OutputSink>,
 }
 
 impl CliModbusHook {
+    #[must_use]
     pub fn new(matches: &ArgMatches) -> Self {
         let ipc = crate::cli::actions::setup_ipc(matches);
         let output_sink = matches
@@ -103,7 +97,7 @@ impl ModbusHook for CliModbusHook {
         Ok(())
     }
 
-    fn on_error(&self, port: &str, error: &anyhow::Error) {
+    fn on_error(&self, port: &str, error: &Error) {
         // Log error via IPC?
         if let Ok(mut ipc) = self.ipc.lock() {
             if let Some(ref mut ipc_conn) = *ipc {
@@ -166,7 +160,7 @@ pub fn parse_data_line(
                 let mut result = Vec::new();
                 for val in arr {
                     if let Some(num) = val.as_u64() {
-                        result.push(num as u16);
+                        result.push(u16::try_from(num).unwrap_or(u16::MAX));
                     }
                 }
                 return Ok(result);
@@ -224,7 +218,7 @@ pub(crate) fn extract_values_from_station_configs(
     }
 
     let offset = (start_address - range.address_start) as usize;
-    let total_available = range.length.saturating_sub(offset as u16) as usize;
+    let total_available = range.length.saturating_sub(u16::try_from(offset).unwrap_or(u16::MAX)) as usize;
 
     if total_available < register_length as usize {
         return Err(anyhow!(
@@ -246,59 +240,64 @@ pub(crate) fn extract_values_from_station_configs(
 
 /// Extract values from modbus storage
 pub fn extract_values_from_storage(
-    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &Arc<ParkingMutex<ModbusStorageSmall>>,
     start_addr: u16,
     length: u16,
-    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    reg_mode: RegisterMode,
 ) -> Result<Vec<u16>> {
-    use rmodbus::server::context::ModbusContext;
-
-    let storage = storage.lock().unwrap();
-    let mut values = Vec::new();
-
-    for i in 0..length {
-        let addr = start_addr + i;
-        let value = match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                storage.get_holding(addr)?
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                storage.get_input(addr)?
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                if storage.get_coil(addr)? {
-                    1
-                } else {
-                    0
-                }
-            }
-            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                if storage.get_discrete(addr)? {
-                    1
-                } else {
-                    0
-                }
-            }
-        };
-        values.push(value);
-    }
-
-    Ok(values)
+    crate::api::modbus::core::extract_values_from_storage(storage, start_addr, length, reg_mode)
 }
 
-/// Build a StationConfig snapshot by reading current values from `storage`.
+/// Write values to Modbus storage based on register mode.
+///
+/// This eliminates the repeated `match reg_mode { Holding | Input | Coils | DiscreteInputs }`
+/// pattern that was duplicated ~36 times across the codebase.
+pub fn set_registers_in_storage(
+    storage: &ParkingMutex<ModbusStorageSmall>,
+    reg_mode: RegisterMode,
+    start_address: u16,
+    values: &[u16],
+) -> Result<()> {
+    let mut ctx = storage.lock();
+    for (i, &val) in values.iter().enumerate() {
+        let addr = start_address + u16::try_from(i).unwrap_or(u16::MAX);
+        match reg_mode {
+            RegisterMode::Holding => ctx.set_holding(addr, val)?,
+            RegisterMode::Input => ctx.set_input(addr, val)?,
+            RegisterMode::Coils => ctx.set_coil(addr, val != 0)?,
+            RegisterMode::DiscreteInputs => ctx.set_discrete(addr, val != 0)?,
+        }
+    }
+    Ok(())
+}
+
+/// Record a changed register range for debounce bypass.
+///
+/// Bounds the internal vec to 1000 entries to prevent unbounded growth.
+pub fn record_changed_range(
+    changed_ranges: &ParkingMutex<Vec<(u16, u16, Instant)>>,
+    address: u16,
+    length: u16,
+) {
+    let mut cr = changed_ranges.lock();
+    cr.push((address, length, Instant::now()));
+    while cr.len() > 1000 {
+        cr.swap_remove(0);
+    }
+    drop(cr);
+}
+
+/// Build a `StationConfig` snapshot by reading current values from `storage`.
 ///
 /// This clones the provided `station` and replaces each `RegisterRange`'s
 /// `initial_values` with the values read from `storage` for that range.
 pub fn build_station_snapshot_from_storage(
-    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    station: &crate::protocol::status::types::modbus::StationConfig,
-) -> Result<crate::protocol::status::types::modbus::StationConfig> {
-    use crate::protocol::status::types::modbus::RegisterMode;
-
+    storage: &Arc<ParkingMutex<ModbusStorageSmall>>,
+    station: &StationConfig,
+) -> Result<StationConfig> {
     let mut sc = station.clone();
 
-    for range in sc.map.holding.iter_mut() {
+    for range in &mut sc.map.holding {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,
@@ -308,7 +307,7 @@ pub fn build_station_snapshot_from_storage(
         range.initial_values = vals;
     }
 
-    for range in sc.map.coils.iter_mut() {
+    for range in &mut sc.map.coils {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,
@@ -318,7 +317,7 @@ pub fn build_station_snapshot_from_storage(
         range.initial_values = vals;
     }
 
-    for range in sc.map.discrete_inputs.iter_mut() {
+    for range in &mut sc.map.discrete_inputs {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,
@@ -328,7 +327,7 @@ pub fn build_station_snapshot_from_storage(
         range.initial_values = vals;
     }
 
-    for range in sc.map.input.iter_mut() {
+    for range in &mut sc.map.input {
         let vals = extract_values_from_storage(
             storage,
             range.address_start,

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use flume::{Receiver, Sender};
@@ -5,7 +6,7 @@ use flume::{Receiver, Sender};
 static REFRESH_PENDING: AtomicBool = AtomicBool::new(false);
 
 /// Messages sent from UI thread to core worker thread.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiToCore {
     /// Request an immediate UI redraw without forcing a port rescan.
     Refresh,
@@ -32,7 +33,7 @@ pub enum UiToCore {
 }
 
 /// Messages sent from core worker thread back to UI thread.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreToUi {
     /// Core completed a cycle of background work; UI may redraw.
     Tick,
@@ -52,14 +53,15 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(core_rx: Receiver<CoreToUi>, ui_tx: Sender<UiToCore>) -> Self {
+    #[must_use]
+    pub const fn new(core_rx: Receiver<CoreToUi>, ui_tx: Sender<UiToCore>) -> Self {
         Self { core_rx, ui_tx }
     }
 }
 
 /// Try to enqueue a refresh message unless one is already pending.
 /// Returns `Ok(true)` when a message was sent, `Ok(false)` when it was coalesced.
-pub fn request_refresh(sender: &Sender<UiToCore>) -> Result<bool, flume::SendError<UiToCore>> {
+pub fn request_refresh(sender: &Sender<UiToCore>) -> Result<bool> {
     // Only one Refresh should be outstanding to avoid starving the writer thread.
     if REFRESH_PENDING
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -68,7 +70,7 @@ pub fn request_refresh(sender: &Sender<UiToCore>) -> Result<bool, flume::SendErr
         return Ok(false);
     }
 
-    sender.send(UiToCore::Refresh).map(|_| true)
+    Ok(sender.send(UiToCore::Refresh).map(|()| true)?)
 }
 
 /// Mark the refresh flag as cleared so the next request can be queued.

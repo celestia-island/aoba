@@ -26,7 +26,7 @@ jobs:
         rust: [stable]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -39,17 +39,17 @@ jobs:
       - name: Attempt auto-fix with cargo fix
         run: |
           echo "Attempting to fix compilation errors..."
-          cargo fix --all-targets --allow-dirty --allow-staged || true
+          cargo fix --all-targets --all-features --allow-dirty --allow-staged || true
+
+      - name: Run enforce_use_groups.py (auto-fix) — MUST run before clippy
+        run: |
+          echo "Rewriting use statements with enforce_use_groups.py..."
+          python3 scripts/enforce_use_groups.py || true
 
       - name: Attempt auto-fix with cargo clippy --fix
         run: |
           echo "Attempting to fix clippy warnings..."
           cargo clippy --fix --all-targets --all-features --allow-dirty --allow-staged || true
-
-      - name: Run enforce_use_groups.py (auto-fix)
-        run: |
-          echo "Rewriting use statements with enforce_use_groups.py..."
-          python3 scripts/enforce_use_groups.py || true
 
       - name: Check for changes and commit
         if: matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/dev'

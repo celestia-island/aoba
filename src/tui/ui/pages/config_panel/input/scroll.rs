@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::tui::status::write_status;
 
-/// Scroll the ConfigPanel view offset up by `amount` (saturating at 0).
+/// Scroll the `ConfigPanel` view offset up by `amount` (saturating at 0).
 pub fn handle_scroll_up(amount: usize) -> Result<()> {
     write_status(|status| {
         if let crate::tui::status::Page::ConfigPanel { view_offset, .. } = &mut status.page {
@@ -15,7 +15,7 @@ pub fn handle_scroll_up(amount: usize) -> Result<()> {
     Ok(())
 }
 
-/// Scroll the ConfigPanel view offset down by `amount`.
+/// Scroll the `ConfigPanel` view offset down by `amount`.
 pub fn handle_scroll_down(amount: usize) -> Result<()> {
     write_status(|status| {
         if let crate::tui::status::Page::ConfigPanel { view_offset, .. } = &mut status.page {

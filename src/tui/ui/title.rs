@@ -1,25 +1,26 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use ratatui::{
     prelude::*,
     text::{Line, Span},
-    widgets::*,
+    widgets::{Block, Borders, Paragraph},
 };
 
 use crate::{
     protocol::status::types::port::PortStatusIndicator, tui::status::read_status, utils::i18n::lang,
 };
 
+const SPINNER_FRAMES: [char; 6] = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
+
 fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {
         read_status(|status| {
-            let name = status.ports.order[selected_port].clone();
+            let name = &status.ports.order[selected_port];
             Ok(status
                 .ports
                 .map
-                .get(&name)
-                .map(|port| port.port_name.clone())
-                .unwrap_or_else(|| format!("COM{selected_port}")))
+                .get(name).map_or_else(|| format!("COM{selected_port}"), |port| port.port_name.clone()))
         })?
     } else {
         format!("COM{selected_port}")
@@ -30,9 +31,8 @@ fn get_port_name(selected_port: usize) -> Result<String> {
 /// Get the status indicator for the currently selected port
 fn get_port_status_indicator(selected_port: usize) -> Result<Option<PortStatusIndicator>> {
     read_status(|status| {
-        let port_name_opt = status.ports.order.get(selected_port).cloned();
-        if let Some(port_name) = port_name_opt {
-            if let Some(port) = status.ports.map.get(&port_name) {
+        if let Some(port_name) = status.ports.order.get(selected_port) {
+            if let Some(port) = status.ports.map.get(port_name) {
                 return Ok(Some(port.status_indicator.clone()));
             }
         }
@@ -120,7 +120,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         crate::tui::status::Page::ConfigPanel { selected_port, .. }
         | crate::tui::status::Page::ModbusDashboard { selected_port, .. }
         | crate::tui::status::Page::LogPanel { selected_port, .. } => Some(selected_port),
-        _ => None,
+            _ => None,
     };
 
     if let Some(selected_port) = selected_port_opt {
@@ -134,7 +134,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
                     let elapsed = Local::now().signed_duration_since(timestamp);
                     elapsed.num_seconds() < 3
                 }
-                _ => true,
+                            _ => true,
             };
 
             if should_show_status {
@@ -169,8 +169,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Spinning animation for "starting" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_starting.clone(),
@@ -187,8 +186,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Yellow spinning animation for "restarting" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_restarting.clone(),
@@ -200,8 +198,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Green spinning animation for "saving" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_saving.clone(),
@@ -213,8 +210,7 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             // Yellow spinning animation for "syncing" state
             let frame_index =
                 read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-            let spinner = frames[frame_index % frames.len()].to_string();
+            let spinner = SPINNER_FRAMES[frame_index % SPINNER_FRAMES.len()].to_string();
 
             Ok((
                 lang.protocol.common.status_syncing.clone(),

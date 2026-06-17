@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
@@ -80,7 +80,7 @@ pub async fn test_ipc_manual_data_source() -> Result<()> {
 
             std::fs::remove_file(&server_output).ok();
 
-            return Err(anyhow::anyhow!(
+            return Err(anyhow!(
                 "Server exited prematurely with status {status}: {stderr}"
             ));
         }
@@ -177,7 +177,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
             std::fs::remove_file(&ipc_pipe).ok();
             std::fs::remove_file(&server_output).ok();
 
-            return Err(anyhow::anyhow!(
+            return Err(anyhow!(
                 "Server exited prematurely with status {status}: {stderr}"
             ));
         }
@@ -220,7 +220,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         let _ = server.wait();
         std::fs::remove_file(&ipc_pipe).ok();
         std::fs::remove_file(&server_output).ok();
-        return Err(anyhow::anyhow!(
+        return Err(anyhow!(
             "Round 1: Slave poll command failed: {} (stderr: {})",
             client_output.status,
             stderr
@@ -232,7 +232,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         .lines()
         .rev()
         .find(|line| !line.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("Round 1: Client produced empty stdout"))?;
+        .ok_or_else(|| anyhow!("Round 1: Client produced empty stdout"))?;
     let response: _main::api::modbus::ModbusResponse = serde_json::from_str(response_line)?;
     log::info!("✅ Round 1: Received values: {:?}", response.values);
 
@@ -241,7 +241,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         let _ = server.wait();
         std::fs::remove_file(&ipc_pipe).ok();
         std::fs::remove_file(&server_output).ok();
-        return Err(anyhow::anyhow!(
+        return Err(anyhow!(
             "Round 1: Received values {:?} do not match expected {:?}",
             response.values,
             round1_values
@@ -287,7 +287,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         let _ = server.wait();
         std::fs::remove_file(&ipc_pipe).ok();
         std::fs::remove_file(&server_output).ok();
-        return Err(anyhow::anyhow!(
+        return Err(anyhow!(
             "Round 2: Slave poll command failed: {} (stderr: {})",
             client_output.status,
             stderr
@@ -299,7 +299,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         .lines()
         .rev()
         .find(|line| !line.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("Round 2: Client produced empty stdout"))?;
+        .ok_or_else(|| anyhow!("Round 2: Client produced empty stdout"))?;
     let response: _main::api::modbus::ModbusResponse = serde_json::from_str(response_line)?;
     log::info!("✅ Round 2: Received values: {:?}", response.values);
 
@@ -308,7 +308,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         let _ = server.wait();
         std::fs::remove_file(&ipc_pipe).ok();
         std::fs::remove_file(&server_output).ok();
-        return Err(anyhow::anyhow!(
+        return Err(anyhow!(
             "Round 2: Received values {:?} do not match expected {:?}",
             response.values,
             round2_values
@@ -354,7 +354,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         let _ = server.wait();
         std::fs::remove_file(&ipc_pipe).ok();
         std::fs::remove_file(&server_output).ok();
-        return Err(anyhow::anyhow!(
+        return Err(anyhow!(
             "Round 3: Slave poll command failed: {} (stderr: {})",
             client_output.status,
             stderr
@@ -366,7 +366,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         .lines()
         .rev()
         .find(|line| !line.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("Round 3: Client produced empty stdout"))?;
+        .ok_or_else(|| anyhow!("Round 3: Client produced empty stdout"))?;
     let response: _main::api::modbus::ModbusResponse = serde_json::from_str(response_line)?;
     log::info!("✅ Round 3: Received values: {:?}", response.values);
 
@@ -375,7 +375,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
         let _ = server.wait();
         std::fs::remove_file(&ipc_pipe).ok();
         std::fs::remove_file(&server_output).ok();
-        return Err(anyhow::anyhow!(
+        return Err(anyhow!(
             "Round 3: Received values {:?} do not match expected {:?}",
             response.values,
             round3_values

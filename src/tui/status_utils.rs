@@ -1,9 +1,10 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 use chrono::{DateTime, Local};
 
 use crate::tui::{status::port::PortStatusIndicator, utils::bus::CoreToUi};
 
-/// Check and update temporary statuses (AppliedSuccess) that should auto-transition
+/// Check and update temporary statuses (`AppliedSuccess`) that should auto-transition
 /// after a certain time period. Returns true if any status was updated.
 pub(crate) fn check_and_update_temporary_statuses(
     core_tx: Option<&flume::Sender<CoreToUi>>,
@@ -25,7 +26,7 @@ pub(crate) fn check_and_update_temporary_statuses_with_now(
                     let elapsed = now.signed_duration_since(*timestamp);
                     elapsed.num_seconds() >= 3
                 }
-                _ => false,
+                            _ => false,
             };
 
             if should_update {
@@ -83,15 +84,14 @@ pub(crate) fn log_state_snapshot() -> Result<()> {
 
         let cursor_info = match &status.page {
             crate::tui::status::Page::Entry { cursor, .. } => {
-                if let Some(c) = cursor {
-                    format!("{c:?}")
-                } else {
-                    "None".to_string()
-                }
+                cursor.as_ref().map_or_else(
+                    || "None".to_string(),
+                    |c| format!("{c:?}"),
+                )
             }
             crate::tui::status::Page::ConfigPanel { cursor, .. } => format!("{cursor:?}"),
             crate::tui::status::Page::ModbusDashboard { cursor, .. } => format!("{cursor:?}"),
-            _ => "N/A".to_string(),
+                    _ => "N/A".to_string(),
         };
 
         let mut port_states = vec![];

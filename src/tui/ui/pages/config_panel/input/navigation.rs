@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use crate::tui::{
@@ -5,9 +6,11 @@ use crate::tui::{
     status::{cursor::Cursor, write_status},
 };
 
-/// Ensure current cursor for ConfigPanel does not point to hidden items when
-/// the selected port is not occupied by this instance or when the port is virtual.
-/// This moves the cursor to a visible default and updates `view_offset` when needed.
+/// Ensure current cursor for `ConfigPanel` does not point to hidden items.
+///
+/// This applies when the selected port is not occupied by this instance or when
+/// the port is virtual. Moves the cursor to a visible default and updates
+/// `view_offset` when needed.
 pub fn sanitize_configpanel_cursor() -> Result<()> {
     write_status(|status| {
         if let crate::tui::status::Page::ConfigPanel {
@@ -18,18 +21,14 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
         } = &mut status.page
         {
             let (occupied, is_virtual) =
-                if let Some(port_name) = status.ports.order.get(*selected_port) {
-                    if let Some(port) = status.ports.map.get(port_name) {
+                status.ports.order.get(*selected_port).map_or((false, false), |port_name| {
+                    status.ports.map.get(port_name).map_or((false, false), |port| {
                         (
                             port.state.is_occupied_by_this(),
                             port.port_type.is_virtual(),
                         )
-                    } else {
-                        (false, false)
-                    }
-                } else {
-                    (false, false)
-                };
+                    })
+                });
 
             if !occupied {
                 // Port not occupied: allow movement within the first group of
@@ -63,7 +62,7 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
                         *cursor = types::cursor::ConfigPanelCursor::ViewCommunicationLog;
                         *view_offset = cursor.view_offset();
                     }
-                    _ => {}
+                                    _ => {}
                 }
             }
         }

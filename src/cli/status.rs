@@ -9,7 +9,7 @@ pub use crate::protocol::status::types::{CliMode, CliStatus, RegisterMode};
 /// serializable status for debug dumps.
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -30,6 +30,7 @@ pub struct CliStatusDumper {
 
 impl CliStatusDumper {
     /// Create a new dumper and start the background task.
+    #[must_use]
     pub fn new(status: CliStatus, port_name: &str) -> Self {
         let should_stop = Arc::new(AtomicBool::new(false));
         let should_stop_clone = should_stop.clone();
@@ -41,7 +42,8 @@ impl CliStatusDumper {
             .to_string();
 
         let task_handle = spawn_task(async move {
-            let status_path = PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
+            let status_path =
+                std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
             loop {
                 if should_stop_clone.load(Ordering::Relaxed) {
                     break;

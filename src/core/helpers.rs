@@ -1,4 +1,5 @@
 /// Parse hex payload string into bytes
+#[must_use]
 pub fn parse_hex_payload(data: &str) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut current = String::new();

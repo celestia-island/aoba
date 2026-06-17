@@ -3,7 +3,7 @@
 /// to allow the TUI to manage CLI subprocesses and receive status updates.
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 
 use interprocess::local_socket::{prelude::*, Stream};
 
@@ -84,10 +84,10 @@ pub enum IpcMessage {
         /// Serialized stations data using postcard
         stations_data: Vec<u8>,
         /// Reason for this update to help distinguish user intent from system operations
-        /// - "user_edit": User explicitly edited register values (should write even if 0)
-        /// - "initial_config": Initial configuration from TUI (skip writes, use defaults)
+        /// - "`user_edit"`: User explicitly edited register values (should write even if 0)
+        /// - "`initial_config"`: Initial configuration from TUI (skip writes, use defaults)
         /// - "sync": Periodic sync/heartbeat (skip 0 values, likely uninitialized)
-        /// - "read_response": Update from actual modbus read (always apply)
+        /// - "`read_response"`: Update from actual modbus read (always apply)
         #[serde(default)]
         update_reason: Option<String>,
         #[serde(default)]
@@ -136,13 +136,15 @@ impl IpcMessage {
 
     /// Get current Unix timestamp in seconds
     fn timestamp() -> i64 {
-        std::time::SystemTime::now()
+        let secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64
+            .unwrap_or(std::time::Duration::ZERO)
+            .as_secs();
+        i64::try_from(secs).unwrap_or(i64::MAX)
     }
 
-    /// Create a PortOpened message with current timestamp
+    /// Create a `PortOpened` message with current timestamp
+    #[must_use]
     pub fn port_opened(port_name: String) -> Self {
         Self::PortOpened {
             port_name,
@@ -150,7 +152,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a PortError message with current timestamp
+    /// Create a `PortError` message with current timestamp
+    #[must_use]
     pub fn port_error(port_name: String, error: String) -> Self {
         Self::PortError {
             port_name,
@@ -160,6 +163,7 @@ impl IpcMessage {
     }
 
     /// Create a Shutdown message with current timestamp
+    #[must_use]
     pub fn shutdown() -> Self {
         Self::Shutdown {
             timestamp: Some(Self::timestamp()),
@@ -167,6 +171,7 @@ impl IpcMessage {
     }
 
     /// Create a Heartbeat message with current timestamp
+    #[must_use]
     pub fn heartbeat() -> Self {
         Self::Heartbeat {
             timestamp: Some(Self::timestamp()),
@@ -174,6 +179,7 @@ impl IpcMessage {
     }
 
     /// Create a Status message with current timestamp
+    #[must_use]
     pub fn status(port_name: String, status: String, details: Option<String>) -> Self {
         Self::Status {
             port_name,
@@ -184,6 +190,7 @@ impl IpcMessage {
     }
 
     /// Create a Log message with current timestamp
+    #[must_use]
     pub fn log(level: String, message: String) -> Self {
         Self::Log {
             level,
@@ -192,11 +199,12 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StationsUpdate message with current timestamp
+    /// Create a `StationsUpdate` message with current timestamp
     ///
     /// # Parameters
     /// - `stations_data`: Serialized station configuration
-    /// - `update_reason`: Optional reason for update ("user_edit", "initial_config", "sync", "read_response")
+    /// - `update_reason`: Optional reason for update ("`user_edit`", "`initial_config`", "sync", "`read_response`")
+    #[must_use]
     pub fn stations_update(stations_data: Vec<u8>) -> Self {
         Self::StationsUpdate {
             stations_data,
@@ -205,7 +213,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StationsUpdate message with specific update reason
+    /// Create a `StationsUpdate` message with specific update reason
+    #[must_use]
     pub fn stations_update_with_reason(stations_data: Vec<u8>, reason: &str) -> Self {
         Self::StationsUpdate {
             stations_data,
@@ -214,7 +223,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StateLockRequest message with current timestamp
+    /// Create a `StateLockRequest` message with current timestamp
+    #[must_use]
     pub fn state_lock_request(requester: String) -> Self {
         Self::StateLockRequest {
             requester,
@@ -222,7 +232,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a StateLockAck message with current timestamp
+    /// Create a `StateLockAck` message with current timestamp
+    #[must_use]
     pub fn state_lock_ack(locked: bool) -> Self {
         Self::StateLockAck {
             locked,
@@ -230,7 +241,8 @@ impl IpcMessage {
         }
     }
 
-    /// Create a RegisterWriteComplete message with current timestamp
+    /// Create a `RegisterWriteComplete` message with current timestamp
+    #[must_use]
     pub fn register_write_complete(
         port_name: String,
         station_id: u8,
@@ -256,8 +268,7 @@ impl IpcMessage {
 /// IPC Server (runs in CLI subprocess)
 pub struct IpcServer {
     socket_name: String,
-    writer: Option<Stream>,
-    reader: Option<BufReader<Stream>>,
+    stream: Option<Stream>,
 }
 
 impl IpcServer {
@@ -268,26 +279,23 @@ impl IpcServer {
             .clone()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let stream = Stream::connect(name)?;
+        stream.set_nonblocking(true)?;
 
         log::info!("IPC: Successfully connected to socket: {socket_name}");
 
-        // We'll use the same stream for both reading and writing
-        // by wrapping it appropriately
         Ok(Self {
             socket_name,
-            writer: Some(stream),
-            reader: None,
+            stream: Some(stream),
         })
     }
 
     /// Send a message to the parent TUI process
     pub fn send(&mut self, msg: &IpcMessage) -> Result<()> {
-        if let Some(ref mut stream) = self.writer {
+        if let Some(ref mut stream) = self.stream {
             let json = msg.to_json()?;
             writeln!(stream, "{json}")?;
             stream.flush()?;
-            if matches!(msg, IpcMessage::Heartbeat { .. }) {
-            } else {
+            if !matches!(msg, IpcMessage::Heartbeat { .. }) {
                 log::info!("IPC: Sent message: {msg:?}");
             }
             Ok(())
@@ -297,26 +305,48 @@ impl IpcServer {
     }
 
     /// Try to receive a message from the parent TUI process (non-blocking)
-    /// Note: This is a simplified implementation that doesn't actually support non-blocking reads
-    /// The CLI subprocess should poll this periodically
     pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
-        // For now, return None to indicate no message available
-        // In a real implementation, we'd need to set the stream to non-blocking mode
-        // or use a timeout-based approach
-        // Since we can't easily do non-blocking with interprocess streams,
-        // we'll skip this for now and handle messages in the main loop differently
-        Ok(None)
+        if let Some(ref mut stream) = self.stream {
+            let mut buf = [0u8; 4096];
+            match stream.read(&mut buf) {
+                Ok(0) => Ok(None),
+                Ok(n) => {
+                    let data = &buf[..n];
+                    let Some(line_end) = data.iter().position(|&b| b == b'\n') else {
+                        return Err(anyhow!("IPC message missing newline terminator"));
+                    };
+                    let trimmed = std::str::from_utf8(&data[..line_end])
+                        .map_err(|e| anyhow!("Invalid UTF-8 in IPC message: {e}"))?
+                        .trim();
+                    if trimmed.is_empty() {
+                        return Ok(None);
+                    }
+                    let msg = IpcMessage::from_json(trimmed)?;
+                    if !matches!(&msg, IpcMessage::Heartbeat { .. }) {
+                        log::info!("IPC: Received message: {msg:?}");
+                    }
+                    Ok(Some(msg))
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+                Err(e) => Err(anyhow!("IPC read error: {e}")),
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     /// Close the IPC connection
     pub fn close(&mut self) {
-        if self.writer.is_some() {
-            let _socket_name = self.socket_name.clone();
-
+        if self.stream.is_some() {
             let _ = self.send(&IpcMessage::shutdown());
-            self.writer = None;
-            self.reader = None;
+            self.stream = None;
         }
+    }
+
+    /// Get the socket name
+    #[must_use]
+    pub fn socket_name(&self) -> &str {
+        &self.socket_name
     }
 }
 
@@ -360,7 +390,6 @@ impl IpcClient {
 
         Ok(IpcConnection {
             reader: BufReader::new(stream),
-            _writer: None,
         })
     }
 
@@ -373,7 +402,6 @@ impl IpcClient {
 /// An active IPC connection from a CLI subprocess
 pub struct IpcConnection {
     reader: BufReader<Stream>,
-    _writer: Option<Stream>,
 }
 
 impl IpcConnection {
@@ -392,8 +420,7 @@ impl IpcConnection {
             }
             Ok(_) => {
                 let msg = IpcMessage::from_json(line.trim())?;
-                if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-                } else {
+                if !matches!(&msg, IpcMessage::Heartbeat { .. }) {
                     log::info!("IPC: Received message: {msg:?}");
                 }
                 Ok(Some(msg))
@@ -413,43 +440,42 @@ impl IpcConnection {
         }
 
         let msg = IpcMessage::from_json(line.trim())?;
-        if matches!(&msg, IpcMessage::Heartbeat { .. }) {
-        } else {
+        if !matches!(&msg, IpcMessage::Heartbeat { .. }) {
             log::info!("IPC: Received message: {msg:?}");
         }
         Ok(msg)
     }
 
     /// Send a message to the CLI subprocess
-    /// Note: Bidirectional communication with interprocess streams is complex
-    /// For now, this is not implemented. Consider using a separate connection
-    /// from TUI to CLI for sending messages.
-    pub fn send(&mut self, _msg: &IpcMessage) -> Result<()> {
-        Err(anyhow!(
-            "IPC Connection send not implemented - use separate channel"
-        ))
+    pub fn send(&mut self, msg: &IpcMessage) -> Result<()> {
+        let stream: &mut Stream = self.reader.get_mut();
+        let json = msg.to_json()?;
+        writeln!(stream, "{json}")?;
+        stream.flush()?;
+        if !matches!(msg, IpcMessage::Heartbeat { .. }) {
+            log::info!("IPC: Sent message: {msg:?}");
+        }
+        Ok(())
     }
 }
 
 /// IPC Command Client (runs in TUI to send commands to CLI subprocess)
 /// This is the reverse channel: TUI → CLI
 pub struct IpcCommandClient {
-    _socket_name: String,
     stream: Option<Stream>,
 }
 
 impl IpcCommandClient {
     /// Connect to a CLI subprocess's command channel
-    pub fn connect(command_channel_name: String) -> Result<Self> {
+    pub fn connect(command_channel_name: &str) -> Result<Self> {
         let name = command_channel_name
-            .clone()
+            .to_string()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let stream = Stream::connect(name)?;
 
         log::info!("IPC CMD: Successfully connected to command channel: {command_channel_name}");
 
         Ok(Self {
-            _socket_name: command_channel_name,
             stream: Some(stream),
         })
     }
@@ -470,6 +496,7 @@ impl IpcCommandClient {
     /// Close the command connection
     pub fn close(&mut self) {
         if self.stream.is_some() {
+            let _ = self.send(&IpcMessage::shutdown());
             self.stream = None;
         }
     }
@@ -484,16 +511,15 @@ impl Drop for IpcCommandClient {
 /// IPC Command Listener (runs in CLI subprocess to receive commands from TUI)
 /// This listens on the reverse channel: TUI → CLI
 pub struct IpcCommandListener {
-    _socket_name: String,
     listener: Option<interprocess::local_socket::Listener>,
     connection: Option<IpcCommandConnection>,
 }
 
 impl IpcCommandListener {
     /// Create a command listener for the CLI subprocess
-    pub fn listen(command_channel_name: String) -> Result<Self> {
+    pub fn listen(command_channel_name: &str) -> Result<Self> {
         let name = command_channel_name
-            .clone()
+            .to_string()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let opts = interprocess::local_socket::ListenerOptions::new().name(name);
 
@@ -505,7 +531,6 @@ impl IpcCommandListener {
         log::info!("IPC CMD: Listening for commands on: {command_channel_name} (non-blocking)");
 
         Ok(Self {
-            _socket_name: command_channel_name,
             listener: Some(listener),
             connection: None,
         })
@@ -528,11 +553,7 @@ impl IpcCommandListener {
 
     /// Try to receive a command message (non-blocking if connection exists)
     pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
-        if let Some(ref mut conn) = self.connection {
-            conn.try_recv()
-        } else {
-            Ok(None)
-        }
+        self.connection.as_mut().map_or(Ok(None), IpcCommandConnection::try_recv)
     }
 }
 
@@ -560,6 +581,7 @@ impl IpcCommandConnection {
 }
 
 /// Generate a unique IPC socket name using UUID
+#[must_use]
 pub fn generate_socket_name() -> String {
     let uuid = uuid::Uuid::new_v4();
     // Use a simple name that works on both Unix and Windows
@@ -568,6 +590,7 @@ pub fn generate_socket_name() -> String {
 
 /// Generate the command channel name from the status channel name
 /// Command channel is used for TUI → CLI communication (reverse direction)
+#[must_use]
 pub fn get_command_channel_name(status_channel: &str) -> String {
     format!("{status_channel}-cmd")
 }

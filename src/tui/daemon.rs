@@ -33,6 +33,7 @@ use crate::{
 /// # Returns
 /// - `Ok(())` on successful execution
 /// - `Err` if configuration file not found or daemon startup fails
+#[allow(clippy::too_many_lines)]
 pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("🤖 Starting TUI in daemon mode (non-interactive)");
 
@@ -86,7 +87,7 @@ pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
         enable_debug_dump();
 
         let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let dump_path = PathBuf::from("/tmp/ci_tui_status.json");
+        let dump_path = std::env::temp_dir().join("ci_tui_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
         start_status_dump_thread(
@@ -139,7 +140,7 @@ pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
                 PortConfig::Modbus { stations, .. } if !stations.is_empty() => {
                     autostart_ports.push(port_name.clone());
                 }
-                _ => {}
+                PortConfig::Modbus { .. } => {}
             }
         }
         Ok(())
@@ -199,7 +200,7 @@ pub async fn start_daemon(matches: &clap::ArgMatches) -> Result<()> {
 }
 
 /// Load port configurations from a JSON file
-fn load_config_from_file(path: &PathBuf) -> Result<HashMap<String, PortConfig>> {
+fn load_config_from_file(path: &std::path::Path) -> Result<HashMap<String, PortConfig>> {
     use crate::core::persistence::{PersistedPortConfig, SerializablePortConfig};
     use crate::protocol::status::types::modbus::{
         ModbusConnectionMode, ModbusMasterDataSource, ModbusRegisterItem, RegisterMode,
@@ -236,7 +237,9 @@ fn load_config_from_file(path: &PathBuf) -> Result<HashMap<String, PortConfig>> 
                                     url: value.unwrap_or_default(),
                                 }),
                                 "http" => Some(ModbusMasterDataSource::HttpServer {
-                                    port: value.and_then(|v| v.parse().ok()).unwrap_or(8080),
+                                    port: value
+                                        .and_then(|v| v.parse::<u16>().ok())
+                                        .unwrap_or(8080),
                                 }),
                                 "ipc" => Some(ModbusMasterDataSource::IpcPipe {
                                     path: value.unwrap_or_default(),
@@ -256,11 +259,10 @@ fn load_config_from_file(path: &PathBuf) -> Result<HashMap<String, PortConfig>> 
                     .iter()
                     .map(|s| {
                         let register_mode = match s.register_mode.as_str() {
-                            "Holding" => RegisterMode::Holding,
                             "Input" => RegisterMode::Input,
                             "Coils" => RegisterMode::Coils,
                             "DiscreteInputs" => RegisterMode::DiscreteInputs,
-                            _ => RegisterMode::Holding, // Default fallback
+                            _ => RegisterMode::Holding,
                         };
 
                         ModbusRegisterItem {

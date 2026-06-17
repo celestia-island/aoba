@@ -2,7 +2,7 @@
 ///
 /// This example demonstrates the Builder API with hooks for monitoring
 /// and logging Modbus communication.
-use anyhow::Result;
+use anyhow::{Error, Result};
 use std::sync::Arc;
 
 use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode};
@@ -26,7 +26,7 @@ impl ModbusHook for LoggingHook {
         Ok(())
     }
 
-    fn on_error(&self, _port: &str, error: &anyhow::Error) {
+    fn on_error(&self, _port: &str, error: &Error) {
         log::warn!("Error: {}", error);
     }
 }

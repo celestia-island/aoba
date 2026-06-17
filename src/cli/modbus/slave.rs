@@ -1,7 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Error, Result};
+use parking_lot::Mutex;
 use std::{
     io::Write,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -17,7 +18,7 @@ use crate::{
     },
     cli::{actions, cleanup},
     protocol::status::types::cli::OutputSink,
-    utils::sleep::{sleep_1s, sleep_3s},
+    utils::sleep::sleep_1s,
 };
 
 /// Outcome of a slave polling transaction.
@@ -26,15 +27,16 @@ enum SlavePollTransaction {
         response: ModbusResponse,
     },
     Failure {
-        error: anyhow::Error,
+        error: Error,
         request_frame: Vec<u8>,
     },
 }
 
 /// Execute a single slave polling transaction, returning either a successful response or
 /// the failure reason along with the request frame that was sent.
+#[allow(clippy::too_many_lines)]
 fn run_slave_poll_transaction(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     register_address: u16,
     register_length: u16,
@@ -74,18 +76,18 @@ fn run_slave_poll_transaction(
             }
         };
 
-        request_frame = request_bytes.1.clone();
+        request_frame = request_bytes.1;
 
         log::info!("run_slave_poll_transaction: Sending request to master: {request_frame:02X?}");
         {
-            let mut port = port_arc.lock().unwrap();
+            let mut port = port_arc.lock();
             port.write_all(&request_frame)?;
             port.flush()?;
         }
 
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = {
-            let mut port = port_arc.lock().unwrap();
+            let mut port = port_arc.lock();
             port.read(&mut buffer)?
         };
 
@@ -147,11 +149,7 @@ fn run_slave_poll_transaction(
                         if values.len() >= register_length as usize {
                             break;
                         }
-                        let bit_value = if (byte_val & (1 << bit_idx)) != 0 {
-                            1
-                        } else {
-                            0
-                        };
+                        let bit_value = u16::from((byte_val & (1 << bit_idx)) != 0);
                         values.push(bit_value);
                     }
                     if values.len() >= register_length as usize {
@@ -182,19 +180,33 @@ fn run_slave_poll_transaction(
 }
 
 /// Handle slave listen persist (continuous JSONL output)
+#[allow(clippy::too_many_lines)]
 pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+    let station_id = *matches
+        .get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches
+        .get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches
+        .get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches
+        .get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let timeout_ms = *matches
+        .get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let output_sink = matches
         .get_one::<String>("output")
         .map(|s| s.parse::<OutputSink>())
         .transpose()?
         .unwrap_or(OutputSink::Stdout);
+    let mut output_writer = output_sink.writer()?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -221,8 +233,7 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
             .and_then(|n| n.to_str())
             .unwrap_or(&port_name);
 
-        let dump_path =
-            std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
+        let dump_path = std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(
@@ -246,17 +257,19 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
     // Open serial port with configured timeout
     let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
-                    let _ = ipc_conns
+                    if let Err(e) = ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        });
+                        }) {
+                        log::warn!("IPC send failed: {e}");
+                    }
                 }
                 return Err(err);
             }
@@ -266,25 +279,25 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc {
-        let _ = ipc_conns
+        if let Err(e) = ipc_conns
             .status
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            });
+            }) {
+            log::warn!("IPC send failed: {e}");
+        }
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
             // Explicitly drop the port and wait for OS to release it
-            if let Ok(mut port) = pa.lock() {
-                // Try to flush any pending data
-                let _ = std::io::Write::flush(&mut **port);
-            }
+            let mut port = pa.lock();
+            let _ = std::io::Write::flush(&mut **port);
+            drop(port);
             drop(pa);
         });
     }
@@ -300,12 +313,12 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
     loop {
         match listen_for_one_request(
-            port_arc.clone(),
+            &port_arc,
             station_id,
             register_address,
             register_length,
             reg_mode,
-            storage.clone(),
+            &storage,
         ) {
             Ok(response) => {
                 let write_this = match &last_written_values {
@@ -315,7 +328,7 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
                 if write_this {
                     let json = serde_json::to_string(&response)?;
-                    output_sink.write(&json)?;
+                    output_writer.write(&json)?;
                     last_written_values = Some(response.values.clone());
                 }
             }
@@ -329,11 +342,21 @@ pub async fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Re
 
 /// Handle a single slave listen (one-shot JSON output)
 pub async fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let station_id = *matches
+        .get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches
+        .get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches
+        .get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches
+        .get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
 
     let output_sink = matches
         .get_one::<String>("output")
@@ -358,12 +381,12 @@ pub async fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()>
 
     // Wait for one request and respond
     let response = listen_for_one_request(
-        port_arc.clone(),
+        &port_arc,
         station_id,
         register_address,
         register_length,
         reg_mode,
-        storage,
+        &storage,
     )?;
 
     // Explicitly drop port_arc to close the port
@@ -381,18 +404,18 @@ pub async fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()>
 
 /// Listen for one Modbus request and respond
 fn listen_for_one_request(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,
     station_id: u8,
     register_address: u16,
     register_length: u16,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
-    storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
 
     // Read request from port
-    let mut buffer = vec![0u8; 256];
-    let mut port = port_arc.lock().unwrap();
+    let mut buffer = [0u8; 256];
+    let mut port = port_arc.lock();
     let bytes_read = port.read(&mut buffer)?;
     drop(port);
 
@@ -411,42 +434,34 @@ fn listen_for_one_request(
     // Generate response based on register mode
     let response_bytes = match reg_mode {
         crate::protocol::status::types::modbus::RegisterMode::Holding => {
-            crate::protocol::modbus::build_slave_holdings_response(
-                &mut frame,
-                &mut storage.lock().unwrap(),
-            )?
+            crate::protocol::modbus::build_slave_holdings_response(&mut frame, &mut storage.lock())?
         }
         crate::protocol::status::types::modbus::RegisterMode::Input => {
-            crate::protocol::modbus::build_slave_inputs_response(
-                &mut frame,
-                &mut storage.lock().unwrap(),
-            )?
+            crate::protocol::modbus::build_slave_inputs_response(&mut frame, &mut storage.lock())?
         }
         crate::protocol::status::types::modbus::RegisterMode::Coils => {
-            crate::protocol::modbus::build_slave_coils_response(
-                &mut frame,
-                &mut storage.lock().unwrap(),
-            )?
+            crate::protocol::modbus::build_slave_coils_response(&mut frame, &mut storage.lock())?
         }
         crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
             crate::protocol::modbus::build_slave_discrete_inputs_response(
                 &mut frame,
-                &mut storage.lock().unwrap(),
+                &mut storage.lock(),
             )?
         }
     };
 
     if let Some(resp) = response_bytes {
         // Send response
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&resp)?;
         port.flush()?;
+        drop(port);
         log::info!("Sent response: {resp:02X?}");
     }
 
     // Extract values from storage for response
     let values =
-        extract_values_from_storage(&storage, register_address, register_length, reg_mode)?;
+        extract_values_from_storage(storage, register_address, register_length, reg_mode)?;
 
     Ok(ModbusResponse {
         station_id,
@@ -458,13 +473,25 @@ fn listen_for_one_request(
 }
 
 /// Handle slave poll (act as Modbus Master/Client - send request and wait for response)
-pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
+    let station_id = *matches
+        .get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches
+        .get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches
+        .get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches
+        .get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let timeout_ms = *matches
+        .get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -475,13 +502,13 @@ pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
     let response = {
         // Open serial port in a scope to ensure it's closed before returning
         let port_handle =
-            open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64))?;
+            open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms)))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
         // Execute single poll transaction
         let outcome = run_slave_poll_transaction(
-            port_arc.clone(),
+            &port_arc,
             station_id,
             register_address,
             register_length,
@@ -504,20 +531,36 @@ pub async fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 }
 
 /// Handle slave poll persist (continuous polling mode)
+#[allow(clippy::too_many_lines)]
 pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let request_interval_ms = *matches.get_one::<u32>("request-interval-ms").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+    let station_id = *matches
+        .get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches
+        .get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches
+        .get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches
+        .get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let request_interval_ms = *matches
+        .get_one::<u32>("request-interval-ms")
+        .context("Missing argument: request-interval-ms")?;
+    let timeout_ms = *matches
+        .get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let output_sink = matches
         .get_one::<String>("output")
         .map(|s| s.parse::<OutputSink>())
         .transpose()?
         .unwrap_or(OutputSink::Stdout);
+    let mut output_writer = output_sink.writer()?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -545,8 +588,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
             .and_then(|n| n.to_str())
             .unwrap_or(&port_name);
 
-        let dump_path =
-            std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
+        let dump_path = std::env::temp_dir().join(format!("ci_cli_{port_basename}_status.json"));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(
@@ -570,17 +612,19 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
     // Open serial port with configured timeout
     let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
-                    let _ = ipc_conns
+                    if let Err(e) = ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        });
+                        }) {
+                        log::warn!("IPC send failed: {e}");
+                    }
                 }
                 return Err(err);
             }
@@ -590,32 +634,31 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc {
-        let _ = ipc_conns
+        if let Err(e) = ipc_conns
             .status
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            });
+            }) {
+            log::warn!("IPC send failed: {e}");
+        }
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
             // Explicitly drop the port and wait for OS to release it
-            if let Ok(mut port) = pa.lock() {
-                // Try to flush any pending data
-                let _ = std::io::Write::flush(&mut **port);
-            }
+            let mut port = pa.lock();
+            let _ = std::io::Write::flush(&mut **port);
+            drop(port);
             drop(pa);
         });
     }
 
     // Flag to track whether command channel has been accepted
-    static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
+    let command_accepted = std::sync::atomic::AtomicBool::new(false);
 
     // Continuously poll
     // Keep track of last written values to avoid consecutive duplicate outputs
@@ -635,11 +678,11 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
     loop {
         // Try to accept incoming command channel connection (non-blocking)
         if let Some(ref mut ipc_conns) = ipc {
-            if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+            if !command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
                 match ipc_conns.command_listener.accept() {
                     Ok(()) => {
                         log::info!("Command channel accepted");
-                        COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        command_accepted.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     Err(_e) => {
                         // Don't log every attempt to avoid spam, just keep trying
@@ -649,7 +692,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         }
 
         // Check for incoming StationsUpdate commands for multi-station support
-        if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+        if command_accepted.load(std::sync::atomic::Ordering::Relaxed) {
             if let Some(ref mut ipc_conns) = ipc {
                 if let Ok(Some(crate::protocol::ipc::IpcMessage::StationsUpdate {
                     stations_data,
@@ -683,8 +726,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                 // - "sync" or None: Skip 0 values (likely defaults/heartbeat)
                                 // - "read_response": Always apply (actual modbus read data)
                                 let should_process_writes = match update_reason.as_deref() {
-                                    Some("user_edit") => true,     // User explicitly edited, write everything
-                                    Some("read_response") => true, // Actual read data, always apply
+                                    Some("user_edit" | "read_response") => true,
                                     Some("initial_config") => false, // Initial config, skip writes
                                     Some("sync") | None => last_written_values.is_some(), // Sync/unknown: only if we've read before
                                     Some(other) => {
@@ -697,10 +739,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     matches!(update_reason.as_deref(), Some("user_edit"));
 
                                 log::info!(
-                                    "Write decision: reason={:?}, should_process={}, allow_zeros={}",
-                                    update_reason,
-                                    should_process_writes,
-                                    allow_zero_writes
+                                    "Write decision: reason={update_reason:?}, should_process={should_process_writes}, allow_zeros={allow_zero_writes}"
                                 );
 
                                 if should_process_writes {
@@ -708,7 +747,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     for range in &first_station.map.holding {
                                         for (idx, &value) in range.initial_values.iter().enumerate()
                                         {
-                                            let addr = range.address_start + idx as u16;
+                                            let addr = range.address_start + u16::try_from(idx).unwrap_or(u16::MAX);
 
                                             // Skip zero values unless this is a user edit
                                             if value == 0 && !allow_zero_writes {
@@ -716,14 +755,12 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                             }
 
                                             let needs_write =
-                                                if let Some(prev_vals) = &last_written_values {
+                                                last_written_values.as_ref().is_some_and(|prev_vals| {
                                                     let relative_idx =
                                                         (addr - current_register_address) as usize;
                                                     relative_idx >= prev_vals.len()
                                                         || prev_vals[relative_idx] != value
-                                                } else {
-                                                    false // Should not happen since we checked above
-                                                };
+                                                });
 
                                             if needs_write {
                                                 log::info!("📤 Queueing write for holding register 0x{addr:04X} = 0x{value:04X}");
@@ -739,7 +776,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                     for range in &first_station.map.coils {
                                         for (idx, &value) in range.initial_values.iter().enumerate()
                                         {
-                                            let addr = range.address_start + idx as u16;
+                                            let addr = range.address_start + u16::try_from(idx).unwrap_or(u16::MAX);
 
                                             // Skip zero values unless this is a user edit
                                             if value == 0 && !allow_zero_writes {
@@ -747,14 +784,12 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                                             }
 
                                             let needs_write =
-                                                if let Some(prev_vals) = &last_written_values {
+                                                last_written_values.as_ref().is_some_and(|prev_vals| {
                                                     let relative_idx =
                                                         (addr - current_register_address) as usize;
                                                     relative_idx >= prev_vals.len()
                                                         || prev_vals[relative_idx] != value
-                                                } else {
-                                                    false
-                                                };
+                                                });
 
                                             if needs_write {
                                                 log::info!("📤 Queueing write for coil 0x{addr:04X} = 0x{value:04X}");
@@ -839,7 +874,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
                         // Send request
                         {
-                            let mut port = port_arc.lock().unwrap();
+                            let mut port = port_arc.lock();
                             if let Err(e) = port.write_all(&raw_frame) {
                                 Err(anyhow!("Failed to write request: {e}"))
                             } else if let Err(e) = port.flush() {
@@ -850,9 +885,9 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                         }?;
 
                         // Wait for response
-                        let mut buffer = vec![0u8; 256];
+                        let mut buffer = [0u8; 256];
                         let bytes_read = {
-                            let mut port = port_arc.lock().unwrap();
+                            let mut port = port_arc.lock();
                             port.read(&mut buffer)?
                         };
 
@@ -865,7 +900,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                             // Parse response
                             match crate::protocol::modbus::parse_pull_set_response(
                                 &mut request,
-                                response.to_vec(),
+                                response,
                             ) {
                                 Ok(()) => {
                                     log::info!("✅ Write successful for 0x{write_addr:04X} = 0x{write_value:04X}");
@@ -878,9 +913,54 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                     Err(e) => Err(e),
                 }
             } else if write_type == "coil" {
-                // TODO: Implement coil write using set_coils_bulk
-                log::warn!("⚠️ Coil write not yet implemented, skipping");
-                Ok(()) // Pretend success for now
+                let coil_value = write_value != 0;
+                match crate::protocol::modbus::generate_pull_set_coils_request(
+                    current_station_id,
+                    &[coil_value],
+                ) {
+                    Ok(mut request) => {
+                        let mut frame = Vec::new();
+                        if let Err(e) =
+                            request.generate_set_coils_bulk(write_addr, &[coil_value], &mut frame)
+                        {
+                            Err(anyhow!("Failed to generate coil write frame: {e}"))
+                        } else {
+                            log::info!("Generated coil write request frame: {frame:02X?}");
+                            {
+                                let mut port = port_arc.lock();
+                                if let Err(e) = port.write_all(&frame) {
+                                    Err(anyhow!("Failed to write request: {e}"))
+                                } else if let Err(e) = port.flush() {
+                                    Err(anyhow!("Failed to flush: {e}"))
+                                } else {
+                                    Ok(())
+                                }
+                            }?;
+                            let mut buffer = [0u8; 256];
+                            let bytes_read = {
+                                let mut port = port_arc.lock();
+                                port.read(&mut buffer)?
+                            };
+                            if bytes_read == 0 {
+                                Err(anyhow!("No response received for coil write"))
+                            } else {
+                                let response = &buffer[..bytes_read];
+                                log::info!("Received coil write response: {response:02X?}");
+                                match crate::protocol::modbus::parse_pull_set_response(
+                                    &mut request,
+                                    response,
+                                ) {
+                                    Ok(()) => {
+                                        log::info!("✅ Coil write successful for 0x{write_addr:04X} = {write_value}");
+                                        Ok(())
+                                    }
+                                    Err(e) => Err(e),
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
             } else {
                 Err(anyhow!("Unsupported write type: {write_type}"))
             };
@@ -894,7 +974,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                     write_value,
                     write_type.clone(),
                     write_result.is_ok(),
-                    write_result.as_ref().err().map(|e| e.to_string()),
+                    write_result.as_ref().err().map(std::string::ToString::to_string),
                 );
 
                 if let Err(e) = ipc_conns.status.send(&msg) {
@@ -907,7 +987,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
         }
 
         match run_slave_poll_transaction(
-            port_arc.clone(),
+            &port_arc,
             current_station_id,
             current_register_address,
             current_register_length,
@@ -921,7 +1001,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
 
                 if write_this {
                     let json = serde_json::to_string(&response)?;
-                    output_sink.write(&json)?;
+                    output_writer.write(&json)?;
                     last_written_values = Some(response.values.clone());
 
                     if let Some(ref mut ipc_conns) = ipc {
@@ -959,11 +1039,7 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 last_failure_log = None;
 
                 // Wait configured request interval after successful poll
-                if request_interval_ms < 1000 {
-                    sleep_1s().await;
-                } else {
-                    sleep_3s().await;
-                }
+                tokio::time::sleep(Duration::from_millis(u64::from(request_interval_ms))).await;
             }
             SlavePollTransaction::Failure {
                 request_frame,
@@ -998,19 +1074,17 @@ pub async fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Resu
                 }
 
                 // Wait configured timeout duration after failure
-                if timeout_ms < 1000 {
-                    sleep_1s().await;
-                } else {
-                    sleep_3s().await;
-                }
+                tokio::time::sleep(Duration::from_millis(u64::from(timeout_ms))).await;
             }
         }
     }
 }
 
-/// Handle IPC channel mode for slave-listen-persist
-/// Creates a Unix socket server that accepts connections and responds to JSON requests
-/// Each connection is handled in a separate async task to support multiple clients
+/// Handle IPC channel mode for slave-listen-persist.
+///
+/// Creates a Unix socket server that accepts connections and responds to JSON requests.
+/// Each connection is handled in a separate async task to support multiple clients.
+#[allow(clippy::too_many_lines)]
 pub async fn handle_slave_listen_ipc_channel(
     matches: &ArgMatches,
     port: &str,
@@ -1018,12 +1092,24 @@ pub async fn handle_slave_listen_ipc_channel(
 ) -> Result<()> {
     use interprocess::local_socket::{prelude::*, ListenerOptions};
 
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
+    let station_id = *matches
+        .get_one::<u8>("station-id")
+        .context("Missing argument: station-id")?;
+    let register_address = *matches
+        .get_one::<u16>("register-address")
+        .context("Missing argument: register-address")?;
+    let register_length = *matches
+        .get_one::<u16>("register-length")
+        .context("Missing argument: register-length")?;
+    let register_mode = matches
+        .get_one::<String>("register-mode")
+        .context("Missing argument: register-mode")?;
+    let baud_rate = *matches
+        .get_one::<u32>("baud-rate")
+        .context("Missing argument: baud-rate")?;
+    let timeout_ms = *matches
+        .get_one::<u32>("timeout-ms")
+        .context("Missing argument: timeout-ms")?;
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -1036,17 +1122,19 @@ pub async fn handle_slave_listen_ipc_channel(
 
     // Open serial port with configured timeout
     let port_handle =
-        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+        match open_serial_port(port, baud_rate, Duration::from_millis(u64::from(timeout_ms))) {
             Ok(handle) => handle,
             Err(err) => {
                 if let Some(ref mut ipc_conns) = ipc {
-                    let _ = ipc_conns
+                    if let Err(e) = ipc_conns
                         .status
                         .send(&crate::protocol::ipc::IpcMessage::PortError {
                             port_name: port.to_string(),
                             error: err.to_string(),
                             timestamp: None,
-                        });
+                        }) {
+                        log::warn!("IPC send failed: {e}");
+                    }
                 }
                 return Err(err);
             }
@@ -1056,24 +1144,24 @@ pub async fn handle_slave_listen_ipc_channel(
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc {
-        let _ = ipc_conns
+        if let Err(e) = ipc_conns
             .status
             .send(&crate::protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
-            });
+            }) {
+            log::warn!("IPC send failed: {e}");
+        }
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
-        let _port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
-            if let Ok(mut port) = pa.lock() {
-                let _ = std::io::Write::flush(&mut **port);
-            }
-            drop(pa);
+            let mut port = pa.lock();
+            let _ = std::io::Write::flush(&mut **port);
+            drop(port);
         });
     }
 
@@ -1095,14 +1183,11 @@ pub async fn handle_slave_listen_ipc_channel(
     }
 
     let listener =
-        match ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() {
-            Ok(name) => ListenerOptions::new().name(name).create_sync(),
-            Err(_) => {
-                // Fall back to file path
-                let path =
-                    ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
-                ListenerOptions::new().name(path).create_sync()
-            }
+        if let Ok(name) = ipc_socket_path.to_ns_name::<interprocess::local_socket::GenericNamespaced>() { ListenerOptions::new().name(name).create_sync() } else {
+            // Fall back to file path
+            let path =
+                ipc_socket_path.to_fs_name::<interprocess::local_socket::GenericFilePath>()?;
+            ListenerOptions::new().name(path).create_sync()
         }?;
 
     log::info!("IPC socket listener created, waiting for connections...");
@@ -1139,7 +1224,7 @@ pub async fn handle_slave_listen_ipc_channel(
 
         // Spawn a task to handle this connection
         crate::core::task_manager::spawn_task(async move {
-            if let Err(e) = handle_ipc_connection(stream, conn_id, ctx.clone()).await {
+            if let Err(e) = handle_ipc_connection(stream, conn_id, &ctx) {
                 log::error!("Connection #{conn_id} error: {e}");
             }
             log::info!("Connection #{conn_id} closed");
@@ -1159,10 +1244,10 @@ struct IpcConnectionContext {
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 }
 
-async fn handle_ipc_connection(
+fn handle_ipc_connection(
     mut stream: interprocess::local_socket::Stream,
     conn_id: usize,
-    ctx: IpcConnectionContext,
+    ctx: &IpcConnectionContext,
 ) -> Result<()> {
     use std::io::{BufRead, BufReader, Write};
 
@@ -1208,12 +1293,12 @@ async fn handle_ipc_connection(
 
         // Process request and generate response
         let response = match listen_for_one_request(
-            ctx.port_arc.clone(),
+            &ctx.port_arc,
             ctx.station_id,
             ctx.register_address,
             ctx.register_length,
             ctx.reg_mode,
-            ctx.storage.clone(),
+            &ctx.storage,
         ) {
             Ok(modbus_response) => {
                 serde_json::json!({

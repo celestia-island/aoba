@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum::{EnumIter, FromRepr};
@@ -14,41 +15,47 @@ pub enum ModbusConnectionMode {
 }
 
 impl ModbusConnectionMode {
-    pub fn is_master(&self) -> bool {
-        matches!(self, ModbusConnectionMode::Master)
+    #[must_use]
+    pub const fn is_master(&self) -> bool {
+        matches!(self, Self::Master)
     }
 
-    pub fn is_slave(&self) -> bool {
-        matches!(self, ModbusConnectionMode::Slave { .. })
+    #[must_use]
+    pub const fn is_slave(&self) -> bool {
+        matches!(self, Self::Slave { .. })
     }
 
-    pub fn default_master() -> Self {
-        ModbusConnectionMode::Master
+    #[must_use]
+    pub const fn default_master() -> Self {
+        Self::Master
     }
 
-    pub fn default_slave() -> Self {
-        ModbusConnectionMode::Slave {
+    #[must_use]
+    pub const fn default_slave() -> Self {
+        Self::Slave {
             current_request_at_station_index: 0,
         }
     }
 
     // Helper methods for UI compatibility
+    #[must_use]
     pub fn all_variants() -> Vec<Self> {
         vec![Self::default_master(), Self::default_slave()]
     }
 
-    pub fn from_index(index: usize) -> Self {
+    #[must_use]
+    pub const fn from_index(index: usize) -> Self {
         match index {
-            0 => Self::default_master(),
             1 => Self::default_slave(),
             _ => Self::default_master(),
         }
     }
 
-    pub fn to_index(&self) -> usize {
+    #[must_use]
+    pub const fn to_index(&self) -> usize {
         match self {
-            ModbusConnectionMode::Master => 0,
-            ModbusConnectionMode::Slave { .. } => 1,
+            Self::Master => 0,
+            Self::Slave { .. } => 1,
         }
     }
 }
@@ -56,10 +63,10 @@ impl ModbusConnectionMode {
 impl std::fmt::Display for ModbusConnectionMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ModbusConnectionMode::Master => {
+            Self::Master => {
                 write!(f, "{}", lang().protocol.modbus.role_master)
             }
-            ModbusConnectionMode::Slave { .. } => {
+            Self::Slave { .. } => {
                 write!(f, "{}", lang().protocol.modbus.role_slave)
             }
         }
@@ -77,6 +84,7 @@ pub enum ModbusMasterDataSourceKind {
 }
 
 impl ModbusMasterDataSourceKind {
+    #[must_use]
     pub const fn all() -> &'static [Self] {
         &[
             Self::Manual,
@@ -87,10 +95,12 @@ impl ModbusMasterDataSourceKind {
         ]
     }
 
+    #[must_use]
     pub fn from_index(index: usize) -> Self {
         Self::all().get(index).copied().unwrap_or(Self::Manual)
     }
 
+    #[must_use]
     pub fn to_index(self) -> usize {
         Self::all()
             .iter()
@@ -98,7 +108,8 @@ impl ModbusMasterDataSourceKind {
             .unwrap_or(0)
     }
 
-    pub fn value_kind(self) -> ModbusMasterDataSourceValueKind {
+    #[must_use]
+    pub const fn value_kind(self) -> ModbusMasterDataSourceValueKind {
         match self {
             Self::Manual => ModbusMasterDataSourceValueKind::None,
             Self::MqttServer => ModbusMasterDataSourceValueKind::Url,
@@ -112,15 +123,15 @@ impl ModbusMasterDataSourceKind {
 impl fmt::Display for ModbusMasterDataSourceKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let label = match self {
-            ModbusMasterDataSourceKind::Manual => lang().protocol.modbus.data_source_manual.clone(),
-            ModbusMasterDataSourceKind::MqttServer => {
+            Self::Manual => lang().protocol.modbus.data_source_manual.clone(),
+            Self::MqttServer => {
                 lang().protocol.modbus.data_source_mqtt.clone()
             }
-            ModbusMasterDataSourceKind::HttpServer => {
+            Self::HttpServer => {
                 lang().protocol.modbus.data_source_http.clone()
             }
-            ModbusMasterDataSourceKind::IpcPipe => lang().protocol.modbus.data_source_ipc.clone(),
-            ModbusMasterDataSourceKind::PortForwarding => {
+            Self::IpcPipe => lang().protocol.modbus.data_source_ipc.clone(),
+            Self::PortForwarding => {
                 lang().protocol.modbus.data_source_port_forwarding.clone()
             }
         };
@@ -158,23 +169,26 @@ pub enum ModbusMasterDataSource {
 }
 
 impl ModbusMasterDataSource {
-    pub fn kind(&self) -> ModbusMasterDataSourceKind {
+    #[must_use]
+    pub const fn kind(&self) -> ModbusMasterDataSourceKind {
         match self {
-            ModbusMasterDataSource::Manual => ModbusMasterDataSourceKind::Manual,
-            ModbusMasterDataSource::MqttServer { .. } => ModbusMasterDataSourceKind::MqttServer,
-            ModbusMasterDataSource::HttpServer { .. } => ModbusMasterDataSourceKind::HttpServer,
-            ModbusMasterDataSource::IpcPipe { .. } => ModbusMasterDataSourceKind::IpcPipe,
-            ModbusMasterDataSource::PortForwarding { .. } => {
+            Self::Manual => ModbusMasterDataSourceKind::Manual,
+            Self::MqttServer { .. } => ModbusMasterDataSourceKind::MqttServer,
+            Self::HttpServer { .. } => ModbusMasterDataSourceKind::HttpServer,
+            Self::IpcPipe { .. } => ModbusMasterDataSourceKind::IpcPipe,
+            Self::PortForwarding { .. } => {
                 ModbusMasterDataSourceKind::PortForwarding
             }
         }
     }
 
-    pub fn value_kind(&self) -> ModbusMasterDataSourceValueKind {
+    #[must_use]
+    pub const fn value_kind(&self) -> ModbusMasterDataSourceValueKind {
         self.kind().value_kind()
     }
 
-    pub fn with_kind(kind: ModbusMasterDataSourceKind) -> Self {
+    #[must_use]
+    pub const fn with_kind(kind: ModbusMasterDataSourceKind) -> Self {
         match kind {
             ModbusMasterDataSourceKind::Manual => Self::Manual,
             ModbusMasterDataSourceKind::MqttServer => Self::MqttServer { url: String::new() },
@@ -192,41 +206,42 @@ impl ModbusMasterDataSource {
         *self = Self::with_kind(kind);
     }
 
-    pub fn get_port(&self) -> Option<u16> {
+    #[must_use]
+    pub const fn get_port(&self) -> Option<u16> {
         match self {
-            ModbusMasterDataSource::HttpServer { port } => Some(*port),
-            _ => None,
+            Self::HttpServer { port } => Some(*port),
+                    _ => None,
         }
     }
 
-    pub fn set_port(&mut self, new_port: u16) {
-        if let ModbusMasterDataSource::HttpServer { port } = self {
+    pub const fn set_port(&mut self, new_port: u16) {
+        if let Self::HttpServer { port } = self {
             *port = new_port;
         }
     }
 
-    pub fn get_text(&self) -> Option<&str> {
+    #[must_use]
+    pub const fn get_text(&self) -> Option<&str> {
         match self {
-            ModbusMasterDataSource::MqttServer { url } => Some(url.as_str()),
-            ModbusMasterDataSource::IpcPipe { path } => Some(path.as_str()),
-            ModbusMasterDataSource::PortForwarding { source_port } => Some(source_port.as_str()),
-            _ => None,
+            Self::MqttServer { url } => Some(url.as_str()),
+            Self::IpcPipe { path } => Some(path.as_str()),
+            Self::PortForwarding { source_port } => Some(source_port.as_str()),
+                    _ => None,
         }
     }
 
     pub fn set_text(&mut self, value: String) {
         match self {
-            ModbusMasterDataSource::MqttServer { url } => {
+            Self::MqttServer { url } => {
                 *url = value;
             }
-            ModbusMasterDataSource::IpcPipe { path } => {
+            Self::IpcPipe { path } => {
                 *path = value;
             }
-            ModbusMasterDataSource::PortForwarding { source_port } => {
+            Self::PortForwarding { source_port } => {
                 *source_port = value;
             }
-            ModbusMasterDataSource::Manual => {}
-            ModbusMasterDataSource::HttpServer { .. } => {}
+            Self::Manual | Self::HttpServer { .. } => {}
         }
     }
 }
@@ -240,20 +255,22 @@ pub enum StationMode {
 }
 
 impl StationMode {
-    pub fn is_master(self) -> bool {
-        matches!(self, StationMode::Master)
+    #[must_use]
+    pub const fn is_master(self) -> bool {
+        matches!(self, Self::Master)
     }
 
-    pub fn is_slave(self) -> bool {
-        matches!(self, StationMode::Slave)
+    #[must_use]
+    pub const fn is_slave(self) -> bool {
+        matches!(self, Self::Slave)
     }
 }
 
 impl fmt::Display for StationMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StationMode::Master => write!(f, "master"),
-            StationMode::Slave => write!(f, "slave"),
+            Self::Master => write!(f, "master"),
+            Self::Slave => write!(f, "slave"),
         }
     }
 }
@@ -269,7 +286,8 @@ pub enum RegisterMode {
 }
 
 impl RegisterMode {
-    pub const fn all() -> &'static [RegisterMode] {
+    #[must_use]
+    pub const fn all() -> &'static [Self] {
         &[
             Self::Coils,
             Self::DiscreteInputs,
@@ -278,13 +296,17 @@ impl RegisterMode {
         ]
     }
 
+    #[must_use]
     pub fn from_u8(v: u8) -> Self {
         match v {
             1 => Self::Coils,
             2 => Self::DiscreteInputs,
             3 => Self::Holding,
             4 => Self::Input,
-            _ => unimplemented!("Invalid RegisterMode value: {v}"),
+            _ => {
+                log::warn!("Invalid RegisterMode value: {v}, defaulting to Holding");
+                Self::Holding
+            }
         }
     }
 
@@ -317,12 +339,12 @@ impl TryFrom<&str> for RegisterMode {
 impl std::fmt::Display for RegisterMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RegisterMode::Coils => write!(f, "{}", lang().protocol.modbus.reg_type_coils),
-            RegisterMode::DiscreteInputs => {
+            Self::Coils => write!(f, "{}", lang().protocol.modbus.reg_type_coils),
+            Self::DiscreteInputs => {
                 write!(f, "{}", lang().protocol.modbus.reg_type_discrete_inputs)
             }
-            RegisterMode::Holding => write!(f, "{}", lang().protocol.modbus.reg_type_holding),
-            RegisterMode::Input => write!(f, "{}", lang().protocol.modbus.reg_type_input),
+            Self::Holding => write!(f, "{}", lang().protocol.modbus.reg_type_holding),
+            Self::Input => write!(f, "{}", lang().protocol.modbus.reg_type_input),
         }
     }
 }
@@ -378,6 +400,7 @@ impl Default for StationConfig {
 
 impl StationConfig {
     /// Convenience constructor for the common single-register-range case.
+    #[must_use]
     pub fn single_range(
         station_id: u8,
         mode: StationMode,
@@ -406,15 +429,18 @@ impl StationConfig {
         }
     }
 
-    pub fn station_id(&self) -> u8 {
+    #[must_use]
+    pub const fn station_id(&self) -> u8 {
         self.station_id
     }
 
-    pub fn is_master(&self) -> bool {
+    #[must_use]
+    pub const fn is_master(&self) -> bool {
         self.mode.is_master()
     }
 
-    pub fn is_slave(&self) -> bool {
+    #[must_use]
+    pub const fn is_slave(&self) -> bool {
         self.mode.is_slave()
     }
 
@@ -449,24 +475,25 @@ impl StationConfig {
         None
     }
 
+    #[must_use]
     pub fn register_mode(&self) -> RegisterMode {
         self.first_range()
-            .map(|(mode, _)| mode)
-            .expect("StationConfig must contain at least one register range")
+            .map_or(RegisterMode::Holding, |(mode, _)| mode)
     }
 
+    #[must_use]
     pub fn start_address(&self) -> u16 {
         self.first_range()
-            .map(|(_, range)| range.address_start)
-            .expect("StationConfig must contain at least one register range")
+            .map_or(0, |(_, range)| range.address_start)
     }
 
+    #[must_use]
     pub fn register_count(&self) -> u16 {
         self.first_range()
-            .map(|(_, range)| range.length)
-            .expect("StationConfig must contain at least one register range")
+            .map_or(0, |(_, range)| range.length)
     }
 
+    #[must_use]
     pub fn register_values(&self) -> Option<&[u16]> {
         self.first_range().and_then(|(_, range)| {
             if range.initial_values.is_empty() {
@@ -477,12 +504,14 @@ impl StationConfig {
         })
     }
 
+    #[must_use]
     pub fn register_values_owned(&self) -> Option<Vec<u16>> {
-        self.register_values().map(|slice| slice.to_vec())
+        self.register_values().map(<[u16]>::to_vec)
     }
 
     /// Total number of register ranges across all register modes.
-    pub fn range_count(&self) -> usize {
+    #[must_use]
+    pub const fn range_count(&self) -> usize {
         self.map.coils.len()
             + self.map.discrete_inputs.len()
             + self.map.holding.len()
@@ -490,23 +519,23 @@ impl StationConfig {
     }
 
     /// Whether the station is defined with exactly one register range.
-    pub fn is_single_range(&self) -> bool {
+    #[must_use]
+    pub const fn is_single_range(&self) -> bool {
         self.range_count() == 1
     }
 
-    pub fn set_station_id(&mut self, station_id: u8) {
+    pub const fn set_station_id(&mut self, station_id: u8) {
         self.station_id = station_id;
     }
 
-    pub fn set_mode(&mut self, mode: StationMode) {
+    pub const fn set_mode(&mut self, mode: StationMode) {
         self.mode = mode;
     }
 
     pub fn set_register_values(&mut self, values: Option<Vec<u16>>) {
-        let (_, range) = self
-            .first_range_mut()
-            .expect("StationConfig must contain at least one register range");
-        range.initial_values = values.unwrap_or_default();
+        if let Some((_, range)) = self.first_range_mut() {
+            range.initial_values = values.unwrap_or_default();
+        }
     }
 
     pub fn set_single_range(
@@ -556,12 +585,12 @@ pub struct ModbusRegisterItem {
     pub last_response_time: Option<std::time::Instant>, // For throttling responses in master mode
     pub pending_requests: Vec<u8>,                     // simplified type for now
 
-    /// Tracks which register indices have pending writes: (register_index, new_value)
+    /// Tracks which register indices have pending writes: (`register_index`, `new_value`)
     pub pending_writes: std::collections::HashMap<usize, u16>,
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, FromRepr)]
 pub enum ParityOption {
     None,
     Odd,
@@ -571,16 +600,16 @@ pub enum ParityOption {
 impl std::fmt::Display for ParityOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParityOption::None => write!(f, "{}", lang().protocol.common.parity_none),
-            ParityOption::Odd => write!(f, "{}", lang().protocol.common.parity_odd),
-            ParityOption::Even => write!(f, "{}", lang().protocol.common.parity_even),
+            Self::None => write!(f, "{}", lang().protocol.common.parity_none),
+            Self::Odd => write!(f, "{}", lang().protocol.common.parity_odd),
+            Self::Even => write!(f, "{}", lang().protocol.common.parity_even),
         }
     }
 }
 
-/// UI enums for DataBits and StopBits so they can be used with selector_spans
+/// UI enums for `DataBits` and `StopBits` so they can be used with `selector_spans`
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, FromRepr)]
 pub enum DataBitsOption {
     Five,
     Six,
@@ -591,16 +620,15 @@ pub enum DataBitsOption {
 impl std::fmt::Display for DataBitsOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DataBitsOption::Five => write!(f, "5"),
-            DataBitsOption::Six => write!(f, "6"),
-            DataBitsOption::Seven => write!(f, "7"),
-            DataBitsOption::Eight => write!(f, "8"),
+            Self::Five => write!(f, "5"),
+            Self::Six => write!(f, "6"),
+            Self::Seven => write!(f, "7"),
+            Self::Eight => write!(f, "8"),
         }
     }
 }
 
 // Custom conversion helpers removed. Use direct casts and `FromRepr::from_repr` as needed.
-impl DataBitsOption {}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, FromRepr)]
@@ -612,15 +640,17 @@ pub enum StopBitsOption {
 impl std::fmt::Display for StopBitsOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StopBitsOption::One => write!(f, "1"),
-            StopBitsOption::Two => write!(f, "2"),
+            Self::One => write!(f, "1"),
+            Self::Two => write!(f, "2"),
         }
     }
 }
 
-/// Baud rate presets including a Custom placeholder. Custom does not carry
-/// the numeric value here; the actual runtime baud is stored in the port
-/// configuration as a `u32`. This enum is used for selector rendering.
+/// Baud rate presets including a Custom placeholder.
+///
+/// Custom does not carry the numeric value here; the actual runtime baud
+/// is stored in the port configuration as a `u32`. This enum is used for
+/// selector rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum BaudRateSelector {
     B110,
@@ -646,102 +676,106 @@ pub enum BaudRateSelector {
 impl std::fmt::Display for BaudRateSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BaudRateSelector::Custom { .. } => write!(f, "{}", lang().protocol.common.custom),
-            other => write!(f, "{}", other.as_u32()),
+            Self::Custom { .. } => write!(f, "{}", lang().protocol.common.custom),
+                    other => write!(f, "{}", other.as_u32()),
         }
     }
 }
 
 impl BaudRateSelector {
-    pub fn as_u32(self) -> u32 {
+    #[must_use]
+    pub const fn as_u32(self) -> u32 {
         match self {
-            BaudRateSelector::B110 => 110u32,
-            BaudRateSelector::B300 => 300u32,
-            BaudRateSelector::B600 => 600u32,
-            BaudRateSelector::B1200 => 1200u32,
-            BaudRateSelector::B2400 => 2400u32,
-            BaudRateSelector::B4800 => 4800u32,
-            BaudRateSelector::B9600 => 9600u32,
-            BaudRateSelector::B14400 => 14400u32,
-            BaudRateSelector::B19200 => 19200u32,
-            BaudRateSelector::B38400 => 38400u32,
-            BaudRateSelector::B57600 => 57600u32,
-            BaudRateSelector::B115200 => 115200u32,
-            BaudRateSelector::B230400 => 230400u32,
-            BaudRateSelector::B460800 => 460800u32,
-            BaudRateSelector::B921600 => 921600u32,
-            BaudRateSelector::B1000000 => 1000000u32,
-            BaudRateSelector::B2000000 => 2000000u32,
-            BaudRateSelector::Custom { baud } => baud,
+            Self::B110 => 110u32,
+            Self::B300 => 300u32,
+            Self::B600 => 600u32,
+            Self::B1200 => 1200u32,
+            Self::B2400 => 2400u32,
+            Self::B4800 => 4800u32,
+            Self::B9600 => 9600u32,
+            Self::B14400 => 14400u32,
+            Self::B19200 => 19200u32,
+            Self::B38400 => 38400u32,
+            Self::B57600 => 57600u32,
+            Self::B115200 => 115_200_u32,
+            Self::B230400 => 230_400_u32,
+            Self::B460800 => 460_800_u32,
+            Self::B921600 => 921_600_u32,
+            Self::B1000000 => 1_000_000_u32,
+            Self::B2000000 => 2_000_000_u32,
+            Self::Custom { baud } => baud,
         }
     }
 
-    pub fn from_u32(v: u32) -> Self {
+    #[must_use]
+    pub const fn from_u32(v: u32) -> Self {
         match v {
-            110 => BaudRateSelector::B110,
-            300 => BaudRateSelector::B300,
-            600 => BaudRateSelector::B600,
-            1200 => BaudRateSelector::B1200,
-            2400 => BaudRateSelector::B2400,
-            4800 => BaudRateSelector::B4800,
-            9600 => BaudRateSelector::B9600,
-            14400 => BaudRateSelector::B14400,
-            19200 => BaudRateSelector::B19200,
-            38400 => BaudRateSelector::B38400,
-            57600 => BaudRateSelector::B57600,
-            115200 => BaudRateSelector::B115200,
-            230400 => BaudRateSelector::B230400,
-            460800 => BaudRateSelector::B460800,
-            921600 => BaudRateSelector::B921600,
-            1000000 => BaudRateSelector::B1000000,
-            2000000 => BaudRateSelector::B2000000,
-            _ => BaudRateSelector::Custom { baud: v },
+            110 => Self::B110,
+            300 => Self::B300,
+            600 => Self::B600,
+            1200 => Self::B1200,
+            2400 => Self::B2400,
+            4800 => Self::B4800,
+            9600 => Self::B9600,
+            14400 => Self::B14400,
+            19200 => Self::B19200,
+            38400 => Self::B38400,
+            57600 => Self::B57600,
+            115_200 => Self::B115200,
+            230_400 => Self::B230400,
+            460_800 => Self::B460800,
+            921_600 => Self::B921600,
+            1_000_000 => Self::B1000000,
+            2_000_000 => Self::B2000000,
+            _ => Self::Custom { baud: v },
         }
     }
 
-    pub fn to_index(self) -> usize {
+    #[must_use]
+    pub const fn to_index(self) -> usize {
         match self {
-            BaudRateSelector::B110 => 0usize,
-            BaudRateSelector::B300 => 1usize,
-            BaudRateSelector::B600 => 2usize,
-            BaudRateSelector::B1200 => 3usize,
-            BaudRateSelector::B2400 => 4usize,
-            BaudRateSelector::B4800 => 5usize,
-            BaudRateSelector::B9600 => 6usize,
-            BaudRateSelector::B14400 => 7usize,
-            BaudRateSelector::B19200 => 8usize,
-            BaudRateSelector::B38400 => 9usize,
-            BaudRateSelector::B57600 => 10usize,
-            BaudRateSelector::B115200 => 11usize,
-            BaudRateSelector::B230400 => 12usize,
-            BaudRateSelector::B460800 => 13usize,
-            BaudRateSelector::B921600 => 14usize,
-            BaudRateSelector::B1000000 => 15usize,
-            BaudRateSelector::B2000000 => 16usize,
-            BaudRateSelector::Custom { .. } => 17usize,
+            Self::B110 => 0usize,
+            Self::B300 => 1usize,
+            Self::B600 => 2usize,
+            Self::B1200 => 3usize,
+            Self::B2400 => 4usize,
+            Self::B4800 => 5usize,
+            Self::B9600 => 6usize,
+            Self::B14400 => 7usize,
+            Self::B19200 => 8usize,
+            Self::B38400 => 9usize,
+            Self::B57600 => 10usize,
+            Self::B115200 => 11usize,
+            Self::B230400 => 12usize,
+            Self::B460800 => 13usize,
+            Self::B921600 => 14usize,
+            Self::B1000000 => 15usize,
+            Self::B2000000 => 16usize,
+            Self::Custom { .. } => 17usize,
         }
     }
 
-    pub fn from_index(i: usize) -> Self {
+    #[must_use]
+    pub const fn from_index(i: usize) -> Self {
         match i {
-            0 => BaudRateSelector::B110,
-            1 => BaudRateSelector::B300,
-            2 => BaudRateSelector::B600,
-            3 => BaudRateSelector::B1200,
-            4 => BaudRateSelector::B2400,
-            5 => BaudRateSelector::B4800,
-            6 => BaudRateSelector::B9600,
-            7 => BaudRateSelector::B14400,
-            8 => BaudRateSelector::B19200,
-            9 => BaudRateSelector::B38400,
-            10 => BaudRateSelector::B57600,
-            11 => BaudRateSelector::B115200,
-            12 => BaudRateSelector::B230400,
-            13 => BaudRateSelector::B460800,
-            14 => BaudRateSelector::B921600,
-            15 => BaudRateSelector::B1000000,
-            16 => BaudRateSelector::B2000000,
-            _ => BaudRateSelector::Custom { baud: 0 },
+            0 => Self::B110,
+            1 => Self::B300,
+            2 => Self::B600,
+            3 => Self::B1200,
+            4 => Self::B2400,
+            5 => Self::B4800,
+            6 => Self::B9600,
+            7 => Self::B14400,
+            8 => Self::B19200,
+            9 => Self::B38400,
+            10 => Self::B57600,
+            11 => Self::B115200,
+            12 => Self::B230400,
+            13 => Self::B460800,
+            14 => Self::B921600,
+            15 => Self::B1000000,
+            16 => Self::B2000000,
+            _ => Self::Custom { baud: 0 },
         }
     }
 }
@@ -755,29 +789,31 @@ pub enum BaudRateOption {
 impl std::fmt::Display for BaudRateOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BaudRateOption::Preset(p) => write!(f, "{}", p.as_u32()),
-            BaudRateOption::Custom(v) => write!(f, "{v}"),
+            Self::Preset(p) => write!(f, "{}", p.as_u32()),
+            Self::Custom(v) => write!(f, "{v}"),
         }
     }
 }
 
 impl BaudRateOption {
-    pub fn from_u32(v: u32) -> Self {
+    #[must_use]
+    pub const fn from_u32(v: u32) -> Self {
         match BaudRateSelector::from_u32(v) {
-            BaudRateSelector::Custom { .. } => BaudRateOption::Custom(v),
-            s => BaudRateOption::Preset(s),
+            BaudRateSelector::Custom { .. } => Self::Custom(v),
+                    s => Self::Preset(s),
         }
     }
 
-    pub fn as_u32(self) -> u32 {
+    #[must_use]
+    pub const fn as_u32(self) -> u32 {
         match self {
-            BaudRateOption::Preset(s) => s.as_u32(),
-            BaudRateOption::Custom(v) => v,
+            Self::Preset(s) => s.as_u32(),
+            Self::Custom(v) => v,
         }
     }
 }
 
-/// Register mode for ModbusResponse, supports standard types and custom mode
+/// Register mode for `ModbusResponse`, supports standard types and custom mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseRegisterMode {
@@ -794,8 +830,9 @@ pub enum ResponseRegisterMode {
 }
 
 impl ResponseRegisterMode {
-    /// Create from RegisterMode
-    pub fn from_register_mode(mode: RegisterMode) -> Self {
+    /// Create from `RegisterMode`
+    #[must_use]
+    pub const fn from_register_mode(mode: RegisterMode) -> Self {
         match mode {
             RegisterMode::Coils => Self::Coils,
             RegisterMode::DiscreteInputs => Self::DiscreteInputs,
@@ -805,7 +842,8 @@ impl ResponseRegisterMode {
     }
 
     /// Create from function code (0x01-0x04 standard, others custom)
-    pub fn from_function_code(code: u8) -> Self {
+    #[must_use]
+    pub const fn from_function_code(code: u8) -> Self {
         match code {
             1 => Self::Coils,
             2 => Self::DiscreteInputs,
@@ -818,7 +856,8 @@ impl ResponseRegisterMode {
     }
 
     /// Get function code
-    pub fn function_code(self) -> u8 {
+    #[must_use]
+    pub const fn function_code(self) -> u8 {
         match self {
             Self::Coils => 1,
             Self::DiscreteInputs => 2,
@@ -829,17 +868,20 @@ impl ResponseRegisterMode {
     }
 
     /// Check if this is a standard mode
-    pub fn is_standard(self) -> bool {
+    #[must_use]
+    pub const fn is_standard(self) -> bool {
         !matches!(self, Self::Custom { .. })
     }
 
     /// Check if this is a custom mode
-    pub fn is_custom(self) -> bool {
+    #[must_use]
+    pub const fn is_custom(self) -> bool {
         matches!(self, Self::Custom { .. })
     }
 
-    /// Try to convert to RegisterMode (only works for standard types)
-    pub fn to_register_mode(self) -> Option<RegisterMode> {
+    /// Try to convert to `RegisterMode` (only works for standard types)
+    #[must_use]
+    pub const fn to_register_mode(self) -> Option<RegisterMode> {
         match self {
             Self::Coils => Some(RegisterMode::Coils),
             Self::DiscreteInputs => Some(RegisterMode::DiscreteInputs),
@@ -857,7 +899,7 @@ impl fmt::Display for ResponseRegisterMode {
             Self::DiscreteInputs => write!(f, "DiscreteInputs"),
             Self::Holding => write!(f, "Holding"),
             Self::Input => write!(f, "Input"),
-            Self::Custom { function_code } => write!(f, "Custom(0x{:02X})", function_code),
+            Self::Custom { function_code } => write!(f, "Custom(0x{function_code:02X})"),
         }
     }
 }

@@ -96,6 +96,7 @@ pub fn is_verification_step(step: &WorkflowStep) -> bool {
         || step.verify_with_placeholder.is_some()
         || step.cursor_at_line.is_some()
         || step.mock_verify_path.is_some()
+        || step.check_status.is_some()
 }
 
 /// Identifies if a step is a mock modification step (doesn't break groups)

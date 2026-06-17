@@ -2,7 +2,7 @@
 ///
 /// This module provides the default implementations that use flume channels for communication.
 /// These are used by the CLI commands and can also be used by external applications.
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -21,6 +21,7 @@ pub struct FlumeSlaveHandler {
 
 impl FlumeSlaveHandler {
     /// Create a new flume slave handler with an unbounded channel
+    #[must_use]
     pub fn new() -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::unbounded();
         let handler = Self {
@@ -31,6 +32,7 @@ impl FlumeSlaveHandler {
     }
 
     /// Create a new flume slave handler with a bounded channel
+    #[must_use]
     pub fn with_capacity(cap: usize) -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::bounded(cap);
         let handler = Self {
@@ -40,12 +42,13 @@ impl FlumeSlaveHandler {
         (handler, receiver)
     }
 
-    /// Stop the handler (causes should_continue to return false)
+    /// Stop the handler (causes `should_continue` to return false)
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
     }
 
     /// Get a handle to control this handler
+    #[must_use]
     pub fn get_control_handle(&self) -> FlumeHandlerControl {
         FlumeHandlerControl {
             running: Arc::clone(&self.running),
@@ -63,7 +66,7 @@ impl ModbusSlaveHandler for FlumeSlaveHandler {
     fn handle_response(&self, response: &ModbusResponse) -> Result<()> {
         self.sender
             .send(response.clone())
-            .map_err(|_| anyhow::anyhow!("Failed to send response: receiver dropped"))
+            .map_err(|_| anyhow!("Failed to send response: receiver dropped"))
     }
 
     fn should_continue(&self) -> bool {
@@ -79,6 +82,7 @@ pub struct FlumeMasterHandler {
 
 impl FlumeMasterHandler {
     /// Create a new flume master handler with an unbounded channel
+    #[must_use]
     pub fn new() -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::unbounded();
         let handler = Self {
@@ -89,6 +93,7 @@ impl FlumeMasterHandler {
     }
 
     /// Create a new flume master handler with a bounded channel
+    #[must_use]
     pub fn with_capacity(cap: usize) -> (Self, flume::Receiver<ModbusResponse>) {
         let (sender, receiver) = flume::bounded(cap);
         let handler = Self {
@@ -98,12 +103,13 @@ impl FlumeMasterHandler {
         (handler, receiver)
     }
 
-    /// Stop the handler (causes should_continue to return false)
+    /// Stop the handler (causes `should_continue` to return false)
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
     }
 
     /// Get a handle to control this handler
+    #[must_use]
     pub fn get_control_handle(&self) -> FlumeHandlerControl {
         FlumeHandlerControl {
             running: Arc::clone(&self.running),
@@ -121,7 +127,7 @@ impl ModbusMasterHandler for FlumeMasterHandler {
     fn handle_response(&self, response: &ModbusResponse) -> Result<()> {
         self.sender
             .send(response.clone())
-            .map_err(|_| anyhow::anyhow!("Failed to send response: receiver dropped"))
+            .map_err(|_| anyhow!("Failed to send response: receiver dropped"))
     }
 
     fn should_continue(&self) -> bool {
@@ -143,6 +149,7 @@ impl FlumeHandlerControl {
     }
 
     /// Check if the handler is still running
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
@@ -155,7 +162,7 @@ mod tests {
 
     #[test]
     fn test_flume_slave_handler() {
-        let (handler, receiver) = FlumeSlaveHandler::new();
+        let (handler, rx) = FlumeSlaveHandler::new();
 
         let response = ModbusResponse {
             station_id: 1,
@@ -167,9 +174,9 @@ mod tests {
 
         handler.handle_response(&response).unwrap();
 
-        let received = receiver.recv().unwrap();
-        assert_eq!(received.station_id, response.station_id);
-        assert_eq!(received.values, response.values);
+        let resp = rx.recv().unwrap();
+        assert_eq!(resp.station_id, response.station_id);
+        assert_eq!(resp.values, response.values);
     }
 
     #[test]

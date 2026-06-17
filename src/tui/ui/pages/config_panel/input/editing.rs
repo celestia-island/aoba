@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Result};
+#![allow(clippy::wildcard_enum_match_arm)]
+use anyhow::Result;
 use strum::IntoEnumIterator;
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -39,6 +40,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_editing_input(
     key: KeyEvent,
     bus: &Bus,
@@ -60,7 +62,7 @@ fn handle_editing_input(
         types::cursor::ConfigPanelCursor::ProtocolMode => {
             Some(1) // Only one option: Modbus RTU for now
         }
-        _ => None,
+            _ => None,
     };
 
     // For BaudRate (custom numeric input) only allow numeric input during editing
@@ -118,7 +120,7 @@ fn handle_editing_input(
                     }
                 }
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 Ok(())
             },
         )?;
@@ -176,7 +178,7 @@ fn handle_editing_input(
                     }
                 }
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 Ok(())
             },
         )?;
@@ -184,6 +186,7 @@ fn handle_editing_input(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_navigation_input(
     key: KeyEvent,
     bus: &Bus,
@@ -211,7 +214,7 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -230,10 +233,10 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
+        KeyCode::Up | KeyCode::Down | KeyCode::Char('k' | 'j') => {
             write_status(|status| {
                 if let crate::tui::status::Page::ConfigPanel {
                     cursor,
@@ -248,7 +251,7 @@ fn handle_navigation_input(
                         KeyCode::Down | KeyCode::Char('j') => {
                             *cursor = cursor.next();
                         }
-                        _ => {}
+                                            _ => {}
                     }
                     *view_offset = cursor.view_offset();
                 }
@@ -257,10 +260,9 @@ fn handle_navigation_input(
 
             sanitize_configpanel_cursor()?;
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => Ok(()),
         KeyCode::Enter => {
             log::info!("handle_navigation_input: Enter pressed, calling handle_enter_action");
             handle_enter_action(selected_cursor, bus)?;
@@ -270,7 +272,7 @@ fn handle_navigation_input(
         KeyCode::Esc => {
             // Return to entry page
             // First, get the selected_port and ports_count outside the write lock
-            let (selected_port_opt, _ports_count) = read_status(|status| {
+            let (selected_port_opt, _) = read_status(|status| {
                 let selected_port =
                     if let crate::tui::status::Page::ConfigPanel { selected_port, .. } =
                         &status.page
@@ -299,9 +301,10 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
+        #[allow(clippy::match_wildcard_for_single_variants, clippy::wildcard_enum_match_arm)]
         _ => Ok(()),
     }
 }
@@ -339,15 +342,14 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                         });
                         Ok(())
                     })?;
-                    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                    bus::request_refresh(&bus.ui_tx)?;
                     return Ok(());
                 }
 
                 log::info!("Sending ToggleRuntime for port: {port_name}");
                 log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx
-                    .send(crate::core::bus::UiToCore::ToggleRuntime(port_name.clone()))
-                    .map_err(|err| anyhow!(err))?;
+                    .send(crate::core::bus::UiToCore::ToggleRuntime(port_name.clone()))?;
                 log::info!("✅ ToggleRuntime({port_name}) message sent successfully");
             } else {
                 log::warn!("port_name is None");
@@ -366,7 +368,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
@@ -380,7 +382,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         types::cursor::ConfigPanelCursor::BaudRate
@@ -390,7 +392,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
             start_editing_mode(selected_cursor)?;
             Ok(())
         }
-        _ => Ok(()),
+        types::cursor::ConfigPanelCursor::ProtocolMode => Ok(()),
     }
 }
 
@@ -453,7 +455,9 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(0);
                         }
-                        _ => {}
+                        types::cursor::ConfigPanelCursor::EnablePort
+                        | types::cursor::ConfigPanelCursor::ProtocolConfig
+                        | types::cursor::ConfigPanelCursor::ViewCommunicationLog => {}
                     }
                 }
             }
@@ -480,28 +484,26 @@ fn handle_selector_commit(
                             .ports
                             .map
                             .get(port_name)
-                            .map(|port| port.serial_config.baud)
-                            .unwrap_or(9600))
+                            .map_or(9600, |port| port.serial_config.baud))
                     })?;
 
                     write_status(|status| {
                         status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
                             bytes: current_baud.to_string().into_bytes(),
-                            offset: current_baud.to_string().len() as isize,
+                            offset: isize::try_from(current_baud.to_string().len()).unwrap_or(isize::MAX),
                         };
                         Ok(())
                     })?;
                     return Ok(()); // Don't commit yet, wait for string input
-                } else {
-                    // Update serial config directly
-                    write_status(|status| {
-                        if let Some(port) = status.ports.map.get_mut(port_name) {
-                            port.serial_config.baud = sel.as_u32();
-                            port.config_modified = true;
-                        }
-                        Ok(())
-                    })?;
                 }
+                // Update serial config directly
+                write_status(|status| {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        port.serial_config.baud = sel.as_u32();
+                        port.config_modified = true;
+                    }
+                    Ok(())
+                })?;
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
                 let data_bits = match i {
@@ -545,11 +547,10 @@ fn handle_selector_commit(
                     Ok(())
                 })?;
             }
-            types::cursor::ConfigPanelCursor::ProtocolMode => {
+            _ => {
                 // For now only Modbus RTU option - no action needed
                 // Future: When MQTT/TCP support is added, handle protocol switching here
             }
-            _ => {}
         }
 
         write_status(|status| {

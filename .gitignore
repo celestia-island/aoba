@@ -11,6 +11,11 @@ Cargo.lock
 .idea
 
 .env
+*.swp
+*.swo
+*.orig
+__pycache__/
+*.pyc
 # TUI E2E debug scripts
 examples/tui_debug*.rs
 

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use std::{io, sync::Arc, time::Duration};
 
-use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
+use ratatui::{backend::CrosstermBackend, layout::{Layout, Direction, Constraint}, prelude::*};
 
 use crate::{core::task_manager::spawn_task, tui::status::Status, utils::sleep_1s};
 
@@ -10,17 +10,14 @@ use crate::{core::task_manager::spawn_task, tui::status::Status, utils::sleep_1s
 fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
 
-    let mut hints_count = match crate::tui::ui::pages::bottom_hints_for_app() {
-        Ok(h) => h.len(),
-        Err(_) => 0,
-    };
+    let mut hints_count = crate::tui::ui::pages::bottom_hints_for_app().map_or(0, |h| h.len());
 
     let error_visible = crate::tui::ui::bottom::visible_error()?.is_some();
     if error_visible {
         hints_count += 1; // dismiss hint row is appended to bottom hints
     }
 
-    let bottom_height = hints_count + if error_visible { 1 } else { 0 };
+    let bottom_height = hints_count + usize::from(error_visible);
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -28,7 +25,7 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
         .constraints([
             Constraint::Length(1), // title
             Constraint::Min(3),    // main
-            Constraint::Length(bottom_height as u16),
+            Constraint::Length(u16::try_from(bottom_height).unwrap_or(u16::MAX)),
         ])
         .split(area);
 
@@ -39,15 +36,14 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 #[doc(hidden)]
 pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
     render_ui(frame)
 }
 
 pub(crate) fn run_rendering_loop(
-    bus: crate::core::bus::Bus,
-    thr_rx: flume::Receiver<anyhow::Result<()>>,
+    bus: &crate::core::bus::Bus,
+    thr_rx: &flume::Receiver<Result<()>>,
 ) -> Result<()> {
     // Initialize terminal inside rendering thread to avoid cross-thread Terminal usage
     let mut stdout = io::stdout();
@@ -62,18 +58,15 @@ pub(crate) fn run_rendering_loop(
                 if let Err(err) = res {
                     eprintln!("thread exited with error: {err:#}");
                     return Err(err);
-                } else {
-                    log::info!("a monitored thread exited cleanly; shutting down");
-                    return Ok(());
                 }
+                log::info!("a monitored thread exited cleanly; shutting down");
+                return Ok(());
             }
 
             let should_quit = !matches!(
                 bus.core_rx.recv_timeout(Duration::from_millis(100)),
-                Ok(crate::core::bus::CoreToUi::Tick)
-                    | Ok(crate::core::bus::CoreToUi::Refreshed)
-                    | Ok(crate::core::bus::CoreToUi::Error)
-                    | Err(flume::RecvTimeoutError::Timeout)
+                Ok(crate::core::bus::CoreToUi::Tick | crate::core::bus::CoreToUi::Refreshed |
+crate::core::bus::CoreToUi::Error) | Err(flume::RecvTimeoutError::Timeout)
             );
 
             if should_quit {
@@ -81,7 +74,9 @@ pub(crate) fn run_rendering_loop(
             }
 
             terminal.draw(|frame| {
-                render_ui(frame).expect("Render failed");
+                if let Err(e) = render_ui(frame) {
+                    log::error!("Render error: {e}");
+                }
             })?;
         }
 
@@ -125,7 +120,7 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
             "PageDown" => (KeyCode::PageDown, KeyModifiers::NONE),
             "Home" => (KeyCode::Home, KeyModifiers::NONE),
             "End" => (KeyCode::End, KeyModifiers::NONE),
-            _ if key.starts_with("Char(") && key.ends_with(")") => {
+            _ if key.starts_with("Char(") && key.ends_with(')') => {
                 let ch = key[5..key.len() - 1]
                     .chars()
                     .next()
@@ -133,7 +128,10 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
                 (KeyCode::Char(ch), KeyModifiers::NONE)
             }
             _ if key.len() == 1 => {
-                let ch = key.chars().next().unwrap();
+                let ch = key
+                    .chars()
+                    .next()
+                    .ok_or_else(|| anyhow!("Empty key string"))?;
                 (KeyCode::Char(ch), KeyModifiers::NONE)
             }
             _ => return Err(anyhow!("Unsupported key string: {key}")),
@@ -144,12 +142,15 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
 }
 
 pub(crate) fn run_screen_capture_mode() -> Result<()> {
+    use crossterm::event::{Event, KeyCode, KeyModifiers};
+    use std::io::Write;
+
     log::info!("📸 Starting screen capture mode");
 
     let app = Arc::new(RwLock::new(Status::default()));
-    crate::tui::status::init_status(app.clone())?;
+    crate::tui::status::init_status(app)?;
 
-    let status_path = std::path::Path::new("/tmp/status.json");
+    let status_path = std::env::temp_dir().join("status.json");
     if status_path.exists() {
         log::info!(
             "📄 Loading status from {path}",
@@ -187,12 +188,10 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
         }
     })?;
 
-    use std::io::Write;
     io::stdout().flush()?;
 
     log::info!("✅ Screen rendered, waiting for termination signal...");
 
-    use crossterm::event::{Event, KeyCode, KeyModifiers};
     loop {
         if crossterm::event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = crossterm::event::read()? {
@@ -217,6 +216,7 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result<()> {
     use ratatui::backend::TestBackend;
 
@@ -269,7 +269,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
             Ok(crate::utils::E2EToTuiMessage::KeyPress { key }) => {
                 log::info!("⌨️  Processing key press: {key}");
                 if let Ok(event) = parse_key_string(&key) {
-                    if let Err(err) = crate::tui::input::handle_event(event, &bus) {
+                    if let Err(err) = crate::tui::input::handle_event(&event, &bus) {
                         log::warn!("Failed to handle key event: {err}");
                     }
                     sleep_1s().await;
@@ -281,7 +281,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                     crossterm::event::KeyCode::Char(ch),
                     crossterm::event::KeyModifiers::NONE,
                 ));
-                if let Err(err) = crate::tui::input::handle_event(event, &bus) {
+                if let Err(err) = crate::tui::input::handle_event(&event, &bus) {
                     log::warn!("Failed to handle char input: {err}");
                 }
                 sleep_1s().await;

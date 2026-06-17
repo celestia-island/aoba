@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::process::{Command, Stdio};
 
 use crate::utils::build_debug_bin;
@@ -113,7 +113,7 @@ pub async fn test_multi_masters() -> Result<()> {
 
             // Clean up and return error
             std::fs::remove_file(&config_file)?;
-            return Err(anyhow::anyhow!(
+            return Err(anyhow!(
                 "Multi-masters configuration process exited prematurely"
             ));
         }

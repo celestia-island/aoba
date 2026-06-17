@@ -3,7 +3,7 @@
 /// This example demonstrates the new Builder API with:
 /// - Multiple hooks in a middleware chain
 /// - Interceptor pattern for response processing
-use anyhow::Result;
+use anyhow::{Error, Result};
 use std::sync::Arc;
 
 use _main::api::modbus::{ModbusBuilder, ModbusHook, ModbusResponse, RegisterMode};
@@ -20,7 +20,7 @@ impl ModbusHook for RequestMonitorHook {
         Ok(())
     }
 
-    fn on_error(&self, _port: &str, error: &anyhow::Error) {
+    fn on_error(&self, _port: &str, error: &Error) {
         log::warn!("[RequestMonitorHook] Error: {}", error);
     }
 }
@@ -44,7 +44,7 @@ impl ModbusHook for ResponseLoggingHook {
         Ok(())
     }
 
-    fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
+    fn on_error(&self, _port: &str, _error: &Error) {}
 }
 
 /// Hook 3: Statistics tracker
@@ -66,7 +66,7 @@ impl ModbusHook for StatisticsHook {
     }
 
     fn on_after_response(&self, _port: &str, response: &ModbusResponse) -> Result<()> {
-        let mut count = self.total_requests.lock().unwrap();
+        let mut count = self.total_requests.lock().unwrap_or_else(|e| e.into_inner());
         *count += 1;
         log::info!(
             "[StatisticsHook] Request #{}: Station {}, {} values sent",
@@ -77,7 +77,7 @@ impl ModbusHook for StatisticsHook {
         Ok(())
     }
 
-    fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
+    fn on_error(&self, _port: &str, _error: &Error) {}
 }
 
 #[tokio::main]

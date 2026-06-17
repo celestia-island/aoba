@@ -1,7 +1,8 @@
 use anyhow::Result;
+use parking_lot::Mutex;
 use std::{
     io::{Read, Write},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -16,6 +17,7 @@ const READ_BUF_SIZE: usize = 256;
 const MAX_ASSEMBLING_LEN: usize = 768; // defensive cap (3 * READ_BUF_SIZE)
 
 impl SerialConfig {
+    #[must_use]
     pub fn apply_builder(&self, b: serialport::SerialPortBuilder) -> serialport::SerialPortBuilder {
         let b = b.data_bits(match self.data_bits {
             5 => DataBits::Five,
@@ -83,10 +85,10 @@ impl PortRuntimeHandle {
         let initial_cfg = initial.clone();
 
         let serial_clone2 = Arc::clone(&serial);
-        let port_name_clone = port_name.clone();
-        let initial_cfg_clone = initial_cfg.clone();
-        let cmd_rx_clone = cmd_rx.clone();
-        let evt_tx_clone = evt_tx.clone();
+        let port_name_clone = port_name;
+        let initial_cfg_clone = initial_cfg;
+        let cmd_rx_clone = cmd_rx;
+        let evt_tx_clone = evt_tx;
 
         // Spawn the runtime task - it will handle its own lifecycle through the command channel
         spawn_task(async move {
@@ -118,9 +120,9 @@ impl PortRuntimeHandle {
         let initial_cfg = initial.clone();
 
         let serial_clone2 = Arc::clone(&serial);
-        let initial_cfg_clone = initial_cfg.clone();
-        let cmd_rx_clone = cmd_rx.clone();
-        let evt_tx_clone = evt_tx.clone();
+        let initial_cfg_clone = initial_cfg;
+        let cmd_rx_clone = cmd_rx;
+        let evt_tx_clone = evt_tx;
 
         // Spawn the runtime task - it will handle its own lifecycle through the command channel
         spawn_task(async move {
@@ -191,11 +193,11 @@ async fn boot_serial_loop(
                 }
                 RuntimeCommand::Write(bytes) => {
                     let mut ok = false;
-                    if let Ok(mut serial) = serial.lock() {
-                        if serial.write_all(&bytes).is_ok() && serial.flush().is_ok() {
-                            ok = true;
-                        }
+                    let mut serial = serial.lock();
+                    if serial.write_all(&bytes).is_ok() && serial.flush().is_ok() {
+                        ok = true;
                     }
+                    drop(serial);
                     if ok {
                         evt_tx.send(RuntimeEvent::FrameSent(bytes.into()))?;
                     }
@@ -214,9 +216,9 @@ async fn boot_serial_loop(
             }
         }
         // Try to read from serial port
-        let mut data_received = false;
         read_attempts += 1;
-        if let Ok(mut g) = serial.lock() {
+        let data_received = {
+            let mut g = serial.lock();
             let mut buf = [0u8; READ_BUF_SIZE];
             match g.read(&mut buf) {
                 Ok(n) if n > 0 => {
@@ -229,27 +231,22 @@ async fn boot_serial_loop(
                     );
                     assembling.extend_from_slice(&buf[..n]);
                     last_byte = Some(Instant::now());
-                    data_received = true;
                     if assembling.len() > MAX_ASSEMBLING_LEN {
                         finalize_buffer(&mut assembling, &evt_tx)?;
                         assembling.clear();
                         last_byte = None;
                     }
+                    true
                 }
-                Ok(_) => {
-                    // Read returned 0 bytes, continue
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => {
-                    // Timeout is expected, continue
-                }
+                Ok(_) => false,
+                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => false,
                 Err(err) => {
                     log::warn!("⚠️  Runtime {port_name}: Serial read error: {err}");
                     evt_tx.send(RuntimeEvent::Error(format!("read error: {err}")))?;
+                    false
                 }
             }
-        } else {
-            log::warn!("⚠️  Runtime {port_name}: Failed to lock serial port");
-        }
+        };
 
         // Only sleep if no data was received to avoid excessive CPU usage
         // When data is flowing, continue immediately to read more
@@ -259,20 +256,8 @@ async fn boot_serial_loop(
     }
 }
 
-fn crc16_modbus(data: &[u8]) -> u16 {
-    let mut crc: u16 = 0xFFFF;
-    for &b in data {
-        crc ^= b as u16;
-        for _ in 0..8 {
-            if crc & 0x0001 != 0 {
-                crc >>= 1;
-                crc ^= 0xA001;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    crc
+pub(crate) fn crc16_modbus(data: &[u8]) -> u16 {
+    super::status::crc16_modbus(data)
 }
 
 fn candidate_lengths(b: &[u8]) -> Vec<usize> {
@@ -328,7 +313,7 @@ fn salvage_search(buf: &[u8]) -> Option<(usize, usize)> {
                 continue;
             }
             let calc = crc16_modbus(&slice[..pl]);
-            let crc = (slice[pl] as u16) | ((slice[pl + 1] as u16) << 8);
+            let crc = u16::from(slice[pl]) | (u16::from(slice[pl + 1]) << 8);
             if calc == crc {
                 return Some((s, len));
             }
@@ -356,7 +341,7 @@ fn finalize_residual(res: &mut Vec<u8>, out: &mut Vec<bytes::Bytes>) {
             }
             let pl = len - 2;
             let calc = crc16_modbus(&cur[..pl]);
-            let crc = (cur[pl] as u16) | ((cur[pl + 1] as u16) << 8);
+            let crc = u16::from(cur[pl]) | (u16::from(cur[pl + 1]) << 8);
             if calc == crc {
                 out.push(bytes::Bytes::from(cur[..len].to_vec()));
                 consumed += len;
@@ -392,32 +377,33 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> 
     let mut frames = Vec::new();
     finalize_residual(buf, &mut frames);
     if frames.is_empty() {
-    } else {
-        for frame in frames {
-            if log::log_enabled!(log::Level::Info) {
-                let hex = frame
-                    .iter()
-                    .map(|b| format!("{b:02X}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                log::info!("📨 Runtime: assembled frame {hex}");
-            }
-            evt.send(RuntimeEvent::FrameReceived(frame))?;
+        return Ok(());
+    }
+    for frame in frames {
+        if log::log_enabled!(log::Level::Info) {
+            let hex = frame
+                .iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            log::info!("📨 Runtime: assembled frame {hex}");
         }
+        evt.send(RuntimeEvent::FrameReceived(frame))?;
     }
 
     Ok(())
 }
 
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn compute_gap(cfg: &SerialConfig) -> Duration {
     let bits = 1.
-        + cfg.data_bits as f32
-        + (if cfg.parity != SerialParity::None {
-            1.
-        } else {
+        + f32::from(cfg.data_bits)
+        + if cfg.parity == SerialParity::None {
             0.
-        })
-        + cfg.stop_bits as f32;
+        } else {
+            1.
+        }
+        + f32::from(cfg.stop_bits);
     let char_ms = (bits / cfg.baud as f32) * 1000.0;
     let gap_ms = (char_ms * 4.0).clamp(3.0, 50.0);
     Duration::from_millis(gap_ms as u64)
@@ -434,8 +420,6 @@ fn reopen_serial(
     let builder = serialport::new(port, cfg.baud).timeout(Duration::from_millis(200));
     let builder = cfg.apply_builder(builder);
     let new_handle = builder.open()?;
-    if let Ok(mut handle) = shared.lock() {
-        *handle = new_handle;
-    }
+    *shared.lock() = new_handle;
     Ok(())
 }

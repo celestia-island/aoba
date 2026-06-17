@@ -1,10 +1,12 @@
 pub mod core;
 pub mod master;
+pub mod probe;
 pub mod slave;
 pub mod traits;
 
-use anyhow::{anyhow, Result};
-use std::sync::{Arc, Mutex};
+use anyhow::{anyhow, Error, Result};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 // Re-export types from protocol
 #[doc(hidden)]
@@ -92,6 +94,7 @@ pub struct ModbusBuilder {
 
 impl ModbusBuilder {
     /// Create a new builder for a Modbus Master.
+    #[must_use]
     pub fn new_master(station_id: u8) -> Self {
         Self {
             port_name: None,
@@ -111,6 +114,7 @@ impl ModbusBuilder {
     }
 
     /// Create a new builder for a Modbus Slave.
+    #[must_use]
     pub fn new_slave(station_id: u8) -> Self {
         Self {
             port_name: None,
@@ -130,17 +134,22 @@ impl ModbusBuilder {
     }
 
     /// Set the serial port name.
+    #[must_use]
     pub fn with_port(mut self, port_name: &str) -> Self {
         self.port_name = Some(port_name.to_string());
         self
     }
 
     /// Use a virtual serial port with a randomly generated name.
-    /// On Unix, this will be `/tmp/vcom_{uuid}`.
+    /// On Unix, this will be in the system temp directory as `vcom_{uuid}`.
+    #[must_use]
     pub fn with_virtual_port(mut self) -> Self {
         let uuid = uuid::Uuid::new_v4();
         #[cfg(unix)]
-        let port_name = format!("/tmp/vcom_{}", uuid);
+        let port_name = std::env::temp_dir()
+            .join(format!("vcom_{uuid}"))
+            .to_string_lossy()
+            .to_string();
         #[cfg(windows)]
         let port_name = format!("\\\\.\\CNCA{}", uuid.as_u128() % 100); // Fallback/Mock for Windows
 
@@ -149,13 +158,15 @@ impl ModbusBuilder {
     }
 
     /// Set the baud rate.
-    pub fn with_baud_rate(mut self, baud_rate: u32) -> Self {
+    #[must_use]
+    pub const fn with_baud_rate(mut self, baud_rate: u32) -> Self {
         self.baud_rate = baud_rate;
         self
     }
 
     /// Set the register configuration (single register, for backward compatibility).
-    pub fn with_register(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
+    #[must_use]
+    pub const fn with_register(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
         self.register_mode = mode;
         self.register_address = address;
         self.register_length = length;
@@ -180,6 +191,7 @@ impl ModbusBuilder {
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[must_use]
     pub fn add_register_poll(mut self, mode: RegisterMode, address: u16, length: u16) -> Self {
         self.register_polls.push(RegisterPollConfig {
             register_mode: mode,
@@ -190,7 +202,8 @@ impl ModbusBuilder {
     }
 
     /// Set the timeout in milliseconds.
-    pub fn with_timeout(mut self, timeout_ms: u64) -> Self {
+    #[must_use]
+    pub const fn with_timeout(mut self, timeout_ms: u64) -> Self {
         self.timeout_ms = timeout_ms;
         self
     }
@@ -202,7 +215,8 @@ impl ModbusBuilder {
     ///
     /// Recommended: 100-500ms depending on baud rate and communication quality.
     /// Default for Slave: 300ms. Master ignores this setting.
-    pub fn with_error_recovery_delay(mut self, delay_ms: u64) -> Self {
+    #[must_use]
+    pub const fn with_error_recovery_delay(mut self, delay_ms: u64) -> Self {
         self.error_recovery_delay_ms = Some(delay_ms);
         self
     }
@@ -210,7 +224,7 @@ impl ModbusBuilder {
     /// Set the polling interval in milliseconds (Master only).
     ///
     /// For multi-register masters, this is the delay **between each register type poll**.
-    /// Example: poll_interval=1000ms means:
+    /// Example: `poll_interval=1000ms` means:
     /// - Poll Coils → wait 1s → Poll Holding → wait 1s → Poll Coils...
     ///
     /// Shorter intervals = faster updates but higher bus load.
@@ -236,7 +250,8 @@ impl ModbusBuilder {
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn with_poll_interval(mut self, interval_ms: u64) -> Self {
+    #[must_use]
+    pub const fn with_poll_interval(mut self, interval_ms: u64) -> Self {
         self.poll_interval_ms = interval_ms;
         self
     }
@@ -249,16 +264,19 @@ impl ModbusBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, LoggingHandler};
+    /// use aoba::api::modbus::{ModbusBuilder, ModbusHook};
     /// use std::sync::Arc;
+    ///
+    /// struct LoggingHook;
+    /// impl ModbusHook for LoggingHook {}
     ///
     /// let master = ModbusBuilder::new_master(1)
     ///     .with_port("COM1")
-    ///     .add_hook(Arc::new(LoggingHandler))  // First hook
-    ///     .add_hook(Arc::new(CustomHook))      // Second hook
+    ///     .add_hook(Arc::new(LoggingHook))
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[must_use]
     pub fn add_hook(mut self, hook: Arc<dyn ModbusHook>) -> Self {
         self.hooks.push(hook);
         self
@@ -273,21 +291,33 @@ impl ModbusBuilder {
     ///
     /// ```no_run
     /// use aoba::api::modbus::{ModbusBuilder, ModbusDataSource};
-    /// use std::sync::{Arc, Mutex};
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
+    ///
+    /// struct CsvDataSource;
+    /// impl ModbusDataSource for CsvDataSource {
+    ///     fn next_data(&mut self) -> anyhow::Result<Option<Vec<u16>>> {
+    ///         Ok(None)
+    ///     }
+    /// }
     ///
     /// let master = ModbusBuilder::new_master(1)
     ///     .with_port("COM1")
-    ///     .add_data_source(Arc::new(Mutex::new(FileDataSource::new("data.csv")?)))
-    ///     .add_data_source(Arc::new(Mutex::new(DefaultDataSource::new())))
+    ///     .add_data_source(Arc::new(Mutex::new(CsvDataSource)))
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[must_use]
     pub fn add_data_source(mut self, source: Arc<Mutex<dyn traits::ModbusDataSource>>) -> Self {
         self.data_sources.push(source);
         self
     }
 
     /// Build the configuration (public legacy API).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no port name has been configured.
     pub fn build(self) -> Result<ModbusPortConfig> {
         let port_name = self.port_name.ok_or_else(|| {
             anyhow!("Port name is required. Use with_port() or with_virtual_port()")
@@ -310,17 +340,25 @@ impl ModbusBuilder {
     ///
     /// Uses the hooks and data sources configured with `.add_hook()` and `.add_data_source()`.
     ///
+    /// # Errors
+    ///
+    /// Returns an error if the builder is configured for Master instead of Slave,
+    /// if no port name is set, or if the slave loop fails to start.
+    ///
     /// # Example
     ///
     /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, LoggingHandler};
+    /// use aoba::api::modbus::{ModbusBuilder, ModbusHook, RegisterMode};
     /// use std::sync::Arc;
+    ///
+    /// struct LoggingHook;
+    /// impl ModbusHook for LoggingHook {}
     ///
     /// let slave = ModbusBuilder::new_slave(19)
     ///     .with_port("COM2")
     ///     .with_baud_rate(57600)
     ///     .with_register(RegisterMode::Holding, 0x10, 33)
-    ///     .add_hook(Arc::new(LoggingHandler))
+    ///     .add_hook(Arc::new(LoggingHook))
     ///     .build_slave()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
@@ -355,18 +393,26 @@ impl ModbusBuilder {
     /// 1. Single register polling (using `with_register()`)
     /// 2. Multi-register polling (using `add_register_poll()` multiple times)
     ///
+    /// # Errors
+    ///
+    /// Returns an error if the builder is configured for Slave instead of Master,
+    /// if no port name is set, or if the master fails to start.
+    ///
     /// # Example
     ///
     /// ```no_run
-    /// use aoba::api::modbus::{ModbusBuilder, RegisterMode, LoggingHandler};
+    /// use aoba::api::modbus::{ModbusBuilder, ModbusHook, RegisterMode};
     /// use std::sync::Arc;
+    ///
+    /// struct LoggingHook;
+    /// impl ModbusHook for LoggingHook {}
     ///
     /// let master = ModbusBuilder::new_master(19)
     ///     .with_port("COM1")
     ///     .with_baud_rate(57600)
     ///     .add_register_poll(RegisterMode::Coils, 0x01, 11)
     ///     .add_register_poll(RegisterMode::Holding, 0x10, 33)
-    ///     .add_hook(Arc::new(LoggingHandler))
+    ///     .add_hook(Arc::new(LoggingHook))
     ///     .with_timeout(2000)
     ///     .build_master()?;
     /// # Ok::<(), anyhow::Error>(())
@@ -393,16 +439,16 @@ impl ModbusBuilder {
             poll_interval_ms: self.poll_interval_ms,
         };
 
-        if !self.register_polls.is_empty() {
+        if self.register_polls.is_empty() {
+            // Single register mode
+            master::ModbusMaster::new(config, self.hooks, self.data_sources)
+        } else {
             master::ModbusMaster::new_multi_register(
                 config,
                 self.register_polls,
                 self.hooks,
                 self.data_sources,
             )
-        } else {
-            // Single register mode
-            master::ModbusMaster::new(config, self.hooks, self.data_sources)
         }
     }
 
@@ -413,6 +459,11 @@ impl ModbusBuilder {
     ///
     /// Use this when you need fine-grained control over polling timing,
     /// such as implementing a state machine or adaptive polling strategy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the builder is configured for Slave instead of Master,
+    /// if no port name is set, or if the master fails to start.
     ///
     /// # Example
     ///
@@ -454,18 +505,28 @@ impl ModbusBuilder {
             poll_interval_ms: self.poll_interval_ms,
         };
 
-        master::ModbusMaster::new_manual(config)
+        master::ModbusMaster::new_manual(&config)
     }
 }
 
 pub trait ModbusHook: Send + Sync {
+    /// Called before each poll or write request.
+    ///
+    /// # Errors
+    ///
+    /// Return an error to abort the current operation.
     fn on_before_request(&self, _port: &str) -> Result<()> {
         Ok(())
     }
+    /// Called after receiving a successful response.
+    ///
+    /// # Errors
+    ///
+    /// Return an error to signal a processing failure.
     fn on_after_response(&self, _port: &str, _response: &ModbusResponse) -> Result<()> {
         Ok(())
     }
-    fn on_error(&self, _port: &str, _error: &anyhow::Error) {}
+    fn on_error(&self, _port: &str, _error: &Error) {}
 
     /// Called before writing data to Modbus (Master writing to Slave)
     ///
@@ -482,6 +543,10 @@ pub trait ModbusHook: Send + Sync {
     ///
     /// * `Ok(())` - Continue with the write operation
     /// * `Err(_)` - Abort the write operation and report error
+    ///
+    /// # Errors
+    ///
+    /// Return an error to abort the write operation.
     fn on_before_write(
         &self,
         _port: &str,
@@ -505,6 +570,10 @@ pub trait ModbusHook: Send + Sync {
     ///
     /// * `Ok(())` - Continue with request processing
     /// * `Err(_)` - Abort processing and report error
+    ///
+    /// # Errors
+    ///
+    /// Return an error to abort request processing.
     fn on_after_receive_request(&self, _port: &str, _data: &mut [u8]) -> Result<()> {
         Ok(())
     }

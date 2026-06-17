@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use crate::tui::{status as types, status::read_status};
@@ -6,12 +7,13 @@ use crate::tui::{status as types, status::read_status};
 pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
     match read_status(|status| Ok(status.page.clone()))? {
         crate::tui::status::Page::ConfigPanel { cursor, .. } => Ok(cursor),
-        _ => Ok(types::cursor::ConfigPanelCursor::EnablePort),
+            _ => Ok(types::cursor::ConfigPanelCursor::EnablePort),
     }
 }
 
 /// Helper: whether a port is occupied by this instance
-pub fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bool {
+#[must_use]
+pub const fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bool {
     if let Some(port) = port_data {
         return port.state.is_occupied_by_this();
     }
@@ -19,6 +21,7 @@ pub fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bo
 }
 
 /// Get serial parameter value by cursor type
+#[must_use]
 pub fn get_serial_param_value_by_cursor(
     port_data: Option<&types::port::PortData>,
     cursor_type: types::cursor::ConfigPanelCursor,
@@ -37,7 +40,7 @@ pub fn get_serial_param_value_by_cursor(
             types::cursor::ConfigPanelCursor::StopBits => {
                 return port.serial_config.stop_bits.to_string()
             }
-            _ => return "??".to_string(),
+                    _ => return "??".to_string(),
         }
     }
 

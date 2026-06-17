@@ -7,7 +7,7 @@ mod modbus_cli;
 mod modbus_e2e;
 mod utils;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 #[cfg(not(windows))]
 use std::process::Command;
 
@@ -231,7 +231,7 @@ async fn main() -> Result<()> {
         _ => {
             log::error!("❌ Unknown module: {module}");
             log::error!("Run without --module to see available modules");
-            return Err(anyhow::anyhow!("Unknown module: {module}"));
+            return Err(anyhow!("Unknown module: {module}"));
         }
     }
 

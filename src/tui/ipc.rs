@@ -25,6 +25,7 @@ pub(crate) fn map_register_mode_hint(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     match message {
         IpcMessage::PortOpened { .. } => {
@@ -162,13 +163,20 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                 pending_indices.len()
                                             );
                                             // Calculate offset: incoming range may start at different address than station
-                                            let offset = (range.address_start - modbus_stations[idx].register_address) as usize;
+                                            let offset = range.address_start.saturating_sub(modbus_stations[idx].register_address) as usize;
                                             for (incoming_idx, &value) in range.initial_values.iter().enumerate() {
                                                 // Convert to station's last_values index
                                                 let station_idx = offset + incoming_idx;
                                                 let old_value = modbus_stations[idx].last_values.get(station_idx).copied();
                                                 // Only update if this register doesn't have a pending write
-                                                if !pending_indices.contains(&station_idx) {
+                                                if pending_indices.contains(&station_idx) {
+                                                    let pending_val = modbus_stations[idx].pending_writes.get(&station_idx).copied().unwrap_or(0);
+                                                    log::info!(
+                                                        "  ⏸️  Register addr=0x{:04X} (idx={}): Skipped (pending=0x{pending_val:04X}, incoming=0x{value:04X})",
+                                                        range.address_start + u16::try_from(incoming_idx).unwrap_or(u16::MAX),
+                                                        station_idx
+                                                    );
+                                                } else {
                                                     // Ensure last_values is large enough
                                                     if station_idx >= modbus_stations[idx].last_values.len() {
                                                         modbus_stations[idx].last_values.resize(station_idx + 1, 0);
@@ -178,24 +186,17 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                                                         if old != value {
                                                             log::info!(
                                                                 "  📝 Register addr=0x{:04X} (idx={}): 0x{old:04X} → 0x{value:04X}",
-                                                                range.address_start + incoming_idx as u16,
+                                                                range.address_start + u16::try_from(incoming_idx).unwrap_or(u16::MAX),
                                                                 station_idx
                                                             );
                                                         }
                                                     } else {
                                                         log::info!(
                                                             "  📝 Register addr=0x{:04X} (idx={}): <new> → 0x{value:04X}",
-                                                            range.address_start + incoming_idx as u16,
+                                                            range.address_start + u16::try_from(incoming_idx).unwrap_or(u16::MAX),
                                                             station_idx
                                                         );
                                                     }
-                                                } else {
-                                                    let pending_val = modbus_stations[idx].pending_writes.get(&station_idx).copied().unwrap_or(0);
-                                                    log::info!(
-                                                        "  ⏸️  Register addr=0x{:04X} (idx={}): Skipped (pending=0x{pending_val:04X}, incoming=0x{value:04X})",
-                                                        range.address_start + incoming_idx as u16,
-                                                        station_idx
-                                                    );
                                                 }
                                             }
                                         } else if !range.initial_values.is_empty() {
@@ -292,6 +293,13 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                     // Find the station and register to update
                     for station in stations.iter_mut() {
                         if station.station_id == station_id {
+                            if register_address < station.register_address {
+                                log::warn!(
+                                    "Register address 0x{register_address:04X} < station start 0x{:04X}, skipping",
+                                    station.register_address
+                                );
+                                continue;
+                            }
                             let register_index =
                                 (register_address - station.register_address) as usize;
 

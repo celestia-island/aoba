@@ -59,7 +59,7 @@ pub use renderer::*;
 pub use workflow::*;
 
 use _main::utils::i18n;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 
 /// TUI E2E test suite with TOML-based workflows
@@ -188,7 +188,7 @@ async fn main() -> Result<()> {
     // Find the requested workflow
     let workflow = workflows
         .get(module)
-        .ok_or_else(|| anyhow::anyhow!("Unknown module: {module}"))?;
+        .ok_or_else(|| anyhow!("Unknown module: {module}"))?;
 
     log::info!("🧪 Running module: {module}");
     log::info!(

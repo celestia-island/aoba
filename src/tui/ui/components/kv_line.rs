@@ -27,7 +27,7 @@ pub(crate) const INDICATOR_UNSELECTED: &str = "  ";
 ///
 /// Returns a `Line<'static>` suitable for `render_boxed_paragraph`.
 pub fn render_kv_line<F>(
-    label: impl ToString,
+    label: &str,
     text_state: TextState,
     value_renderer: F,
     dimmed: bool,

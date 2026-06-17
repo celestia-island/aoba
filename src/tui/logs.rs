@@ -67,6 +67,7 @@ pub(crate) fn append_lifecycle_log(
     append_port_log_internal(port_name, summary, Some(metadata));
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn append_modbus_log(
     port_name: &str,
     direction: &str,
@@ -133,7 +134,7 @@ pub(crate) fn append_modbus_log(
                         register_quantity = Some(u16::from_be_bytes([payload[4], payload[5]]));
                     }
                 } else if payload.len() >= 3 {
-                    let byte_count = payload[2] as u16;
+                    let byte_count = u16::from(payload[2]);
                     if register_quantity.is_none() {
                         register_quantity = match function_code {
                             0x01 | 0x02 => Some(byte_count * 8),
@@ -185,48 +186,44 @@ pub(crate) fn append_modbus_log(
     let mut role = StationMode::Master;
     let mut role_confident = false;
     let status_lookup = crate::tui::status::read_status(|status| {
-        if let Some(port) = status.ports.map.get(port_name) {
-            match &port.config {
-                PortConfig::Modbus { mode, stations, .. } => {
-                    let role = if mode.is_master() {
-                        StationMode::Master
-                    } else {
-                        StationMode::Slave
-                    };
+        status.ports.map.get(port_name).map_or(Ok(None), |port| match &port.config {
+            PortConfig::Modbus { mode, stations, .. } => {
+                let role = if mode.is_master() {
+                    StationMode::Master
+                } else {
+                    StationMode::Slave
+                };
 
-                    let matched = if let (Some(sid), Some(reg_mode)) = (station_id, register_mode) {
-                        let mut candidate: Option<(usize, u16, u16)> = None;
+                let matched = if let (Some(sid), Some(reg_mode)) = (station_id, register_mode) {
+                    let mut candidate: Option<(usize, u16, u16)> = None;
 
-                        for (idx, item) in stations.iter().enumerate() {
-                            if item.station_id != sid || item.register_mode != reg_mode {
-                                continue;
-                            }
+                    for (idx, item) in stations.iter().enumerate() {
+                        if item.station_id != sid || item.register_mode != reg_mode {
+                            continue;
+                        }
 
-                            if let Some(start) = register_start {
-                                if item.register_address == start {
-                                    candidate =
-                                        Some((idx, item.register_address, item.register_length));
-                                    break;
-                                }
-                            }
-
-                            if candidate.is_none() {
+                        if let Some(start) = register_start {
+                            if item.register_address == start {
                                 candidate =
                                     Some((idx, item.register_address, item.register_length));
+                                break;
                             }
                         }
 
-                        candidate.map(|(idx, start, length)| (idx as u16 + 1, start, length))
-                    } else {
-                        None
-                    };
+                        if candidate.is_none() {
+                            candidate =
+                                Some((idx, item.register_address, item.register_length));
+                        }
+                    }
 
-                    Ok(Some((role, matched)))
-                }
+                    candidate.map(|(idx, start, length)| (u16::try_from(idx).unwrap_or(u16::MAX) + 1, start, length))
+                } else {
+                    None
+                };
+
+                Ok(Some((role, matched)))
             }
-        } else {
-            Ok(None)
-        }
+        })
     });
 
     match status_lookup {
@@ -266,18 +263,10 @@ pub(crate) fn append_modbus_log(
     let register_end = register_start
         .and_then(|start| register_quantity.map(|len| start.saturating_add(len.saturating_sub(1))));
 
-    let full_payload_hex = if payload.is_empty() {
-        String::new()
-    } else {
-        payload
-            .iter()
-            .map(|byte| format!("{byte:02X}"))
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
+    let full_payload_hex = crate::utils::format_hex_bytes(&payload);
 
     if failure_reason.is_none() {
-        failure_reason = parse_error.clone();
+        failure_reason.clone_from(&parse_error);
     }
 
     if success_hint == Some(true) {
@@ -442,7 +431,7 @@ pub(crate) fn append_status_log(port_name: &str, status: &str, details: Option<&
         summary,
         PortManagementEvent::Status {
             status: status.to_string(),
-            details: details.map(|d| d.to_string()),
+            details: details.map(std::string::ToString::to_string),
         },
     );
 }
@@ -487,8 +476,9 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
     let translations = lang();
     let summary = translations.tabs.log.subprocess_exited_summary.clone();
 
-    let (success, mut detail) = match exit_status {
-        Some(status) => {
+    let (success, mut detail) = exit_status.map_or_else(
+        || (None, translations.tabs.log.reason_none.clone()),
+        |status| {
             let success = status.success();
             let detail = if success {
                 translations.tabs.log.subprocess_exit_success.clone()
@@ -499,9 +489,8 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
                 translations.tabs.log.subprocess_exit_signal.clone()
             };
             (Some(success), detail)
-        }
-        None => (None, translations.tabs.log.reason_none.clone()),
-    };
+        },
+    );
 
     // If process exited abnormally, append recent stderr logs to the detail
     if success != Some(true) {
@@ -561,7 +550,7 @@ fn cli_mode_label(mode: &CliMode) -> String {
     }
 }
 
-pub(crate) fn map_function_to_register_mode(function_code: u8) -> Option<RegisterMode> {
+pub(crate) const fn map_function_to_register_mode(function_code: u8) -> Option<RegisterMode> {
     match function_code {
         0x01 | 0x05 | 0x0F => Some(RegisterMode::Coils),
         0x02 => Some(RegisterMode::DiscreteInputs),

@@ -1,8 +1,7 @@
-use anyhow::Result;
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+#![allow(clippy::wildcard_enum_match_arm)]
+use anyhow::{anyhow, Result};
+use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 
 use super::{
     core::{self, master_poll_loop, MasterPollParams},
@@ -41,25 +40,32 @@ impl ModbusMaster {
     /// ```rust,no_run
     /// use aoba::api::modbus::{ModbusMaster, ModbusPortConfig, RegisterMode};
     ///
-    /// let config = ModbusPortConfig {
-    ///     port_name: "/dev/ttyUSB0".to_string(),
-    ///     baud_rate: 9600,
-    ///     station_id: 1,
-    ///     register_address: 0x00,
-    ///     register_length: 10,
-    ///     register_mode: RegisterMode::Holding,
-    ///     timeout_ms: 1000,
-    ///     error_recovery_delay_ms: 1000,
-    /// };
+    /// fn example() -> anyhow::Result<()> {
+    ///     let config = ModbusPortConfig {
+    ///         port_name: "/dev/ttyUSB0".to_string(),
+    ///         baud_rate: 9600,
+    ///         station_id: 1,
+    ///         register_address: 0x00,
+    ///         register_length: 10,
+    ///         register_mode: RegisterMode::Holding,
+    ///         timeout_ms: 1000,
+    ///         error_recovery_delay_ms: Some(1000),
+    ///         poll_interval_ms: 1000,
+    ///     };
     ///
-    /// let master = ModbusMaster::new_simple(config, 1000)?;
+    ///     let master = ModbusMaster::new_simple(config, 1000)?;
     ///
-    /// // Receive responses
-    /// while let Some(response) = master.try_recv() {
-    ///     println!("Values: {:?}", response.values);
+    ///     // Receive responses
+    ///     while let Some(response) = master.try_recv() {
+    ///         println!("Values: {:?}", response.values);
+    ///     }
+    ///     Ok(())
     /// }
     /// ```
-    pub fn new_simple(config: ModbusPortConfig, poll_interval_ms: u64) -> Result<Self> {
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened.
+    pub fn new_simple(config: &ModbusPortConfig, poll_interval_ms: u64) -> Result<Self> {
         let (response_tx, response_rx) = flume::unbounded();
         let (control_tx, control_rx) = flume::unbounded();
 
@@ -108,7 +114,11 @@ impl ModbusMaster {
     ///
     /// This variant provides access to the port handle for manual single-shot operations.
     /// Does NOT start automatic polling - use `poll_once` or `write_coils` methods.
-    pub fn new_manual(config: ModbusPortConfig) -> Result<Self> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the serial port cannot be opened.
+    pub fn new_manual(config: &ModbusPortConfig) -> Result<Self> {
         let (_response_tx, response_rx) = flume::unbounded();
         let (control_tx, control_rx) = flume::unbounded();
 
@@ -149,15 +159,21 @@ impl ModbusMaster {
     /// Execute a single poll operation (manual mode only)
     ///
     /// Returns the response immediately without going through the receiver channel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, or if the underlying
+    /// poll operation fails (port error, invalid response, etc.).
     pub fn poll_once(
         &self,
         register_mode: RegisterMode,
         address: u16,
         length: u16,
     ) -> Result<ModbusResponse> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
         core::execute_single_poll_internal(
             port_arc,
@@ -174,16 +190,23 @@ impl ModbusMaster {
     ///
     /// **Note for 储氢罐 hardware**: The hardware requires byte-swapping for 11-coil writes.
     /// Apply `swap_coils_byte_order()` before calling this method if needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, writing to or reading
+    /// from the port fails, the response is incomplete, or the slave returns an
+    /// exception code.
     pub fn write_coils(&self, address: u16, values: &[bool]) -> Result<()> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
-
         use crate::protocol::modbus::generate_pull_set_coils_request;
         use std::io::{Read, Write};
 
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
+
         // Generate write request
-        let mut request = generate_pull_set_coils_request(self.station_id, values.to_vec())?;
+        let mut request = generate_pull_set_coils_request(self.station_id, values)?;
         let mut frame = Vec::new();
         request.generate_set_coils_bulk(address, values, &mut frame)?;
 
@@ -195,20 +218,18 @@ impl ModbusMaster {
         }
 
         // Send request
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&frame)?;
         port.flush()?;
 
         // Read confirmation
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
+        drop(port);
 
         if bytes_read < 8 {
-            return Err(anyhow::anyhow!(
-                "Incomplete write response: {} bytes",
-                bytes_read
-            ));
+            return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
         }
 
         // Check response
@@ -218,16 +239,17 @@ impl ModbusMaster {
             Ok(())
         } else if response[1] & 0x80 != 0 {
             // Exception
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Modbus exception: error code 0x{:02X}",
                 response[2]
             ))
         } else {
-            Err(anyhow::anyhow!("Unexpected response"))
+            Err(anyhow!("Unexpected response"))
         }
     }
 
     /// Get a reference to the port handle for advanced operations (manual mode only)
+    #[must_use]
     pub fn port_handle(&self) -> Option<&Arc<Mutex<Box<dyn serialport::SerialPort>>>> {
         self.port_arc.as_ref()
     }
@@ -236,98 +258,111 @@ impl ModbusMaster {
     ///
     /// For a single register, consider using `write_holding` instead (fc 0x06).
     /// Returns Ok(()) if the write was acknowledged successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, writing to or reading
+    /// from the port fails, the response is incomplete, or the slave returns an
+    /// exception code.
     pub fn write_registers(&self, address: u16, values: &[u16]) -> Result<()> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
-
         use crate::protocol::modbus::generate_pull_set_holdings_bulk_request;
         use std::io::{Read, Write};
+
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
         let (_request, frame) =
             generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
 
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&frame)?;
         port.flush()?;
 
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
+        drop(port);
 
         if bytes_read < 8 {
-            return Err(anyhow::anyhow!(
-                "Incomplete write response: {} bytes",
-                bytes_read
-            ));
+            return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
         }
 
         let response = &buffer[..bytes_read];
         if response[1] == 0x10 {
             Ok(())
         } else if response[1] & 0x80 != 0 {
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Modbus exception: error code 0x{:02X}",
                 response[2]
             ))
         } else {
-            Err(anyhow::anyhow!("Unexpected response"))
+            Err(anyhow!("Unexpected response"))
         }
     }
 
     /// Write a single holding register (function code 0x06) to the slave.
     ///
     /// Returns Ok(()) if the write was acknowledged successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if manual mode is not available, writing to or reading
+    /// from the port fails, the response is incomplete, or the slave returns an
+    /// exception code.
     pub fn write_holding(&self, address: u16, value: u16) -> Result<()> {
-        let port_arc = self.port_arc.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Manual mode not available (created with automatic polling)")
-        })?;
-
         use crate::protocol::modbus::generate_pull_set_holding_request;
         use std::io::{Read, Write};
 
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
+
         let (_request, frame) = generate_pull_set_holding_request(self.station_id, address, value)?;
 
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock();
         port.write_all(&frame)?;
         port.flush()?;
 
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let mut buffer = vec![0u8; 256];
+        let mut buffer = [0u8; 256];
         let bytes_read = port.read(&mut buffer)?;
+        drop(port);
 
         if bytes_read < 8 {
-            return Err(anyhow::anyhow!(
-                "Incomplete write response: {} bytes",
-                bytes_read
-            ));
+            return Err(anyhow!("Incomplete write response: {bytes_read} bytes"));
         }
 
         let response = &buffer[..bytes_read];
         if response[1] == 0x06 {
             Ok(())
         } else if response[1] & 0x80 != 0 {
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Modbus exception: error code 0x{:02X}",
                 response[2]
             ))
         } else {
-            Err(anyhow::anyhow!("Unexpected response"))
+            Err(anyhow!("Unexpected response"))
         }
     }
 
     /// Try to receive without blocking (iterator-like interface)
+    #[must_use]
     pub fn try_recv(&self) -> Option<ModbusResponse> {
         self.receiver.try_recv().ok()
     }
 
     /// Receive a response with timeout
+    #[must_use]
     pub fn recv_timeout(&self, timeout: Duration) -> Option<ModbusResponse> {
         self.receiver.recv_timeout(timeout).ok()
     }
 
     /// Get the underlying receiver for advanced usage
-    pub fn receiver(&self) -> &flume::Receiver<ModbusResponse> {
+    #[must_use]
+    pub const fn receiver(&self) -> &flume::Receiver<ModbusResponse> {
         &self.receiver
     }
 
@@ -338,19 +373,29 @@ impl ModbusMaster {
     /// - `"pause"` - Pause polling (not yet implemented)
     ///
     /// Returns `Ok(())` if command was sent, `Err` if no control channel exists (legacy API)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no control channel is available or if sending the
+    /// command through the channel fails.
     pub fn send_control(&self, command: &str) -> Result<()> {
         if let Some(tx) = &self.control_sender {
             tx.send(command.to_string())
-                .map_err(|e| anyhow::anyhow!("Failed to send control command: {}", e))?;
+                .map_err(|e| anyhow!("Failed to send control command: {e}"))?;
             Ok(())
         } else {
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "Control channel not available (created with legacy API)"
             ))
         }
     }
 
     /// Stop the master loop gracefully
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no control channel is available or if sending the
+    /// stop command fails.
     pub fn stop(&self) -> Result<()> {
         self.send_control("stop")
     }
@@ -363,26 +408,30 @@ fn new_master_legacy(
     config: ModbusPortConfig,
     hooks: Vec<Arc<dyn ModbusHook>>,
     data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
-) -> Result<ModbusMaster> {
+) -> ModbusMaster {
     let (sender, receiver) = flume::unbounded();
     let station_id = config.station_id;
 
     let handle =
         tokio::spawn(async move { run_master_loop(config, hooks, data_sources, sender).await });
 
-    Ok(ModbusMaster {
+    ModbusMaster {
         receiver,
         control_sender: None,
         _handle: handle,
         port_arc: None,
         station_id,
-    })
+    }
 }
 
 impl ModbusMaster {
     /// Create and start a multi-register Modbus master (new Builder API)
     ///
     /// Polls multiple register types on the same port with middleware support.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying master construction fails.
     pub fn new_multi_register(
         config: ModbusPortConfig,
         register_polls: Vec<super::RegisterPollConfig>,
@@ -406,12 +455,16 @@ impl ModbusMaster {
     }
 
     /// Legacy constructor using hooks and data sources
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying master construction fails.
     pub fn new(
         config: ModbusPortConfig,
         hooks: Vec<Arc<dyn ModbusHook>>,
         data_sources: Vec<Arc<Mutex<dyn ModbusDataSource>>>,
     ) -> Result<Self> {
-        new_master_legacy(config, hooks, data_sources)
+        Ok(new_master_legacy(config, hooks, data_sources))
     }
 }
 
@@ -419,6 +472,12 @@ impl ModbusMaster {
 ///
 /// This function is independent of communication channels.
 /// It calls the handler's methods to process responses.
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during polling.
+#[allow(clippy::too_many_lines)]
 pub async fn run_master_loop_with_handler(
     config: ModbusPortConfig,
     hooks: Option<Arc<dyn ModbusHook>>,
@@ -446,22 +505,62 @@ pub async fn run_master_loop_with_handler(
 
         if let Some(h) = &hooks {
             if let Err(e) = h.on_before_request(&config.port_name) {
-                log::warn!("Hook on_before_request failed: {}", e);
+                log::warn!("Hook on_before_request failed: {e}");
             }
         }
 
         // Check if data source has new data to write
         if let Some(ds) = &data_source {
-            match ds.lock().unwrap().next_data() {
-                Ok(Some(_values)) => {
-                    // TODO: Implement write operation based on register mode
-                    // For now, we'll just log it
+            let data_result = { ds.lock().next_data() };
+            match data_result {
+                Ok(Some(values)) => {
+                    log::info!(
+                        "Data source provided {} values for write operation (mode={:?})",
+                        values.len(),
+                        config.register_mode,
+                    );
+                    let write_result = match config.register_mode {
+                        RegisterMode::Coils => {
+                            let coil_values: Vec<bool> = values.iter().map(|&v| v != 0).collect();
+                            crate::api::modbus::core::master_write_coils(
+                                &port_arc,
+                                config.station_id,
+                                config.register_address,
+                                &coil_values,
+                            )?;
+                            Ok(())
+                        }
+                        RegisterMode::Holding => {
+                            use std::io::Write;
+                            let (_request, frame) =
+                                crate::protocol::modbus::generate_pull_set_holdings_bulk_request(
+                                    config.station_id,
+                                    config.register_address,
+                                    &values,
+                                )?;
+                            let mut port = port_arc.lock();
+                            port.write_all(&frame)?;
+                            port.flush()?;
+                            drop(port);
+                            Ok(())
+                        }
+                                            other => {
+                            log::warn!("Write operation not supported for {other:?}");
+                            Ok(())
+                        }
+                    };
+                    if let Err(e) = write_result {
+                        log::warn!("Data source write failed: {e}");
+                        if let Some(h) = &hooks {
+                            h.on_error(&config.port_name, &e);
+                        }
+                    }
                 }
                 Ok(None) => {
                     // No data this cycle
                 }
                 Err(e) => {
-                    log::warn!("Data source error: {}", e);
+                    log::warn!("Data source error: {e}");
                 }
             }
         }
@@ -476,13 +575,13 @@ pub async fn run_master_loop_with_handler(
             Ok(response) => {
                 if let Some(h) = &hooks {
                     if let Err(e) = h.on_after_response(&config.port_name, &response) {
-                        log::warn!("Hook on_after_response failed: {}", e);
+                        log::warn!("Hook on_after_response failed: {e}");
                     }
                 }
 
                 // Use handler to process response
                 if let Err(e) = handler.handle_response(&response) {
-                    log::error!("Handler failed to process response: {}", e);
+                    log::error!("Handler failed to process response: {e}");
                     if let Some(h) = &hooks {
                         h.on_error(&config.port_name, &e);
                     }
@@ -522,7 +621,7 @@ pub async fn run_master_loop_with_handler(
                         // call before_request hooks again
                         if let Some(h) = &hooks {
                             if let Err(e) = h.on_before_request(&config.port_name) {
-                                log::warn!("Hook on_before_request failed during retry: {}", e);
+                                log::warn!("Hook on_before_request failed during retry: {e}");
                             }
                         }
 
@@ -538,13 +637,12 @@ pub async fn run_master_loop_with_handler(
                                     if let Err(e) =
                                         h.on_after_response(&config.port_name, &response)
                                     {
-                                        log::warn!("Hook on_after_response failed: {}", e);
+                                        log::warn!("Hook on_after_response failed: {e}");
                                     }
                                 }
                                 if let Err(e) = handler.handle_response(&response) {
                                     log::error!(
-                                        "Handler failed to process response after retry: {}",
-                                        e
+                                        "Handler failed to process response after retry: {e}"
                                     );
                                     if let Some(h) = &hooks {
                                         h.on_error(&config.port_name, &e);
@@ -559,10 +657,7 @@ pub async fn run_master_loop_with_handler(
                                     h.on_error(&config.port_name, &last_err);
                                 }
                                 log::warn!(
-                                    "Retry {}/{} failed: {}",
-                                    attempt,
-                                    max_retries,
-                                    last_err
+                                    "Retry {attempt}/{max_retries} failed: {last_err}"
                                 );
                             }
                         }
@@ -591,6 +686,12 @@ pub async fn run_master_loop_with_handler(
 /// Master loop - uses middleware chains for hooks and data sources (Builder API)
 ///
 /// Process hooks and data sources using a middleware chain
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during the polling loop.
+#[allow(clippy::too_many_lines)]
 async fn run_master_loop(
     config: ModbusPortConfig,
     hooks: Vec<Arc<dyn ModbusHook>>,
@@ -609,8 +710,7 @@ async fn run_master_loop(
         poll_interval_ms: _, // Poll interval is hard-coded to 1 second for single-register mode
     } = config;
 
-    log::info!("Starting master loop (middleware) for {}", port_name);
-    // debug info removed
+    log::info!("Starting master loop (middleware) for {port_name}");
 
     let port_handle = open_serial_port(&port_name, baud_rate, Duration::from_millis(timeout_ms))?;
     let port_arc = Arc::new(Mutex::new(port_handle));
@@ -619,7 +719,7 @@ async fn run_master_loop(
         // Execute hook chain: on_before_request
         for hook in &hooks {
             if let Err(e) = hook.on_before_request(&port_name) {
-                log::warn!("Hook on_before_request failed: {}", e);
+                log::warn!("Hook on_before_request failed: {e}");
             }
         }
 
@@ -627,8 +727,6 @@ async fn run_master_loop(
         if !data_sources.is_empty() {
             match super::traits::execute_data_source_chain(&mut data_sources) {
                 Ok(Some(values)) => {
-                    // debug info removed
-
                     // Execute write operation based on register mode
                     match register_mode {
                         RegisterMode::Coils => {
@@ -639,7 +737,7 @@ async fn run_master_loop(
                             let mut request_frame = Vec::new();
                             match crate::protocol::modbus::generate_pull_set_coils_request(
                                 station_id,
-                                coil_values.clone(),
+                                &coil_values,
                             ) {
                                 Ok(mut request) => {
                                     if let Err(e) = request.generate_set_coils_bulk(
@@ -647,7 +745,7 @@ async fn run_master_loop(
                                         &coil_values,
                                         &mut request_frame,
                                     ) {
-                                        log::error!("Failed to generate coils write frame: {}", e);
+                                        log::error!("Failed to generate coils write frame: {e}");
                                     } else {
                                         // Call on_before_write hooks to transform data (e.g., byte-swap)
                                         for hook in &hooks {
@@ -656,37 +754,32 @@ async fn run_master_loop(
                                                 &mut request_frame,
                                                 register_mode,
                                             ) {
-                                                log::warn!("Hook on_before_write failed: {}", e);
+                                                log::warn!("Hook on_before_write failed: {e}");
                                             }
                                         }
 
-                                        // debug info removed
-
                                         // Send write request and receive confirmation
                                         {
-                                            let mut port = port_arc.lock().unwrap();
+                                            let mut port = port_arc.lock();
                                             if let Err(e) = port.write_all(&request_frame) {
-                                                log::error!("Failed to send write request: {}", e);
-                                                let err = anyhow::anyhow!(
-                                                    "Failed to send write request: {}",
-                                                    e
-                                                );
+                                                log::error!("Failed to send write request: {e}");
+                                                let err =
+                                                    anyhow!("Failed to send write request: {e}");
                                                 for hook in &hooks {
                                                     hook.on_error(&port_name, &err);
                                                 }
                                             } else if let Err(e) = port.flush() {
-                                                log::error!("Failed to flush write request: {}", e);
+                                                log::error!("Failed to flush write request: {e}");
                                             } else {
                                                 // Wait for confirmation
                                                 std::thread::sleep(
                                                     std::time::Duration::from_millis(50),
                                                 );
-                                                let mut buffer = vec![0u8; 256];
-                                                match port.read(&mut buffer) {
-                                                    Ok(bytes_read) if bytes_read >= 8 => {
-                                                        let response = &buffer[..bytes_read];
-                                                        // debug info removed
-                                                        if response[1] == 0x0F {
+                                                let mut buffer = [0u8; 256];
+                                                    match port.read(&mut buffer) {
+                                                        Ok(bytes_read) if bytes_read >= 8 => {
+                                                            let response = &buffer[..bytes_read];
+                                                            if response[1] == 0x0F {
                                                             log::info!("Successfully wrote {} coils to slave at address 0x{:04X}", coil_values.len(), register_address);
                                                         } else if response[1] & 0x80 != 0 {
                                                             log::error!("Modbus exception: error code 0x{:02X}", response[2]);
@@ -694,14 +787,12 @@ async fn run_master_loop(
                                                     }
                                                     Ok(bytes_read) => {
                                                         log::warn!(
-                                                            "Incomplete write response: {} bytes",
-                                                            bytes_read
+                                                            "Incomplete write response: {bytes_read} bytes"
                                                         );
                                                     }
                                                     Err(e) => {
                                                         log::error!(
-                                                            "Failed to read write confirmation: {}",
-                                                            e
+                                                            "Failed to read write confirmation: {e}"
                                                         );
                                                     }
                                                 }
@@ -710,21 +801,21 @@ async fn run_master_loop(
                                     }
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to generate coils write request: {}", e);
+                                    log::error!("Failed to generate coils write request: {e}");
                                 }
                             }
                         }
                         RegisterMode::Holding => {
                             log::warn!("Holding register write not yet implemented");
                         }
-                        _ => {
-                            log::warn!("Write operation not supported for {:?}", register_mode);
+                                            _ => {
+                            log::warn!("Write operation not supported for {register_mode:?}");
                         }
                     }
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    log::error!("Data source chain error: {}", e);
+                    log::error!("Data source chain error: {e}");
                 }
             }
         }
@@ -741,7 +832,7 @@ async fn run_master_loop(
                 // Execute hook chain: on_after_response
                 for hook in &hooks {
                     if let Err(e) = hook.on_after_response(&port_name, &response) {
-                        log::warn!("Hook on_after_response failed: {}", e);
+                        log::warn!("Hook on_after_response failed: {e}");
                     }
                 }
 
@@ -769,16 +860,13 @@ async fn run_master_loop(
                 }
 
                 if max_retries == 0 {
-                    log::warn!("Error polling on {}: {}", port_name, err);
+                    log::warn!("Error polling on {port_name}: {err}");
                     for hook in &hooks {
                         hook.on_error(&port_name, &err);
                     }
                 } else {
                     log::warn!(
-                        "Error polling on {}: {} - retrying up to {} times",
-                        port_name,
-                        err,
-                        max_retries
+                        "Error polling on {port_name}: {err} - retrying up to {max_retries} times"
                     );
                     let mut last_err = err;
                     let mut success = false;
@@ -788,7 +876,7 @@ async fn run_master_loop(
                         // call before_request hooks again
                         for hook in &hooks {
                             if let Err(e) = hook.on_before_request(&port_name) {
-                                log::warn!("Hook on_before_request failed during retry: {}", e);
+                                log::warn!("Hook on_before_request failed during retry: {e}");
                             }
                         }
 
@@ -802,7 +890,7 @@ async fn run_master_loop(
                             Ok(response) => {
                                 for hook in &hooks {
                                     if let Err(e) = hook.on_after_response(&port_name, &response) {
-                                        log::warn!("Hook on_after_response failed: {}", e);
+                                        log::warn!("Hook on_after_response failed: {e}");
                                     }
                                 }
                                 if sender.send(response).is_err() {
@@ -818,10 +906,7 @@ async fn run_master_loop(
                                     hook.on_error(&port_name, &last_err);
                                 }
                                 log::warn!(
-                                    "Retry {}/{} failed: {}",
-                                    attempt,
-                                    max_retries,
-                                    last_err
+                                    "Retry {attempt}/{max_retries} failed: {last_err}"
                                 );
                             }
                         }
@@ -829,9 +914,7 @@ async fn run_master_loop(
 
                     if !success {
                         log::warn!(
-                            "Retries exhausted for {}: last error: {}",
-                            port_name,
-                            last_err
+                            "Retries exhausted for {port_name}: last error: {last_err}"
                         );
                     }
                 }
@@ -847,7 +930,13 @@ async fn run_master_loop(
 
 /// Multi-register master loop - middleware chains (Builder API)
 ///
-/// Polls multiple register types with middleware support
+/// Polls multiple register types with middleware support.
+///
+/// # Errors
+///
+/// Returns an error if the serial port cannot be opened or if an unrecoverable
+/// error occurs during the polling loop.
+#[allow(clippy::too_many_lines)]
 async fn run_multi_register_master_loop(
     config: ModbusPortConfig,
     register_polls: Vec<super::RegisterPollConfig>,
@@ -883,7 +972,7 @@ async fn run_multi_register_master_loop(
             // Execute hook chain: on_before_request
             for hook in &hooks {
                 if let Err(e) = hook.on_before_request(&port_name) {
-                    log::warn!("Hook on_before_request failed: {}", e);
+                    log::warn!("Hook on_before_request failed: {e}");
                 }
             }
 
@@ -915,7 +1004,7 @@ async fn run_multi_register_master_loop(
                             let mut request_frame = Vec::new();
                             match crate::protocol::modbus::generate_pull_set_coils_request(
                                 station_id,
-                                coil_values.clone(),
+                                &coil_values,
                             ) {
                                 Ok(mut request) => {
                                     if let Err(e) = request.generate_set_coils_bulk(
@@ -923,7 +1012,7 @@ async fn run_multi_register_master_loop(
                                         &coil_values,
                                         &mut request_frame,
                                     ) {
-                                        log::error!("Failed to generate coils write frame: {}", e);
+                                        log::error!("Failed to generate coils write frame: {e}");
                                     } else {
                                         // Call on_before_write hooks to transform data (e.g., byte-swap)
                                         for hook in &hooks {
@@ -932,13 +1021,13 @@ async fn run_multi_register_master_loop(
                                                 &mut request_frame,
                                                 RegisterMode::Coils,
                                             ) {
-                                                log::warn!("Hook on_before_write failed: {}", e);
+                                                log::warn!("Hook on_before_write failed: {e}");
                                             }
                                         }
 
                                         // Send write request
                                         let write_result = {
-                                            let mut port = port_arc.lock().unwrap();
+                                            let mut port = port_arc.lock();
                                             let write_res = port.write_all(&request_frame);
                                             if write_res.is_ok() {
                                                 port.flush()
@@ -949,13 +1038,10 @@ async fn run_multi_register_master_loop(
 
                                         if let Err(e) = write_result {
                                             log::error!(
-                                                "Failed to send/flush write request: {}",
-                                                e
+                                                "Failed to send/flush write request: {e}"
                                             );
-                                            let err = anyhow::anyhow!(
-                                                "Failed to send write request: {}",
-                                                e
-                                            );
+                                            let err =
+                                                anyhow!("Failed to send write request: {e}");
                                             for hook in &hooks {
                                                 hook.on_error(&port_name, &err);
                                             }
@@ -964,9 +1050,9 @@ async fn run_multi_register_master_loop(
                                             tokio::time::sleep(Duration::from_millis(50)).await;
 
                                             // Read confirmation (acquire lock again)
-                                            let mut buffer = vec![0u8; 256];
+                                            let mut buffer = [0u8; 256];
                                             let read_result = {
-                                                let mut port = port_arc.lock().unwrap();
+                                                let mut port = port_arc.lock();
                                                 port.read(&mut buffer)
                                             };
 
@@ -984,14 +1070,12 @@ async fn run_multi_register_master_loop(
                                                 }
                                                 Ok(bytes_read) => {
                                                     log::warn!(
-                                                        "Incomplete write response: {} bytes",
-                                                        bytes_read
+                                                        "Incomplete write response: {bytes_read} bytes"
                                                     );
                                                 }
                                                 Err(e) => {
                                                     log::error!(
-                                                        "Failed to read write confirmation: {}",
-                                                        e
+                                                        "Failed to read write confirmation: {e}"
                                                     );
                                                 }
                                             }
@@ -999,7 +1083,7 @@ async fn run_multi_register_master_loop(
                                     }
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to generate coils write request: {}", e);
+                                    log::error!("Failed to generate coils write request: {e}");
                                 }
                             }
                         } else {
@@ -1008,7 +1092,7 @@ async fn run_multi_register_master_loop(
                     }
                     Ok(None) => {}
                     Err(e) => {
-                        log::error!("Data source chain error: {}", e);
+                        log::error!("Data source chain error: {e}");
                     }
                 }
             }
@@ -1022,12 +1106,10 @@ async fn run_multi_register_master_loop(
                 poll_config.register_mode,
             ) {
                 Ok(response) => {
-                    // debug info removed
-
                     // Execute hook chain: on_after_response
                     for hook in &hooks {
                         if let Err(e) = hook.on_after_response(&port_name, &response) {
-                            log::warn!("Hook on_after_response failed: {}", e);
+                            log::warn!("Hook on_after_response failed: {e}");
                         }
                     }
 
@@ -1082,7 +1164,7 @@ async fn run_multi_register_master_loop(
                             // call before_request hooks again
                             for hook in &hooks {
                                 if let Err(e) = hook.on_before_request(&port_name) {
-                                    log::warn!("Hook on_before_request failed during retry: {}", e);
+                                    log::warn!("Hook on_before_request failed during retry: {e}");
                                 }
                             }
 
@@ -1098,7 +1180,7 @@ async fn run_multi_register_master_loop(
                                         if let Err(e) =
                                             hook.on_after_response(&port_name, &response)
                                         {
-                                            log::warn!("Hook on_after_response failed: {}", e);
+                                            log::warn!("Hook on_after_response failed: {e}");
                                         }
                                     }
                                     if sender.send(response).is_err() {
@@ -1114,10 +1196,7 @@ async fn run_multi_register_master_loop(
                                         hook.on_error(&port_name, &last_err);
                                     }
                                     log::warn!(
-                                        "Retry {}/{} failed: {}",
-                                        attempt,
-                                        max_retries,
-                                        last_err
+                                        "Retry {attempt}/{max_retries} failed: {last_err}"
                                     );
                                 }
                             }

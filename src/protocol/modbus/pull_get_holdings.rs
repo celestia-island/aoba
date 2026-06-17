@@ -13,8 +13,12 @@ pub fn generate_pull_get_holdings_request(
     Ok((request, raw))
 }
 
-pub fn parse_pull_get_holdings(request: &mut ModbusRequest, response: Vec<u8>) -> Result<Vec<u16>> {
-    request.parse_ok(&response)?;
+pub fn parse_pull_get_holdings(request: &mut ModbusRequest, response: &[u8]) -> Result<Vec<u16>> {
+    request.parse_ok(response)?;
+
+    if response.len() < 5 {
+        return Err(anyhow::anyhow!("Response too short for holdings: {} bytes", response.len()));
+    }
 
     let values = response[3..response.len() - 2]
         .chunks_exact(2)

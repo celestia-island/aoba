@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use ratatui::{prelude::*, style::Modifier, text::Line};
@@ -69,7 +70,7 @@ pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {
 
 /// Create a config line with dynamic spacing between label and value using unicode-width
 fn create_line(
-    label: impl ToString,
+    label: &str,
     selected: bool,
     render_closure: impl Fn() -> Result<Vec<Span<'static>>>,
 ) -> Result<Line<'static>> {
@@ -88,13 +89,12 @@ fn create_line(
 }
 
 /// Generate lines for modbus panel with 2:20:remaining layout (indicator:label:value).
-/// Returns lines that can be used with render_boxed_paragraph.
+/// Returns lines that can be used with `render_boxed_paragraph`.
+#[allow(clippy::too_many_lines)]
 pub fn render_kv_lines_with_indicators(
     _sel_index: usize,
     terminal_width: u16,
 ) -> Result<Vec<Line<'static>>> {
-    let mut lines: Vec<Line> = Vec::new();
-
     // Separator configuration for this file
     const SEP_LEN: usize = 64usize;
 
@@ -104,6 +104,8 @@ pub fn render_kv_lines_with_indicators(
         let sep = Span::styled(sep_str, Style::default().fg(Color::DarkGray));
         Line::from(vec![sep])
     }
+
+    let mut lines: Vec<Line> = Vec::new();
 
     let port_data = read_status(|status| {
         if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -136,7 +138,7 @@ pub fn render_kv_lines_with_indicators(
         let mut rendered_value_spans: Vec<Span> = Vec::new();
         if let Some(ref port) = port_data {
             let types::port::PortConfig::Modbus { mode, .. } = &port.config;
-            let (current_mode, mode_obj) = (mode.to_index(), mode.clone());
+            let current_mode = mode.to_index();
 
             let selected = matches!(
                 current_selection,
@@ -165,7 +167,7 @@ pub fn render_kv_lines_with_indicators(
             };
 
             let variants = ModbusConnectionMode::all_variants();
-            let current_text = format!("{mode_obj}");
+            let current_text = format!("{mode}");
 
             match state {
                 TextState::Normal => {
@@ -275,7 +277,7 @@ pub fn render_kv_lines_with_indicators(
                     ModbusMasterDataSourceValueKind::PortName => {
                         lang().protocol.modbus.data_source_source_port.clone()
                     }
-                    ModbusMasterDataSourceValueKind::None => unreachable!(),
+                    ModbusMasterDataSourceValueKind::None => String::new(),
                 };
 
                 let master_source_value_renderer = || -> Result<Vec<Span<'static>>> {
@@ -376,8 +378,7 @@ pub fn render_kv_lines_with_indicators(
 
                         let style = match state {
                             TextState::Normal => Style::default().fg(Color::White),
-                            TextState::Selected => Style::default().fg(Color::Yellow),
-                            TextState::Editing => Style::default().fg(Color::Yellow),
+                            TextState::Selected | TextState::Editing => Style::default().fg(Color::Yellow),
                         };
 
                         return Ok(vec![Span::styled(display_text, style)]);
@@ -410,13 +411,13 @@ pub fn render_kv_lines_with_indicators(
                             else {
                                 unreachable!("editing state requires string buffer");
                             };
-                            let custom_value = String::from_utf8_lossy(bytes).to_string();
+                            let custom_value = String::from_utf8_lossy(bytes).into_owned();
                             let placeholder = get_data_source_placeholder(master_source.kind());
-                            return input_spans_with_placeholder(custom_value, placeholder, state);
+                            return input_spans_with_placeholder(&custom_value, placeholder.as_deref(), state);
                         }
 
                         let placeholder = get_data_source_placeholder(master_source.kind());
-                        input_spans_with_placeholder(port_num.to_string(), placeholder, state)
+                        input_spans_with_placeholder(&port_num.to_string(), placeholder.as_deref(), state)
                     } else {
                         // Render as text input for other types (MQTT, IPC, PortForwarding)
                         let current_value = match master_source {
@@ -425,7 +426,7 @@ pub fn render_kv_lines_with_indicators(
                             ModbusMasterDataSource::PortForwarding { source_port } => {
                                 source_port.clone()
                             }
-                            _ => String::new(),
+                                                    _ => String::new(),
                         };
 
                         let editing = selected
@@ -444,18 +445,18 @@ pub fn render_kv_lines_with_indicators(
                             else {
                                 unreachable!("editing state requires string buffer");
                             };
-                            let custom_value = String::from_utf8_lossy(bytes).to_string();
+                            let custom_value = String::from_utf8_lossy(bytes).into_owned();
                             let placeholder = get_data_source_placeholder(master_source.kind());
-                            return input_spans_with_placeholder(custom_value, placeholder, state);
+                            return input_spans_with_placeholder(&custom_value, placeholder.as_deref(), state);
                         }
 
                         let placeholder = get_data_source_placeholder(master_source.kind());
-                        input_spans_with_placeholder(current_value, placeholder, state)
+                        input_spans_with_placeholder(&current_value, placeholder.as_deref(), state)
                     }
                 };
 
                 lines.push(create_line(
-                    value_label,
+                    &value_label,
                     matches!(
                         current_selection,
                         types::cursor::ModbusDashboardCursor::MasterSourceValue
@@ -494,12 +495,12 @@ pub fn render_kv_lines_with_indicators(
                     if editing {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
-                            Ok(input_spans(format!("{custom_value} ms"), state)?)
+                            Ok(input_spans(&format!("{custom_value} ms"), state)?)
                         } else {
-                            Ok(input_spans(format!("{current_value} ms"), state)?)
+                            Ok(input_spans(&format!("{current_value} ms"), state)?)
                         }
                     } else {
-                        Ok(input_spans(format!("{current_value} ms"), state)?)
+                        Ok(input_spans(&format!("{current_value} ms"), state)?)
                     }
                 } else {
                     Ok(vec![])
@@ -539,12 +540,12 @@ pub fn render_kv_lines_with_indicators(
                     if editing {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
-                            Ok(input_spans(format!("{custom_value} ms"), state)?)
+                            Ok(input_spans(&format!("{custom_value} ms"), state)?)
                         } else {
-                            Ok(input_spans(format!("{current_value} ms"), state)?)
+                            Ok(input_spans(&format!("{current_value} ms"), state)?)
                         }
                     } else {
-                        Ok(input_spans(format!("{current_value} ms"), state)?)
+                        Ok(input_spans(&format!("{current_value} ms"), state)?)
                     }
                 } else {
                     Ok(vec![])
@@ -606,11 +607,10 @@ pub fn render_kv_lines_with_indicators(
                 ),
                 || -> Result<Vec<Span<'static>>> {
                     let types::port::PortConfig::Modbus { stations, .. } = &port_data.config;
-                    let current_value = if let Some(item) = stations.get(index) {
-                        item.station_id.to_string()
-                    } else {
-                        "?".to_string()
-                    };
+                    let current_value = stations.get(index).map_or_else(
+                        || "?".to_string(),
+                        |item| item.station_id.to_string(),
+                    );
 
                     let selected = matches!(
                         current_selection,
@@ -629,13 +629,13 @@ pub fn render_kv_lines_with_indicators(
                     };
 
                     let hex_display = if current_value.starts_with("0x") {
-                        current_value.clone()
+                        current_value
                     } else if let Ok(n) = current_value.parse::<u8>() {
                         format!("0x{n:02X} ({n})")
                     } else {
                         format!("0x{current_value} (?)")
                     };
-                    let rendered_value_spans: Vec<Span> = input_spans(hex_display, state)?;
+                    let rendered_value_spans: Vec<Span> = input_spans(&hex_display, state)?;
                     Ok(rendered_value_spans)
                 },
             )?);
@@ -650,11 +650,7 @@ pub fn render_kv_lines_with_indicators(
 
                         let types::port::PortConfig::Modbus { stations, .. } =
                             &port_data.config;
-                        let current_mode = if let Some(item) = stations.get(index) {
-                            (item.register_mode as u8 - 1u8) as usize
-                        } else {
-                            2usize // default to Holding
-                        };
+                        let current_mode = stations.get(index).map_or(2usize, |item| (item.register_mode as u8 - 1u8) as usize);
 
                         let selected = matches!(
                             current_selection,
@@ -697,11 +693,10 @@ pub fn render_kv_lines_with_indicators(
 
                         let types::port::PortConfig::Modbus { stations, .. } =
                             &port_data.config;
-                        let current_value = if let Some(item) = stations.get(index) {
-                            item.register_address.to_string()
-                        } else {
-                            "0".to_string()
-                        };
+                        let current_value = stations.get(index).map_or_else(
+                            || "0".to_string(),
+                            |item| item.register_address.to_string(),
+                        );
 
                         let selected = matches!(
                             current_selection,
@@ -720,13 +715,13 @@ pub fn render_kv_lines_with_indicators(
                         };
 
                         let hex_display = if current_value.starts_with("0x") {
-                            current_value.clone()
+                            current_value
                         } else if let Ok(n) = current_value.parse::<u16>() {
                             format!("0x{n:04X} ({n})")
                         } else {
                             format!("0x{current_value} (?)")
                         };
-                        let rendered_value_spans: Vec<Span> = input_spans(hex_display, state)?;
+                        let rendered_value_spans: Vec<Span> = input_spans(&hex_display, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);
@@ -741,11 +736,10 @@ pub fn render_kv_lines_with_indicators(
 
                         let types::port::PortConfig::Modbus { stations, .. } =
                             &port_data.config;
-                        let current_value = if let Some(item) = stations.get(index) {
-                            item.register_length.to_string()
-                        } else {
-                            "1".to_string()
-                        };
+                        let current_value = stations.get(index).map_or_else(
+                            || "1".to_string(),
+                            |item| item.register_length.to_string(),
+                        );
 
                         let selected = matches!(
                             current_selection,
@@ -764,13 +758,13 @@ pub fn render_kv_lines_with_indicators(
                         };
 
                         let hex_display = if current_value.starts_with("0x") {
-                            current_value.clone()
+                            current_value
                         } else if let Ok(n) = current_value.parse::<u16>() {
                             format!("0x{n:04X} ({n})")
                         } else {
                             format!("0x{current_value} (?)")
                         };
-                        let rendered_value_spans: Vec<Span> = input_spans(hex_display, state)?;
+                        let rendered_value_spans: Vec<Span> = input_spans(&hex_display, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);
@@ -782,9 +776,9 @@ pub fn render_kv_lines_with_indicators(
                 // Calculate registers per row dynamically based on terminal width
                 let registers_per_row = super::table::get_registers_per_row(terminal_width);
 
-                let first_row = (item_start / registers_per_row as u16) * registers_per_row as u16;
+                let first_row = (item_start / u16::try_from(registers_per_row).unwrap_or(u16::MAX)) * u16::try_from(registers_per_row).unwrap_or(u16::MAX);
                 let last_row =
-                    item_end.div_ceil(registers_per_row as u16) * registers_per_row as u16;
+                    item_end.div_ceil(u16::try_from(registers_per_row).unwrap_or(u16::MAX)) * u16::try_from(registers_per_row).unwrap_or(u16::MAX);
 
                 let mut row = first_row;
                 while row < last_row {
@@ -799,7 +793,7 @@ pub fn render_kv_lines_with_indicators(
                     ) {
                         lines.push(line);
                     }
-                    row += registers_per_row as u16;
+                    row += u16::try_from(registers_per_row).unwrap_or(u16::MAX);
                 }
             }
 

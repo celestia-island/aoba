@@ -521,10 +521,6 @@ description = "Verify data on 0x0008 row (partial)"
 verify = "    0x0008              0x0001 0x0000"
 
 [[workflow.simulate_data_feed_round2]]
-description = "Verify data on 0x0008 row (partial)"
-verify = "    0x0008              0x0001 0x0000"
-
-[[workflow.simulate_data_feed_round2]]
 description = "Verify all register values in mock state"
 mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
@@ -553,6 +549,7 @@ verify = "    0x0000              0x1111 0x2222 0x3333 0x4444 0x5555 0x6666 0x77
 
 [[workflow.simulate_data_feed_round3]]
 description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x9999 0xAAAA"
 
 [[workflow.simulate_data_feed_round3]]
 description = "Verify all register values in mock state"

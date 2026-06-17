@@ -32,7 +32,7 @@ jobs:
           - api_slave_cli_master
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -62,9 +62,6 @@ jobs:
           chmod +x target/debug/cli_e2e
           chmod +x target/debug/api_master
           chmod +x target/debug/api_slave
-
-      - name: Install socat
-        run: sudo apt-get update && sudo apt-get install -y socat
 
       - name: Install and start mosquitto MQTT broker
         run: |
@@ -94,7 +91,7 @@ jobs:
           - modbus_multi_slaves_adjacent_registers
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -124,9 +121,6 @@ jobs:
           chmod +x target/debug/cli_e2e
           chmod +x target/debug/api_master
           chmod +x target/debug/api_slave
-
-      - name: Install socat
-        run: sudo apt-get update && sudo apt-get install -y socat
 
       - name: Install and start mosquitto MQTT broker
         run: |

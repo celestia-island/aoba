@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Result};
+#![allow(clippy::wildcard_enum_match_arm)]
+use anyhow::Result;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -10,13 +11,12 @@ use crate::tui::status::cursor::Cursor;
 use crate::tui::status::{read_status, write_status, Page};
 use crate::tui::ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT};
 
+#[allow(clippy::too_many_lines)]
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Char('q') => {
             // Quit the application
-            bus.ui_tx
-                .send(crate::core::bus::UiToCore::Quit)
-                .map_err(|err| anyhow!(err))?;
+            bus.ui_tx.send(crate::core::bus::UiToCore::Quit)?;
         }
         KeyCode::PageUp => {
             // Jump to first cursor position
@@ -34,7 +34,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::PageDown => {
             // Jump to last cursor position (About)
@@ -48,7 +48,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::Left | KeyCode::Char('h') => {
             // Check if we're in new port creation mode
@@ -71,7 +71,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     }
                 })?)?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::Right | KeyCode::Char('l') => {
             // Check if we're in new port creation mode
@@ -111,18 +111,18 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
             }
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for About (A key)
-        KeyCode::Char('a') | KeyCode::Char('A') => {
+        KeyCode::Char('a' | 'A') => {
             write_status(|status| {
                 status.page = Page::About { view_offset: 0 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for New (N key) - activate port creation mode
-        KeyCode::Char('n') | KeyCode::Char('N') => {
+        KeyCode::Char('n' | 'N') => {
             log::info!("New port creation requested");
             write_status(|status| {
                 status.temporarily.new_port_creation.active = true;
@@ -135,10 +135,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         // Support for Delete (D key) - placeholder for port deletion
-        KeyCode::Char('d') | KeyCode::Char('D') => {
+        KeyCode::Char('d' | 'D') => {
             log::info!("Port deletion requested - feature not yet fully implemented");
             write_status(|status| {
                 status.temporarily.error = Some(crate::tui::status::ErrorInfo {
@@ -149,7 +149,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 });
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
         KeyCode::Enter => {
             // Check if we're in new port creation mode
@@ -157,6 +157,13 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 read_status(|status| Ok(status.temporarily.new_port_creation.active))?;
 
             if in_creation {
+                // Create a new port entry (without starting it)
+                use crate::protocol::status::types::port::{PortType, SerialConfig};
+                use crate::tui::status::modbus::ModbusMasterDataSource;
+                use crate::tui::status::port::{
+                    PortConfig, PortData, PortState, PortStatusIndicator,
+                };
+
                 // Confirm port creation
                 let port_type_index =
                     read_status(|status| Ok(status.temporarily.new_port_creation.port_type_index))?;
@@ -168,30 +175,23 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 let new_port_name = uuid.to_string();
 
                 log::info!(
-                    "Creating new {} port with UUID: {}",
-                    port_type_name,
-                    new_port_name
+                    "Creating new {port_type_name} port with UUID: {new_port_name}"
                 );
-
-                // Create a new port entry (without starting it)
-                use crate::tui::status::port::{
-                    PortConfig, PortData, PortState, PortStatusIndicator,
-                };
 
                 // Add to ports
                 write_status(|status| {
-                    use crate::protocol::status::types::port::PortType;
                     let new_port = PortData {
                         port_name: new_port_name.clone(),
                         port_type: PortType::IPC,
+                        #[allow(clippy::default_trait_access)]
                         extra: Default::default(),
                         state: PortState::Free,
                         subprocess_info: None,
-                        serial_config: Default::default(),
+                        serial_config: SerialConfig::default(),
                         config: PortConfig::Modbus {
                             mode: crate::tui::status::modbus::ModbusConnectionMode::default_master(
                             ),
-                            master_source: Default::default(),
+                            master_source: ModbusMasterDataSource::default(),
                             stations: Vec::new(),
                         },
                         logs: Vec::new(),
@@ -210,7 +210,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.new_port_creation.port_type_index = 0;
 
                     // Set cursor to the newly created port (last in the list)
-                    let new_port_index = status.ports.order.len() - 1;
+                    let new_port_index = status.ports.order.len().saturating_sub(1);
                     status.page = Page::Entry {
                         cursor: Some(types::cursor::EntryCursor::Com {
                             index: new_port_index,
@@ -221,7 +221,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -332,74 +332,68 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
         }
-        _ => {}
+            _ => {}
     }
     Ok(())
 }
 
 pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
-    match cursor {
-        cursor::EntryCursor::Com { index } => {
-            if index > 0 {
-                let prev = index - 1;
-                let new_cursor = types::cursor::EntryCursor::Com { index: prev };
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(new_cursor),
-                        view_offset: prev,
-                    };
-                    Ok(())
-                })?;
-            }
-            // If already at index 0, stay there (no wrap-around in grid layout)
-        }
-        _ => {
-            // For other cursor types, move to last port
-            let last_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
-            let new_cursor = types::cursor::EntryCursor::Com { index: last_index };
+    if let cursor::EntryCursor::Com { index } = cursor {
+        if index > 0 {
+            let prev = index - 1;
+            let new_cursor = types::cursor::EntryCursor::Com { index: prev };
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
-                    view_offset: last_index,
+                    view_offset: prev,
                 };
                 Ok(())
             })?;
         }
+        // If already at index 0, stay there (no wrap-around in grid layout)
+    } else {
+        // For other cursor types, move to last port
+        let last_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
+        let new_cursor = types::cursor::EntryCursor::Com { index: last_index };
+        write_status(|status| {
+            status.page = Page::Entry {
+                cursor: Some(new_cursor),
+                view_offset: last_index,
+            };
+            Ok(())
+        })?;
     }
 
     Ok(())
 }
 
 pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
-    match cursor {
-        cursor::EntryCursor::Com { index } => {
-            let max_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
-            if index < max_index {
-                let next = index + 1;
-                let new_cursor = types::cursor::EntryCursor::Com { index: next };
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(new_cursor),
-                        view_offset: next,
-                    };
-                    Ok(())
-                })?;
-            }
-            // If already at last index, stay there (no wrap-around in grid layout)
-        }
-        _ => {
-            // For other cursor types, move to first port
-            let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
+    if let cursor::EntryCursor::Com { index } = cursor {
+        let max_index = read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))?;
+        if index < max_index {
+            let next = index + 1;
+            let new_cursor = types::cursor::EntryCursor::Com { index: next };
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
-                    view_offset: 0,
+                    view_offset: next,
                 };
                 Ok(())
             })?;
         }
+        // If already at last index, stay there (no wrap-around in grid layout)
+    } else {
+        // For other cursor types, move to first port
+        let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
+        write_status(|status| {
+            status.page = Page::Entry {
+                cursor: Some(new_cursor),
+                view_offset: 0,
+            };
+            Ok(())
+        })?;
     }
 
     Ok(())

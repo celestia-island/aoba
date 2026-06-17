@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -20,6 +21,7 @@ use crate::{
     utils::i18n::lang,
 };
 
+#[allow(clippy::too_many_lines)]
 pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Enter => {
@@ -53,11 +55,11 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
                 }
                 types::ui::InputRawBuffer::String { bytes, .. } => {
-                    let value = String::from_utf8_lossy(bytes).to_string();
+                    let value = String::from_utf8_lossy(bytes).into_owned();
                     log::info!("🟡 Committing text edit, value='{value}'");
-                    commit_text_edit(current_cursor, value, bus)?;
+                    commit_text_edit(current_cursor, &value, bus)?;
                 }
-                _ => {
+                types::ui::InputRawBuffer::None => {
                     log::warn!("🟡 Buffer is None, skipping commit");
                 }
             }
@@ -67,12 +69,10 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Ok(())
             })?;
 
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
 
             if let Some(port_name) = maybe_restart {
-                bus.ui_tx
-                    .send(UiToCore::RestartRuntime(port_name))
-                    .map_err(|err| anyhow!(err))?;
+                bus.ui_tx.send(UiToCore::RestartRuntime(port_name))?;
             }
             Ok(())
         }
@@ -89,7 +89,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -118,11 +118,11 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
                     }
                     types::ui::InputRawBuffer::String { bytes, .. } => {
-                        let value = String::from_utf8_lossy(bytes).to_string();
+                        let value = String::from_utf8_lossy(bytes).into_owned();
                         log::info!("💾 Committing text edit on Esc, value='{value}'");
-                        commit_text_edit(current_cursor, value, bus)?;
+                        commit_text_edit(current_cursor, &value, bus)?;
                     }
-                    _ => {}
+                    types::ui::InputRawBuffer::None => {}
                 }
 
                 write_status(|status| {
@@ -130,12 +130,10 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
 
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
 
                 if let Some(port_name) = maybe_restart {
-                    bus.ui_tx
-                        .send(UiToCore::RestartRuntime(port_name))
-                        .map_err(|err| anyhow!(err))?;
+                    bus.ui_tx.send(UiToCore::RestartRuntime(port_name))?;
                 }
             } else {
                 // No pending data, just clear buffer and refresh
@@ -144,7 +142,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
             }
 
             Ok(())
@@ -189,7 +187,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         .unwrap_or(0)
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
-                    _ => 0,
+                                    _ => 0,
                 };
 
                 if max_index == 0 {
@@ -207,7 +205,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }
@@ -264,7 +262,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         .unwrap_or(0)
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
-                    _ => 0,
+                                    _ => 0,
                 };
 
                 if max_index == 0 {
@@ -282,19 +280,20 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }
             Ok(())
         }
-        _ => {
+            _ => {
             handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             Ok(())
         }
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn commit_selector_edit(
     cursor: types::cursor::ModbusDashboardCursor,
     selected_index: usize,
@@ -331,7 +330,7 @@ fn commit_selector_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
                         // evaluate occupancy before taking a mutable borrow of port.config
                         let was_occupied_by_this = matches!(port.state, PortState::OccupiedByThis);
 
@@ -363,7 +362,7 @@ fn commit_selector_edit(
                             new_mode
                         );
                         crate::tui::append_runtime_restart_log(&port_name, reason, connection_mode);
-                        return Ok(Some(port_name.clone()));
+                        return Ok(Some(port_name));
                     }
                 }
                 types::cursor::ModbusDashboardCursor::MasterSourceKind => {
@@ -375,7 +374,7 @@ fn commit_selector_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
 
                         let types::port::PortConfig::Modbus { master_source, .. } =
                             &mut port.config;
@@ -388,7 +387,7 @@ fn commit_selector_edit(
 
                             master_source.set_kind(new_kind);
                             port.config_modified = true;
-                            log::info!("Updated master data source kind to {:?}", new_kind);
+                            log::info!("Updated master data source kind to {new_kind:?}");
                         }
 
                         Ok(())
@@ -410,12 +409,12 @@ fn commit_selector_edit(
                             reason,
                             StationMode::Master,
                         );
-                        return Ok(Some(port_name.clone()));
+                        return Ok(Some(port_name));
                     }
                 }
                 types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
                     // Apply register mode changes
-                    let new_mode = RegisterMode::from_u8((selected_index as u8) + 1);
+                    let new_mode = RegisterMode::from_u8(u8::try_from(selected_index).unwrap_or(u8::MAX) + 1);
 
                     let mut should_restart = false;
                     let mut connection_mode = StationMode::Master;
@@ -424,7 +423,7 @@ fn commit_selector_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
                         let types::port::PortConfig::Modbus {
                             mode,
                             master_source: _,
@@ -460,7 +459,7 @@ fn commit_selector_edit(
                             new_mode
                         );
                         crate::tui::append_runtime_restart_log(&port_name, reason, connection_mode);
-                        return Ok(Some(port_name.clone()));
+                        return Ok(Some(port_name));
                     }
                 }
                 types::cursor::ModbusDashboardCursor::MasterSourceValue => {
@@ -493,21 +492,17 @@ fn commit_selector_edit(
                             let mut should_restart = false;
                             write_status(|status| {
                                 // First, get the source port's station configurations
-                                let source_stations = if let Some(source_port_data) =
-                                    status.ports.map.get(selected_port_name)
-                                {
+                                let source_stations = status.ports.map.get(selected_port_name).map(|source_port_data| {
                                     let types::port::PortConfig::Modbus { stations, .. } =
                                         &source_port_data.config;
-                                    Some(stations.clone())
-                                } else {
-                                    None
-                                };
+                                    stations.clone()
+                                });
 
                                 let port = status
                                     .ports
                                     .map
                                     .get_mut(&port_name)
-                                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                    .ok_or_else(|| anyhow!("Port not found"))?;
 
                                 let types::port::PortConfig::Modbus {
                                     master_source,
@@ -519,28 +514,26 @@ fn commit_selector_edit(
                                     master_source
                                 {
                                     if *source_port != *selected_port_name {
-                                        *source_port = selected_port_name.clone();
+                                        source_port.clone_from(selected_port_name);
                                         port.config_modified = true;
 
                                         // CRITICAL FIX: Copy station configurations from source port
                                         if let Some(source_stations) = source_stations {
-                                            if !source_stations.is_empty() {
+                                            if source_stations.is_empty() {
+                                                log::warn!(
+                                                    "Source port '{selected_port_name}' has no station configurations to copy"
+                                                );
+                                            } else {
                                                 *stations = source_stations;
                                                 log::info!(
                                                     "Copied {} station configuration(s) from source port '{}'",
                                                     stations.len(),
                                                     selected_port_name
                                                 );
-                                            } else {
-                                                log::warn!(
-                                                    "Source port '{}' has no station configurations to copy",
-                                                    selected_port_name
-                                                );
                                             }
                                         } else {
                                             log::warn!(
-                                                "Source port '{}' not found or not accessible",
-                                                selected_port_name
+                                                "Source port '{selected_port_name}' not found or not accessible"
                                             );
                                         }
 
@@ -548,8 +541,7 @@ fn commit_selector_edit(
                                             should_restart = true;
                                         }
                                         log::info!(
-                                            "Updated port forwarding source to: {}",
-                                            selected_port_name
+                                            "Updated port forwarding source to: {selected_port_name}"
                                         );
                                     }
                                 }
@@ -573,22 +565,23 @@ fn commit_selector_edit(
                                     reason,
                                     StationMode::Master,
                                 );
-                                return Ok(Some(port_name.clone()));
+                                return Ok(Some(port_name));
                             }
                         }
                     }
                     // For other data sources (HttpServer), text input is used
                 }
-                _ => {}
+                            _ => {}
             }
         }
     }
     Ok(None)
 }
 
+#[allow(clippy::too_many_lines)]
 fn commit_text_edit(
     cursor: types::cursor::ModbusDashboardCursor,
-    value: String,
+    value: &str,
     bus: &Bus,
 ) -> Result<()> {
     let selected_port = read_status(|status| {
@@ -614,7 +607,7 @@ fn commit_text_edit(
                             .ports
                             .map
                             .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            .ok_or_else(|| anyhow!("Port not found"))?;
 
                         let types::port::PortConfig::Modbus { master_source, .. } =
                             &mut port_data.config;
@@ -624,7 +617,7 @@ fn commit_text_edit(
                         match master_source {
                             ModbusMasterDataSource::MqttServer { url } => {
                                 if *url != trimmed {
-                                    *url = trimmed.clone();
+                                    url.clone_from(&trimmed);
                                     port_data.config_modified = true;
                                     if matches!(
                                         port_data.state,
@@ -639,7 +632,7 @@ fn commit_text_edit(
                                 if let Ok(new_port) = trimmed.parse::<u16>() {
                                     if new_port == 0 {
                                         // Invalid port range
-                                        log::warn!("Invalid port number: {}", new_port);
+                                        log::warn!("Invalid port number: {new_port}");
                                     } else if *port != new_port {
                                         *port = new_port;
                                         port_data.config_modified = true;
@@ -651,12 +644,12 @@ fn commit_text_edit(
                                         }
                                     }
                                 } else {
-                                    log::warn!("Failed to parse port number from: {}", trimmed);
+                                    log::warn!("Failed to parse port number from: {trimmed}");
                                 }
                             }
                             ModbusMasterDataSource::IpcPipe { path } => {
                                 if *path != trimmed {
-                                    *path = trimmed.clone();
+                                    path.clone_from(&trimmed);
                                     port_data.config_modified = true;
                                     if matches!(
                                         port_data.state,
@@ -668,7 +661,7 @@ fn commit_text_edit(
                             }
                             ModbusMasterDataSource::PortForwarding { source_port } => {
                                 if *source_port != trimmed {
-                                    *source_port = trimmed.clone();
+                                    source_port.clone_from(&trimmed);
                                     port_data.config_modified = true;
                                     if matches!(
                                         port_data.state,
@@ -704,8 +697,7 @@ fn commit_text_edit(
                         }
 
                         bus.ui_tx
-                            .send(UiToCore::RestartRuntime(port_name.clone()))
-                            .map_err(|err| anyhow!(err))?;
+                            .send(UiToCore::RestartRuntime(port_name))?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::StationId { index } => {
@@ -715,7 +707,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus {
                                 mode: _,
                                 master_source: _,
@@ -738,7 +730,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus {
                                 mode: _,
                                 master_source: _,
@@ -761,7 +753,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus {
                                 mode: _,
                                 master_source: _,
@@ -788,7 +780,7 @@ fn commit_text_edit(
                     } else if value.is_empty() {
                         Ok(0) // Empty input defaults to 0
                     } else {
-                        u16::from_str_radix(&value, 16)
+                        u16::from_str_radix(value, 16)
                     };
 
                     if let Ok(mut register_value) = parsed_value {
@@ -800,7 +792,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             let owner_info = port.subprocess_info.clone();
 
                             let types::port::PortConfig::Modbus {
@@ -822,17 +814,17 @@ fn commit_text_edit(
                                     RegisterMode::Holding => (register_value, "holding"),
                                     RegisterMode::Input => (register_value, "input"),
                                     RegisterMode::Coils => {
-                                        (if register_value == 0 { 0 } else { 1 }, "coil")
+                                        (u16::from(register_value != 0), "coil")
                                     }
                                     RegisterMode::DiscreteInputs => {
-                                        (if register_value == 0 { 0 } else { 1 }, "discrete")
+                                        (u16::from(register_value != 0), "discrete")
                                     }
                                 };
 
                                 register_value = sanitized_value;
                                 item.last_values[idx] = sanitized_value;
 
-                                let register_addr = item.register_address + register_index as u16;
+                                let register_addr = item.register_address + u16::try_from(register_index).unwrap_or(u16::MAX);
                                 payload = Some((
                                     register_type.to_string(),
                                     item.station_id,
@@ -872,7 +864,7 @@ fn commit_text_edit(
                                 "📤 Sending RegisterUpdate to core: port={port_name}, station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                             );
                             if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                port_name: port_name.clone(),
+                                port_name,
                                 station_id: *station_id,
                                 register_type: register_type.clone(),
                                 start_address: *start_address,
@@ -908,7 +900,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             port.serial_config.request_interval_ms = interval_ms;
                             port.config_modified = true; // Mark as modified
                             log::info!("Updated request interval to {interval_ms} ms");
@@ -923,7 +915,7 @@ fn commit_text_edit(
                                 .ports
                                 .map
                                 .get_mut(&port_name)
-                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                .ok_or_else(|| anyhow!("Port not found"))?;
                             port.serial_config.timeout_ms = timeout_ms;
                             port.config_modified = true; // Mark as modified
                             log::info!("Updated timeout to {timeout_ms} ms");
@@ -931,7 +923,7 @@ fn commit_text_edit(
                         })?;
                     }
                 }
-                _ => {}
+                            _ => {}
             }
         }
     }
@@ -966,7 +958,7 @@ fn enqueue_slave_write(
                 register_value != 0
             );
         }
-        _ => {
+            _ => {
             log::warn!(
                 "Cannot write to read-only register type: {:?}",
                 item.register_mode
