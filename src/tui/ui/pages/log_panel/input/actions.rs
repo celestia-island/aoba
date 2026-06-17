@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use crate::tui::{
     status as types,
@@ -23,7 +23,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         };
         Ok(())
     })?;
-    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx)?;
     Ok(())
 }
 
@@ -58,7 +58,7 @@ pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
         }
         Ok(())
     })?;
-    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx)?;
     Ok(())
 }
 
@@ -75,6 +75,6 @@ pub fn handle_clear_logs(bus: &Bus) -> Result<()> {
         }
         Ok(())
     })?;
-    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx)?;
     Ok(())
 }

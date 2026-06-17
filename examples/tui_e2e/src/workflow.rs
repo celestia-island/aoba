@@ -58,6 +58,15 @@ pub struct StationConfig {
     pub register_count: u16,
 }
 
+/// Status check verification (JSONPath-based)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CheckStatus {
+    /// JSONPath to the value to check (e.g., "$.ports[0].state")
+    pub path: String,
+    /// Expected value
+    pub expected: serde_json::Value,
+}
+
 /// Individual workflow step
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct WorkflowStep {
@@ -127,6 +136,10 @@ pub struct WorkflowStep {
     /// Trigger name for custom actions (e.g., "match_master_registers")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trigger: Option<String>,
+
+    /// Status check verification (JSONPath-based, screen-capture mode only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_status: Option<CheckStatus>,
 
     /// Trigger parameters (passed as JSON)
     #[serde(skip_serializing_if = "Option::is_none")]

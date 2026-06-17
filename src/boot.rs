@@ -42,10 +42,10 @@ pub fn init_common() {
     if let Some(path) = log_file {
         if let Err(err) = init_file_logger(&path) {
             eprintln!("Failed to initialize file logger at '{path}': {err}");
-            env_logger::init();
+            let _ = env_logger::try_init();
         }
     } else {
-        env_logger::init();
+        let _ = env_logger::try_init();
     }
 
     crate::utils::i18n::init_i18n();
@@ -87,7 +87,8 @@ pub fn init_daemon_logger(path: &str) -> io::Result<()> {
         .target(Target::Pipe(Box::new(dual_writer)))
         .filter_level(LevelFilter::Info)
         .parse_default_env()
-        .init();
+        .try_init()
+        .ok();
 
     log::info!("Daemon logger initialized - logging to file and terminal");
 
@@ -116,7 +117,8 @@ fn init_file_logger(path: &str) -> io::Result<()> {
         .target(Target::Pipe(Box::new(file)))
         .filter_level(LevelFilter::Debug)
         .parse_default_env()
-        .init();
+        .try_init()
+        .ok();
 
     log::info!("File logger initialized at {path}");
 

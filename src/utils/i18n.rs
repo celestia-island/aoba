@@ -10,7 +10,7 @@ const ZH_CHT_TOML: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh_cht.toml"));
 
 derive_struct! {
-    #[derive(PartialEq, Serialize, Deserialize)]
+    #[derive(PartialEq, Eq, Serialize, Deserialize)]
     pub Lang {
         index: {
             title: String = "title".to_string(),
@@ -35,6 +35,9 @@ derive_struct! {
             err_modbus_config_empty: String = "err-modbus-config-empty".to_string(),
             port_suffix: String = "port_suffix".to_string(),
             virtual_port_prefix: String = "virtual_port_prefix".to_string(),
+            port_type_http_server_label: String = "port_type_http_server_label".to_string(),
+            port_type_ipc_pipe_label: String = "port_type_ipc_pipe_label".to_string(),
+            new_port_label: String = "new_port_label".to_string(),
             new_action: String = "new_action".to_string(),
             delete_action: String = "delete_action".to_string(),
             port_creation_new_label: String = "port_creation_new_label".to_string(),
@@ -178,6 +181,7 @@ derive_struct! {
                 runtime_restart_reason_connection_mode_change: String = "runtime_restart_reason_connection_mode_change".to_string(),
                 runtime_restart_reason_data_source_change: String = "runtime_restart_reason_data_source_change".to_string(),
                 runtime_restart_reason_station_mode_change: String = "runtime_restart_reason_station_mode_change".to_string(),
+                runtime_restart_stopping_old_process: String = "runtime_restart_stopping_old_process".to_string(),
                 cli_mode_slave_poll: String = "cli_mode_slave_poll".to_string(),
                 cli_mode_slave_listen: String = "cli_mode_slave_listen".to_string(),
                 cli_mode_master_provide: String = "cli_mode_master_provide".to_string(),
@@ -362,7 +366,7 @@ pub fn init_i18n() {
     // Detect preferred languages from env vars
     let mut prefs: Vec<String> = Vec::new();
     if let Ok(v) = std::env::var("LANGUAGE") {
-        prefs.extend(v.split(':').map(|s| s.to_lowercase()));
+        prefs.extend(v.split(':').map(str::to_lowercase));
     }
     if let Ok(v) = std::env::var("LC_ALL") {
         prefs.push(v.to_lowercase());
@@ -377,7 +381,7 @@ pub fn init_i18n() {
 
     // Simple matcher: try to map prefs to available locales
     let mut chosen: Option<(&str, Lang)> = None;
-    for p in prefs.iter() {
+    for p in &prefs {
         if p.contains("zh") {
             if p.contains("tw") || p.contains("hk") || p.contains("cht") {
                 if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh_cht") {
@@ -413,6 +417,6 @@ pub fn init_i18n() {
     log::info!(
         "i18n: user={} locale={}",
         user,
-        LOCALE.get().map(|s| s.as_str()).unwrap_or("-")
+        LOCALE.get().map_or("-", std::string::String::as_str)
     );
 }

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -46,10 +47,10 @@ pub enum RegisterType {
 impl fmt::Display for RegisterType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RegisterType::Coils => write!(f, "coils"),
-            RegisterType::DiscreteInputs => write!(f, "discrete_inputs"),
-            RegisterType::Holding => write!(f, "holding"),
-            RegisterType::Input => write!(f, "input"),
+            Self::Coils => write!(f, "coils"),
+            Self::DiscreteInputs => write!(f, "discrete_inputs"),
+            Self::Holding => write!(f, "holding"),
+            Self::Input => write!(f, "input"),
         }
     }
 }
@@ -61,13 +62,13 @@ pub struct CommunicationParams {
     pub mode: CommunicationMethod,
     /// Dynamically pull data from external source
     pub dynamic_pull: bool,
-    /// Wait time (seconds) - deprecated, use request_interval_ms instead
+    /// Wait time (seconds) - deprecated, use `request_interval_ms` instead
     #[serde(default)]
     pub wait_time: Option<f64>,
-    /// Timeout (seconds) - deprecated, use timeout_ms instead
+    /// Timeout (seconds) - deprecated, use `timeout_ms` instead
     #[serde(default)]
     pub timeout: Option<f64>,
-    /// Request interval time in milliseconds (replaces wait_time)
+    /// Request interval time in milliseconds (replaces `wait_time`)
     #[serde(default = "default_request_interval_ms")]
     pub request_interval_ms: u32,
     /// Timeout waiting time in milliseconds (replaces timeout)
@@ -77,11 +78,11 @@ pub struct CommunicationParams {
     pub persistence: PersistenceMode,
 }
 
-fn default_request_interval_ms() -> u32 {
+const fn default_request_interval_ms() -> u32 {
     1000
 }
 
-fn default_timeout_ms() -> u32 {
+const fn default_timeout_ms() -> u32 {
     3000
 }
 
@@ -114,19 +115,19 @@ impl Default for CommunicationParams {
 
 impl ModbusBootConfig {
     /// Parse configuration from a JSON string
-    pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json_str)
+    pub fn from_json(json_str: &str) -> Result<Self> {
+        Ok(serde_json::from_str(json_str)?)
     }
 
     /// Read configuration from a file
-    pub fn from_file(file_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file(file_path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(file_path)?;
-        Self::from_json(&content).map_err(|e| e.into())
+        Self::from_json(&content)
     }
 
     /// Convert to a JSON string
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+    pub fn to_json(&self) -> Result<String> {
+        Ok(serde_json::to_string_pretty(self)?)
     }
 }
 

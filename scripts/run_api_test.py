@@ -6,8 +6,8 @@ This script runs both the master and slave examples simultaneously,
 prefixing their output for easy identification.
 
 Usage:
-    python scripts/run_master_slave_test.py
-    python scripts/run_master_slave_test.py --master-port /tmp/vcom1 --slave-port /tmp/vcom2
+    python scripts/run_api_test.py
+    python scripts/run_api_test.py --master-port /tmp/vcom1 --slave-port /tmp/vcom2
 """
 
 import subprocess

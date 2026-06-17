@@ -1,3 +1,4 @@
+#![allow(clippy::wildcard_enum_match_arm)]
 use anyhow::Result;
 
 use ratatui::{
@@ -24,16 +25,16 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     if in_creation {
         // Show creation mode hints using "Press xxx to yyy" format
         Ok(vec![vec![
-            lang().hotkeys.press_enter_submit.to_string(),
-            lang().hotkeys.press_esc_cancel.to_string(),
+            lang().hotkeys.press_enter_submit.clone(),
+            lang().hotkeys.press_esc_cancel.clone(),
         ]])
     } else {
         // Show normal mode hints using "Press xxx to yyy" format
         Ok(vec![vec![
-            lang().index.hint_press_n_new_port.to_string(),
-            lang().index.hint_press_d_delete_port.to_string(),
-            lang().index.hint_press_a_about.to_string(),
-            lang().hotkeys.press_q_quit.to_string(),
+            lang().index.hint_press_n_new_port.clone(),
+            lang().index.hint_press_d_delete_port.clone(),
+            lang().index.hint_press_a_about.clone(),
+            lang().hotkeys.press_q_quit.clone(),
         ]])
     }
 }
@@ -80,12 +81,13 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
 /// Get the base node height (always fixed at 4 lines)
 /// Stations are now rendered outside the box, so node height doesn't include them
-fn get_node_height() -> u16 {
+const fn get_node_height() -> u16 {
     // Base height: 2 content lines (name + type) + 2 border lines = 4
     4u16
 }
 
 /// Render nodes in a horizontal single-row layout with scrolling support
+#[allow(clippy::too_many_lines)]
 fn render_node_grid(
     frame: &mut Frame,
     area: Rect,
@@ -138,8 +140,8 @@ fn render_node_grid(
             selection + 1
         };
 
-        let indicator_text = format!(" {} / {} ", display_position, actual_port_count);
-        let indicator_width = indicator_text.len() as u16;
+        let indicator_text = format!(" {display_position} / {actual_port_count} ");
+        let indicator_width = u16::try_from(indicator_text.len()).unwrap_or(u16::MAX);
         let indicator_area = Rect {
             x: area.x + area.width.saturating_sub(indicator_width + 1),
             y: area.y,
@@ -171,7 +173,7 @@ fn render_node_grid(
         .take(end_idx.saturating_sub(start_index))
     {
         let node_position_in_view = i - start_index;
-        let x = inner_area.x + (node_position_in_view as u16 * (node_width + spacing));
+        let x = inner_area.x + (u16::try_from(node_position_in_view).unwrap_or(u16::MAX) * (node_width + spacing));
         let y = inner_area.y;
 
         // Skip if no room
@@ -196,7 +198,7 @@ fn render_node_grid(
             port_name.as_str(),
             i == selection,
             &ports_map,
-        )?;
+        );
     }
 
     // Render "editing" node if in creation mode and it's in visible range
@@ -204,7 +206,7 @@ fn render_node_grid(
         let edit_node_index = ports_order.len();
         if edit_node_index >= start_index {
             let node_position_in_view = edit_node_index - start_index;
-            let x = inner_area.x + (node_position_in_view as u16 * (node_width + spacing));
+            let x = inner_area.x + (u16::try_from(node_position_in_view).unwrap_or(u16::MAX) * (node_width + spacing));
             let y = inner_area.y;
 
             if x + node_width <= inner_area.x + inner_area.width {
@@ -215,7 +217,7 @@ fn render_node_grid(
                     height: 4u16, // Base height for editing node
                 };
 
-                render_editing_node(frame, node_area, port_type_index)?;
+                render_editing_node(frame, node_area, port_type_index);
             }
         }
     }
@@ -290,39 +292,43 @@ fn truncate_text(text: &str, max_chars: usize) -> String {
     } else {
         // Take first 7 chars + "..."
         let truncated: String = chars.iter().take(7).collect();
-        format!("{}...", truncated)
+        format!("{truncated}...")
     }
 }
 
 /// Render a single port node
+#[allow(clippy::too_many_lines)]
 fn render_node(
     frame: &mut Frame,
     area: Rect,
     port_name: &str,
     is_selected: bool,
     ports_map: &std::collections::HashMap<String, PortData>,
-) -> Result<()> {
+) {
     // Get port data
-    let (port_state, port_type, master_source) = if let Some(port_data) = ports_map.get(port_name) {
-        let state = port_data.state.clone();
-        let ptype = port_data.port_type;
-        let master_source = if state.is_occupied_by_this() {
-            let crate::tui::status::port::PortConfig::Modbus { master_source, .. } =
-                &port_data.config;
-            Some(master_source.clone())
-        } else {
-            None
-        };
-        (state, ptype, master_source)
-    } else {
-        use crate::protocol::status::types::port::PortType;
-        (PortState::Free, PortType::Unknown, None)
-    };
+    let (port_state, port_type, master_source) = ports_map.get(port_name).map_or_else(
+        || {
+            use crate::protocol::status::types::port::PortType;
+            (PortState::Free, PortType::Unknown, None)
+        },
+        |port_data| {
+            let state = port_data.state.clone();
+            let ptype = port_data.port_type;
+            let master_source = if state.is_occupied_by_this() {
+                let crate::tui::status::port::PortConfig::Modbus { master_source, .. } =
+                    &port_data.config;
+                Some(master_source.clone())
+            } else {
+                None
+            };
+            (state, ptype, master_source)
+        },
+    );
 
     // Determine status indicator
     let status_indicator = match port_state {
         PortState::OccupiedByThis => "●", // Filled circle
-        _ => "○",                         // Empty circle
+            _ => "○",                         // Empty circle
     };
 
     // Create node block with border
@@ -355,14 +361,14 @@ fn render_node(
         };
         let indicator_color = match port_state {
             PortState::OccupiedByThis => Color::Green,
-            _ => Color::Gray,
+                    _ => Color::Gray,
         };
 
         // Selection indicator: angle brackets around the circle when selected
         let indicator_text = if is_selected {
-            format!(" > {} < ", status_indicator)
+            format!(" > {status_indicator} < ")
         } else {
-            format!("   {}   ", status_indicator)
+            format!("   {status_indicator}   ")
         };
 
         let indicator_style = if is_selected {
@@ -384,21 +390,12 @@ fn render_node(
         use crate::protocol::status::types::port::PortType;
         let port_type_label = match port_type {
             PortType::HTTP => {
-                if lang().index.title.contains("中") {
-                    "HTTP 服务器"
-                } else {
-                    "HTTP Server"
-                }
+                lang().index.port_type_http_server_label.as_str()
             }
             PortType::IPC => {
-                if lang().index.title.contains("中") {
-                    "IPC 管道"
-                } else {
-                    "IPC Pipe"
-                }
+                lang().index.port_type_ipc_pipe_label.as_str()
             }
             PortType::Physical | PortType::Unknown => {
-                // Default to serial port
                 lang().index.port_suffix.as_str()
             }
         };
@@ -474,7 +471,7 @@ fn render_node(
     }
 
     // Check if any other port references this port (this port is a data source)
-    for (other_port_name, other_port_data) in ports_map.iter() {
+    for (other_port_name, other_port_data) in ports_map {
         if other_port_name != port_name && other_port_data.state.is_occupied_by_this() {
             let crate::tui::status::port::PortConfig::Modbus {
                 master_source: other_master_source,
@@ -509,7 +506,7 @@ fn render_node(
                 "├"
             };
 
-            let full_text = format!(" {}{}", timeline_char, reference_text);
+            let full_text = format!(" {timeline_char}{reference_text}");
 
             let reference_area = Rect {
                 x: area.x,
@@ -524,8 +521,6 @@ fn render_node(
             frame.render_widget(reference_widget, reference_area);
         }
     }
-
-    Ok(())
 }
 
 /// Format port name for display: show last 7 chars for UUIDs, full name otherwise
@@ -548,7 +543,7 @@ fn format_port_name_for_display(port_name: &str) -> String {
 }
 
 /// Render the "editing" node for new port creation
-fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) -> Result<()> {
+fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) {
     // Create node block with border - always highlighted as it's being edited
     let node_border_style = Style::default()
         .fg(Color::Yellow)
@@ -567,12 +562,8 @@ fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) ->
             .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD);
 
-        // Line 1: "新建" label
-        let new_label = if lang().index.title.contains("中") {
-            "新建"
-        } else {
-            "New"
-        };
+        // Line 1: "New" label
+        let new_label = lang().index.new_port_label.as_str();
         let new_area = Rect {
             x: inner.x,
             y: inner.y,
@@ -608,8 +599,6 @@ fn render_editing_node(frame: &mut Frame, area: Rect, port_type_index: usize) ->
             .alignment(Alignment::Center);
         frame.render_widget(type_widget, type_area);
     }
-
-    Ok(())
 }
 
 /// Render the config file path indicator at the bottom of the entry panel
@@ -618,13 +607,10 @@ fn render_config_path_indicator(frame: &mut Frame, area: Rect) -> Result<()> {
 
     let is_temp_mode = config_path.is_none();
 
-    let indicator_text = if let Some(path) = config_path {
-        // Show config file path
-        format!("{} {}", lang().index.config_path_label, path.display())
-    } else {
-        // Show temporary mode (in italics)
-        lang().index.config_temporary_mode.clone()
-    };
+    let indicator_text = config_path.map_or_else(
+        || lang().index.config_temporary_mode.clone(),
+        |path| format!("{} {}", lang().index.config_path_label, path.display()),
+    );
 
     // Position at bottom of the panel, inside the border (y = area.y + area.height - 2)
     // with 1 padding from left (x = area.x + 2, accounting for border)

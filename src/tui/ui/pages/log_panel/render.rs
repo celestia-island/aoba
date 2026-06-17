@@ -36,6 +36,7 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
         let label = lang().tabs.log.hint_follow_on.as_str();
         let template = lang().hotkeys.hint_kv_template.as_str();
         // Replace placeholders {key} and {label}
+        #[allow(clippy::literal_string_with_formatting_args)]
         let hint = template.replace("{key}", key).replace("{label}", label);
         second_row.insert(0, hint);
     }

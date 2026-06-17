@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Result};
+#![allow(clippy::wildcard_enum_match_arm)]
+use anyhow::{anyhow, bail, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -12,6 +13,7 @@ use crate::{
     utils::i18n::lang,
 };
 
+#[allow(clippy::too_many_lines)]
 pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     log::info!("🟠 ModbusDashboard navigation input: {:?}", key.code);
 
@@ -21,7 +23,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         .contains(crossterm::event::KeyModifiers::CONTROL);
 
     // Handle Ctrl+S for saving configuration
-    if matches!(key.code, KeyCode::Char('s') | KeyCode::Char('S')) && has_ctrl {
+    if matches!(key.code, KeyCode::Char('s' | 'S')) && has_ctrl {
         log::info!("💾 Ctrl+S pressed - saving configuration and enabling port");
         // This will trigger port enable with current configuration
         handle_save_config(bus)?;
@@ -50,10 +52,10 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageUp: Jump to previous station group
                 let current_cursor = read_status(|status| match &status.page {
                     crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
                 })?;
 
-                let new_cursor = jump_to_prev_group(current_cursor)?;
+                let new_cursor = jump_to_prev_group(current_cursor);
                 let new_offset = new_cursor.view_offset();
                 write_status(|status| {
                     if let crate::tui::status::Page::ModbusDashboard {
@@ -68,7 +70,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -92,7 +94,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageDown: Jump to next station group
                 let current_cursor = read_status(|status| match &status.page {
                     crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
                 })?;
 
                 let new_cursor = jump_to_next_group(current_cursor)?;
@@ -110,13 +112,13 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Left | KeyCode::Char('h') => {
             let current_cursor = read_status(|status| match &status.page {
                 crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                            _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
             // Handle horizontal navigation for register table
@@ -135,7 +137,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: slave_index }
                     }
                 }
-                _ => current_cursor.prev(),
+                            _ => current_cursor.prev(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -151,7 +153,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Right | KeyCode::Char('l') => {
@@ -175,7 +177,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
-                            _ => None,
+                                                    _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
@@ -211,7 +213,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         current_cursor
                     }
                 }
-                _ => current_cursor.next(),
+                            _ => current_cursor.next(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -227,13 +229,13 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Up | KeyCode::Char('k') => {
             let current_cursor = read_status(|status| match &status.page {
                 crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                            _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
             // Handle vertical navigation for register table with dynamic registers per row
@@ -251,7 +253,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
-                            _ => None,
+                                                    _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
@@ -288,7 +290,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: slave_index }
                     }
                 }
-                _ => current_cursor.prev(),
+                            _ => current_cursor.prev(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -304,13 +306,13 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
             let current_cursor = read_status(|status| match &status.page {
                 crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                            _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
             // Handle vertical navigation for register table with 8-register row alignment
@@ -328,7 +330,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
-                            _ => None,
+                                                    _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
@@ -377,7 +379,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                 }
-                _ => current_cursor.next(),
+                            _ => current_cursor.next(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -393,7 +395,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Enter => {
@@ -410,7 +412,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             handle_leave_page(bus)?;
             Ok(())
         }
-        _ => Ok(()),
+            _ => Ok(()),
     }
 }
 
@@ -445,7 +447,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                     });
                     Ok(())
                 })?;
-                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx)?;
                 return Ok(());
             }
 
@@ -457,7 +459,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             } = &port.config;
             if mode.is_master() {
                 if let Err(validation_error) = validate_data_source(master_source) {
-                    let err_msg = validation_error.clone();
+                    let err_msg = format!("{validation_error}");
                     write_status(|status| {
                         status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                             message: err_msg.clone(),
@@ -465,7 +467,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                         });
                         Ok(())
                     })?;
-                    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                    bus::request_refresh(&bus.ui_tx)?;
                     return Ok(());
                 }
             }
@@ -476,7 +478,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                     .ports
                     .map
                     .get_mut(&port_name)
-                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                    .ok_or_else(|| anyhow!("Port not found"))?;
 
                 let is_enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
                 let needs_restart = is_enabled && port.config_modified;
@@ -500,20 +502,16 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             })?;
 
             // Trigger immediate UI refresh to show status change
-            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx)?;
 
             if !is_enabled {
                 // Enable the port if not already enabled
                 log::info!("Port not enabled, triggering enable via ToggleRuntime");
-                bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name.clone()))
-                    .map_err(|err| anyhow!(err))?;
+                bus.ui_tx.send(UiToCore::ToggleRuntime(port_name))?;
             } else if needs_restart {
                 // Port already enabled, just restart it with new config
                 log::info!("Port already enabled, restarting with new config");
-                bus.ui_tx
-                    .send(UiToCore::RestartRuntime(port_name))
-                    .map_err(|err| anyhow!(err))?;
+                bus.ui_tx.send(UiToCore::RestartRuntime(port_name))?;
             } else {
                 log::info!("Port already enabled and runtime up-to-date; skipping restart");
             }
@@ -524,34 +522,24 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
 }
 
 /// Jump to previous station group
-/// - If on AddLine or ModbusMode, stay at AddLine (first group)
-/// - If on a station's item, jump to previous station's first item (StationId)
-/// - If on first station, jump to ModbusMode
-fn jump_to_prev_group(
+/// - If on `AddLine` or `ModbusMode`, stay at `AddLine` (first group)
+/// - If on a station's item, jump to previous station's first item (`StationId`)
+/// - If on first station, jump to `ModbusMode`
+const fn jump_to_prev_group(
     current_cursor: types::cursor::ModbusDashboardCursor,
-) -> Result<types::cursor::ModbusDashboardCursor> {
+) -> types::cursor::ModbusDashboardCursor {
     match current_cursor {
-        types::cursor::ModbusDashboardCursor::AddLine => {
-            // Already at first group
-            Ok(types::cursor::ModbusDashboardCursor::AddLine)
-        }
-        types::cursor::ModbusDashboardCursor::ModbusMode => {
-            // Jump to AddLine
-            Ok(types::cursor::ModbusDashboardCursor::AddLine)
+        types::cursor::ModbusDashboardCursor::AddLine
+        | types::cursor::ModbusDashboardCursor::ModbusMode
+        | types::cursor::ModbusDashboardCursor::RequestInterval
+        | types::cursor::ModbusDashboardCursor::Timeout => {
+            types::cursor::ModbusDashboardCursor::AddLine
         }
         types::cursor::ModbusDashboardCursor::MasterSourceKind => {
-            Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+            types::cursor::ModbusDashboardCursor::ModbusMode
         }
         types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-            Ok(types::cursor::ModbusDashboardCursor::MasterSourceKind)
-        }
-        types::cursor::ModbusDashboardCursor::RequestInterval => {
-            // Jump to AddLine
-            Ok(types::cursor::ModbusDashboardCursor::AddLine)
-        }
-        types::cursor::ModbusDashboardCursor::Timeout => {
-            // Jump to AddLine
-            Ok(types::cursor::ModbusDashboardCursor::AddLine)
+            types::cursor::ModbusDashboardCursor::MasterSourceKind
         }
         types::cursor::ModbusDashboardCursor::StationId { index }
         | types::cursor::ModbusDashboardCursor::RegisterMode { index }
@@ -561,20 +549,19 @@ fn jump_to_prev_group(
             slave_index: index, ..
         } => {
             if index == 0 {
-                // Jump to ModbusMode (second item in first group)
-                Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+                types::cursor::ModbusDashboardCursor::ModbusMode
             } else {
-                // Jump to previous station's first item
-                Ok(types::cursor::ModbusDashboardCursor::StationId { index: index - 1 })
+                types::cursor::ModbusDashboardCursor::StationId { index: index - 1 }
             }
         }
     }
 }
 
 /// Jump to next station group
-/// - If on AddLine, jump to ModbusMode
-/// - If on ModbusMode, jump to first station (if exists) or stay at ModbusMode
+/// - If on `AddLine`, jump to `ModbusMode`
+/// - If on `ModbusMode`, jump to first station (if exists) or stay at `ModbusMode`
 /// - If on a station's item, jump to next station's first item (if exists) or stay
+#[allow(clippy::too_many_lines)]
 fn jump_to_next_group(
     current_cursor: types::cursor::ModbusDashboardCursor,
 ) -> Result<types::cursor::ModbusDashboardCursor> {
@@ -709,8 +696,7 @@ fn jump_to_next_group(
                                 master_source: _,
                                 stations,
                             } = &port.config;
-                            let all_items: Vec<_> = stations.iter().collect();
-                            return Ok(index + 1 < all_items.len());
+                            return Ok(index + 1 < stations.len());
                         }
                     }
                 }
@@ -727,7 +713,7 @@ fn jump_to_next_group(
     }
 }
 
-/// Jump to last station group (first item of last station if exists, otherwise ModbusMode)
+/// Jump to last station group (first item of last station if exists, otherwise `ModbusMode`)
 fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
     let last_station_index = read_status(|status| {
         if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -749,17 +735,14 @@ fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
         Ok(None)
     })?;
 
-    if let Some(index) = last_station_index {
-        Ok(types::cursor::ModbusDashboardCursor::StationId { index })
-    } else {
-        // No stations, stay at ModbusMode
-        Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
-    }
+    last_station_index.map_or_else(
+        || Ok(types::cursor::ModbusDashboardCursor::ModbusMode),
+        |index| Ok(types::cursor::ModbusDashboardCursor::StationId { index }),
+    )
 }
 
 /// Validate data source configuration
-/// Returns Ok(()) if valid, Err(message) if invalid
-fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Result<(), String> {
+fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Result<()> {
     match source {
         types::modbus::ModbusMasterDataSource::Manual => Ok(()),
         types::modbus::ModbusMasterDataSource::MqttServer { url } => {
@@ -769,9 +752,8 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             validate_url(url, "mqtt")
         }
         types::modbus::ModbusMasterDataSource::HttpServer { port } => {
-            // Validate port number range (1-65535)
             if *port == 0 {
-                return Err("Port number must be between 1 and 65535".to_string());
+                bail!("Port number must be between 1 and 65535");
             }
             Ok(())
         }
@@ -779,35 +761,28 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             if path.is_empty() {
                 return Ok(()); // Allow empty path, will use placeholder
             }
-            // For IPC, we don't validate the path exists yet
-            // It will be created or connected when starting
             Ok(())
         }
         types::modbus::ModbusMasterDataSource::PortForwarding { source_port } => {
             if source_port.is_empty() {
                 return Ok(()); // Allow empty port, will use placeholder
             }
-            // Validate that source_port is not the same as current port
-            // This will be done at runtime validation
             Ok(())
         }
     }
 }
 
 /// Validate URL format
-fn validate_url(url: &str, expected_scheme: &str) -> Result<(), String> {
-    // Basic URL validation - check if it looks like a valid URL
-    if let Ok(parsed) = url::Url::parse(url) {
-        // Check if scheme matches expected
-        if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{}s", expected_scheme)
-        {
-            Ok(())
-        } else {
-            let err_msg = lang().protocol.modbus.err_invalid_url.replace("{}", url);
-            Err(err_msg)
-        }
+fn validate_url(url: &str, expected_scheme: &str) -> Result<()> {
+    let parsed = url::Url::parse(url)
+        .map_err(|_| anyhow!(lang().protocol.modbus.err_invalid_url.replace("{}", url)))?;
+    if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{expected_scheme}s") {
+        Ok(())
     } else {
-        let err_msg = lang().protocol.modbus.err_invalid_url.replace("{}", url);
-        Err(err_msg)
+        Err(anyhow!(lang()
+            .protocol
+            .modbus
+            .err_invalid_url
+            .replace("{}", url)))
     }
 }

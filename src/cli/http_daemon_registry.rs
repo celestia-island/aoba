@@ -1,10 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures::Future;
 use once_cell::sync::Lazy;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{collections::HashMap, sync::Arc};
 
 use flume::Sender;
 
@@ -34,7 +32,7 @@ pub fn register_handle(
         handle: arc.clone(),
         shutdown_tx,
     };
-    let mut reg = HTTP_REGISTRY.lock().unwrap();
+    let mut reg = HTTP_REGISTRY.lock();
     reg.map.insert(port, entry);
     arc
 }
@@ -43,7 +41,7 @@ pub fn register_handle(
 pub async fn shutdown_and_join(port: u16) -> Result<()> {
     // send shutdown (best-effort)
     let maybe_entry = {
-        let reg = HTTP_REGISTRY.lock().unwrap();
+        let reg = HTTP_REGISTRY.lock();
         reg.map.get(&port).map(|e| e.shutdown_tx.clone())
     };
 
@@ -53,9 +51,9 @@ pub async fn shutdown_and_join(port: u16) -> Result<()> {
 
     // take and join the handle if present
     let handle_to_await = {
-        let mut reg = HTTP_REGISTRY.lock().unwrap();
+        let mut reg = HTTP_REGISTRY.lock();
         if let Some(entry) = reg.map.remove(&port) {
-            entry.handle.lock().unwrap().take()
+            entry.handle.lock().take()
         } else {
             None
         }
@@ -69,25 +67,26 @@ pub async fn shutdown_and_join(port: u16) -> Result<()> {
 }
 
 /// Shutdown all registered HTTP daemons and join them.
-pub fn shutdown_all_and_join() {
+pub async fn shutdown_all_and_join() {
     let ports: Vec<u16> = {
-        let reg = HTTP_REGISTRY.lock().unwrap();
+        let reg = HTTP_REGISTRY.lock();
         reg.map.keys().copied().collect()
     };
 
     for p in ports {
-        std::mem::drop(shutdown_and_join(p));
+        let _ = shutdown_and_join(p).await;
     }
 }
 
 /// Check whether a registered handle for the given port is finished.
 /// Returns None if no handle registered for port, Some(true) if finished.
 pub fn is_handle_finished(port: u16) -> Option<bool> {
-    let reg = HTTP_REGISTRY.lock().unwrap();
+    let reg = HTTP_REGISTRY.lock();
     if let Some(entry) = reg.map.get(&port) {
-        let guard = entry.handle.lock().unwrap();
-        return Some(guard.as_ref().map(|h| h.is_finished()).unwrap_or(true));
+        let guard = entry.handle.lock();
+        return Some(guard.as_ref().is_none_or(tokio::task::JoinHandle::is_finished));
     }
+    drop(reg);
     None
 }
 
@@ -96,9 +95,9 @@ pub fn is_handle_finished(port: u16) -> Option<bool> {
 pub fn get_handle_error(port: u16) -> Option<Result<()>> {
     use std::task::Poll;
 
-    let reg = HTTP_REGISTRY.lock().unwrap();
+    let reg = HTTP_REGISTRY.lock();
     if let Some(entry) = reg.map.get(&port) {
-        let mut guard = entry.handle.lock().unwrap();
+        let mut guard = entry.handle.lock();
         if let Some(handle) = guard.as_mut() {
             // Create a no-op waker to poll the handle
             let waker = futures::task::noop_waker();
@@ -108,19 +107,17 @@ pub fn get_handle_error(port: u16) -> Option<Result<()>> {
             match std::pin::Pin::new(handle).poll(&mut cx) {
                 Poll::Ready(Ok(Ok(()))) => return Some(Ok(())),
                 Poll::Ready(Ok(Err(e))) => {
-                    log::error!("HTTP server thread error detected: {}", e);
+                    log::error!("HTTP server thread error detected: {e}");
                     return Some(Err(e));
                 }
                 Poll::Ready(Err(join_err)) => {
-                    log::error!("HTTP server thread panicked: {}", join_err);
-                    return Some(Err(anyhow::anyhow!(
-                        "HTTP server thread panicked: {}",
-                        join_err
-                    )));
+                    log::error!("HTTP server thread panicked: {join_err}");
+                    return Some(Err(anyhow!("HTTP server thread panicked: {join_err}")));
                 }
                 Poll::Pending => return None,
             }
         }
     }
+    drop(reg);
     None
 }

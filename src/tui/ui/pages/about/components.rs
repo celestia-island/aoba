@@ -25,12 +25,13 @@ pub struct RepoManifest {
 
 static ABOUT_CACHE: OnceLock<Arc<Mutex<RepoManifest>>> = OnceLock::new();
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
+    const ABOUT_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/res/about_cache.toml"));
+
     if let Some(v) = ABOUT_CACHE.get() {
         return v.clone();
     }
-
-    const ABOUT_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/res/about_cache.toml"));
 
     let mut cache = RepoManifest::default();
 
@@ -97,7 +98,7 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
             }
 
             if let Some(lmap) = val.get("license_map").and_then(|v| v.as_table()) {
-                for (k, v) in lmap.iter() {
+                for (k, v) in lmap {
                     if let Some(s) = v.as_str() {
                         cache
                             .license_map
@@ -167,9 +168,10 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
 }
 
 /// Render about content on right panel. Reads Cargo.toml at repo root and shows package and deps.
+///
 /// Render the about details (label/value pairs) into lines. This can be used both for
 /// the entry preview and the full about subpage.
-pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Result<Vec<Line<'static>>> {
+pub fn render_about_page_manifest_lines(app_snapshot: &RepoManifest) -> Result<Vec<Line<'static>>> {
     let mut out: Vec<Line> = Vec::new();
 
     out.push(Line::from(lang().about.welcome.clone()));
@@ -198,12 +200,11 @@ pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Result<Ve
             .map(|(n, _)| UnicodeWidthStr::width(n.as_str()))
             .max()
             .unwrap_or(0usize);
-        for (name, decl) in app_snapshot.deps.iter() {
+        for (name, decl) in &app_snapshot.deps {
             let license = app_snapshot
                 .license_map
                 .get(name)
-                .map(|s| s.as_str())
-                .unwrap_or("-");
+                .map_or("-", std::string::String::as_str);
             let name_w = UnicodeWidthStr::width(name.as_str());
             let pad = max_name_w.saturating_sub(name_w);
             let padded_name = format!("  {}{}", name, " ".repeat(pad));
