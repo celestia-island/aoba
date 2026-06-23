@@ -38,10 +38,10 @@ jobs:
             os: ubuntu-24.04
             kind: native
           - target: armv7-unknown-linux-gnueabihf
-            os: ubuntu-24.04-arm
+            os: ubuntu-24.04
             kind: cross
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04-arm
+            os: ubuntu-24.04
             kind: cross
     steps:
       - name: Checkout
@@ -158,7 +158,7 @@ jobs:
           targets: ${{ matrix.platform.target }}
 
       - name: Install cross (for ARM cross-builds)
-        if: matrix.platform.os == 'ubuntu-24.04-arm'
+        if: matrix.platform.kind == 'cross'
         uses: taiki-e/install-action@v2
         with:
           tool: cross
@@ -170,7 +170,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build release binary (native)
-        if: matrix.platform.os != 'ubuntu-24.04-arm'
+        if: matrix.platform.kind == 'native'
         shell: bash
         run: |
           set -euo pipefail
@@ -203,7 +203,7 @@ jobs:
           echo "Built: $SRC"
 
       - name: Build release binary (cross)
-        if: matrix.platform.os == 'ubuntu-24.04-arm'
+        if: matrix.platform.kind == 'cross'
         shell: bash
         env:
           TARGET: ${{ matrix.platform.target }}
