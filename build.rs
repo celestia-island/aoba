@@ -38,7 +38,17 @@ fn main() -> Result<()> {
                             TomlValue::String(repo.to_string()),
                         );
                     }
-                    if let Some(lic) = t.get("license").and_then(|x| x.as_str()) {
+                    // License: prefer the package-level field, fall back to the
+                    // workspace declaration. The package uses license-file (non-SPDX
+                    // SySL-1.0) for crates.io compatibility, so the textual license
+                    // id lives only in [workspace.package].
+                    let lic = t.get("license").and_then(|x| x.as_str()).or_else(|| {
+                        v.get("workspace")
+                            .and_then(|w| w.get("package"))
+                            .and_then(|p| p.get("license"))
+                            .and_then(|x| x.as_str())
+                    });
+                    if let Some(lic) = lic {
                         pj.insert("license".to_string(), TomlValue::String(lic.to_string()));
                     }
                     if let Some(auth) = t.get("authors").and_then(|x| x.as_array()) {
