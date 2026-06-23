@@ -53,7 +53,7 @@ impl ModbusMaster {
     ///         poll_interval_ms: 1000,
     ///     };
     ///
-    ///     let master = ModbusMaster::new_simple(config, 1000)?;
+    ///     let master = ModbusMaster::new_simple(&config, 1000)?;
     ///
     ///     // Receive responses
     ///     while let Some(response) = master.try_recv() {
