@@ -66,7 +66,10 @@ impl ModbusHook for StatisticsHook {
     }
 
     fn on_after_response(&self, _port: &str, response: &ModbusResponse) -> Result<()> {
-        let mut count = self.total_requests.lock().unwrap_or_else(|e| e.into_inner());
+        let mut count = self
+            .total_requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *count += 1;
         log::info!(
             "[StatisticsHook] Request #{}: Station {}, {} values sent",

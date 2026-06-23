@@ -131,7 +131,7 @@ impl InputRawBuffer {
                     None
                 }
             }
-                    _ => None,
+            _ => None,
         }
     }
 
@@ -190,11 +190,7 @@ pub enum SpecialEntry {
 impl SpecialEntry {
     #[must_use]
     pub const fn all() -> &'static [Self] {
-        &[
-            Self::Refresh,
-            Self::ManualSpecify,
-            Self::About,
-        ]
+        &[Self::Refresh, Self::ManualSpecify, Self::About]
     }
 }
 

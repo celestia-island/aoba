@@ -173,7 +173,8 @@ fn render_node_grid(
         .take(end_idx.saturating_sub(start_index))
     {
         let node_position_in_view = i - start_index;
-        let x = inner_area.x + (u16::try_from(node_position_in_view).unwrap_or(u16::MAX) * (node_width + spacing));
+        let x = inner_area.x
+            + (u16::try_from(node_position_in_view).unwrap_or(u16::MAX) * (node_width + spacing));
         let y = inner_area.y;
 
         // Skip if no room
@@ -206,7 +207,9 @@ fn render_node_grid(
         let edit_node_index = ports_order.len();
         if edit_node_index >= start_index {
             let node_position_in_view = edit_node_index - start_index;
-            let x = inner_area.x + (u16::try_from(node_position_in_view).unwrap_or(u16::MAX) * (node_width + spacing));
+            let x = inner_area.x
+                + (u16::try_from(node_position_in_view).unwrap_or(u16::MAX)
+                    * (node_width + spacing));
             let y = inner_area.y;
 
             if x + node_width <= inner_area.x + inner_area.width {
@@ -328,7 +331,7 @@ fn render_node(
     // Determine status indicator
     let status_indicator = match port_state {
         PortState::OccupiedByThis => "●", // Filled circle
-            _ => "○",                         // Empty circle
+        _ => "○",                         // Empty circle
     };
 
     // Create node block with border
@@ -361,7 +364,7 @@ fn render_node(
         };
         let indicator_color = match port_state {
             PortState::OccupiedByThis => Color::Green,
-                    _ => Color::Gray,
+            _ => Color::Gray,
         };
 
         // Selection indicator: angle brackets around the circle when selected
@@ -389,15 +392,9 @@ fn render_node(
         // Determine port type display label using PortType enum
         use crate::protocol::status::types::port::PortType;
         let port_type_label = match port_type {
-            PortType::HTTP => {
-                lang().index.port_type_http_server_label.as_str()
-            }
-            PortType::IPC => {
-                lang().index.port_type_ipc_pipe_label.as_str()
-            }
-            PortType::Physical | PortType::Unknown => {
-                lang().index.port_suffix.as_str()
-            }
+            PortType::HTTP => lang().index.port_type_http_server_label.as_str(),
+            PortType::IPC => lang().index.port_type_ipc_pipe_label.as_str(),
+            PortType::Physical | PortType::Unknown => lang().index.port_suffix.as_str(),
         };
 
         let text_style = if is_selected {

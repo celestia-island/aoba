@@ -553,7 +553,9 @@ impl SubprocessManager {
     /// Get snapshot for a running subprocess
     #[must_use]
     pub fn snapshot(&self, port_name: &str) -> Option<SubprocessSnapshot> {
-        self.processes.get(port_name).map(ManagedSubprocess::snapshot)
+        self.processes
+            .get(port_name)
+            .map(ManagedSubprocess::snapshot)
     }
 
     /// Get the list of active subprocess port names

@@ -81,7 +81,8 @@ pub fn render_register_row_line(
     {
         if si == slave_index {
             let sel_addr = item.register_address + u16::try_from(ri).unwrap_or(u16::MAX);
-            sel_addr >= row_base && sel_addr < row_base + u16::try_from(registers_per_row).unwrap_or(u16::MAX)
+            sel_addr >= row_base
+                && sel_addr < row_base + u16::try_from(registers_per_row).unwrap_or(u16::MAX)
         } else {
             false
         }
@@ -126,7 +127,8 @@ pub fn render_register_row_line(
                     register_index: ri,
                 } = current_selection
                 {
-                    si == slave_index && (item.register_address + u16::try_from(ri).unwrap_or(u16::MAX)) == addr
+                    si == slave_index
+                        && (item.register_address + u16::try_from(ri).unwrap_or(u16::MAX)) == addr
                 } else {
                     false
                 };
@@ -201,7 +203,10 @@ pub fn render_register_row_line(
 
                 spans.extend(cell_spans.iter().cloned());
 
-                let cell_text: String = cell_spans.iter().map(std::string::ToString::to_string).collect();
+                let cell_text: String = cell_spans
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect();
                 let cell_width = UnicodeWidthStr::width(cell_text.as_str());
                 if cell_width < col_width_value {
                     spans.push(Span::raw(" ".repeat(col_width_value - cell_width)));

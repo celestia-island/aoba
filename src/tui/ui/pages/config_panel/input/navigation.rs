@@ -21,14 +21,22 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
         } = &mut status.page
         {
             let (occupied, is_virtual) =
-                status.ports.order.get(*selected_port).map_or((false, false), |port_name| {
-                    status.ports.map.get(port_name).map_or((false, false), |port| {
-                        (
-                            port.state.is_occupied_by_this(),
-                            port.port_type.is_virtual(),
-                        )
-                    })
-                });
+                status
+                    .ports
+                    .order
+                    .get(*selected_port)
+                    .map_or((false, false), |port_name| {
+                        status
+                            .ports
+                            .map
+                            .get(port_name)
+                            .map_or((false, false), |port| {
+                                (
+                                    port.state.is_occupied_by_this(),
+                                    port.port_type.is_virtual(),
+                                )
+                            })
+                    });
 
             if !occupied {
                 // Port not occupied: allow movement within the first group of
@@ -62,7 +70,7 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
                         *cursor = types::cursor::ConfigPanelCursor::ViewCommunicationLog;
                         *view_offset = cursor.view_offset();
                     }
-                                    _ => {}
+                    _ => {}
                 }
             }
         }

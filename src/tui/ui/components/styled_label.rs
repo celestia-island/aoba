@@ -54,12 +54,15 @@ where
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
-                    T::iter()
-                        .nth(selected_index).map_or_else(|| {
+                    T::iter().nth(selected_index).map_or_else(
+                        || {
                             // If the index is out of bounds, wrap to valid range
                             T::iter()
-                                .nth(selected_index % T::iter().len()).map_or_else(|| "Invalid".to_string(), |item| item.to_string())
-                        }, |item| item.to_string()),
+                                .nth(selected_index % T::iter().len())
+                                .map_or_else(|| "Invalid".to_string(), |item| item.to_string())
+                        },
+                        |item| item.to_string(),
+                    ),
                     Style::default().fg(Color::Yellow),
                 ),
                 Span::styled(

@@ -21,7 +21,11 @@ pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Opti
             selected_item,
             ..
         } => {
-            let port_name = status.ports.order.get(*selected_port).ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+            let port_name = status
+                .ports
+                .order
+                .get(*selected_port)
+                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
             status.ports.map.get(port_name).map_or_else(
                 || Ok(None),
                 |port| Ok(Some((port.logs.clone(), *selected_item))),
@@ -49,7 +53,11 @@ pub fn render_log_display(
 
     // Calculate which items to show based on selected_item
     let start_index = selected_item.map_or(
-        if logs.len() <= items_visible { 0 } else { logs.len() - items_visible },
+        if logs.len() <= items_visible {
+            0
+        } else {
+            logs.len() - items_visible
+        },
         |selected_idx| selected_idx,
     );
 
@@ -134,7 +142,10 @@ pub fn render_log_display(
 
     // Render position counter at bottom-right of the frame
     let position_area = Rect {
-        x: area.x + area.width.saturating_sub(u16::try_from(position_text.len()).unwrap_or(u16::MAX) + 2),
+        x: area.x
+            + area
+                .width
+                .saturating_sub(u16::try_from(position_text.len()).unwrap_or(u16::MAX) + 2),
         y: area.y + area.height.saturating_sub(1),
         width: u16::try_from(position_text.len()).unwrap_or(u16::MAX) + 1,
         height: 1,
@@ -198,7 +209,9 @@ fn build_lifecycle_lines(
     };
 
     let status_color = match lifecycle.phase {
-        types::port::PortLifecyclePhase::Created | types::port::PortLifecyclePhase::Shutdown => Color::Green,
+        types::port::PortLifecyclePhase::Created | types::port::PortLifecyclePhase::Shutdown => {
+            Color::Green
+        }
         types::port::PortLifecyclePhase::Restarted => Color::Yellow,
         types::port::PortLifecyclePhase::Failed => Color::Red,
     };
@@ -220,15 +233,17 @@ fn build_lifecycle_lines(
 
     let line_three = lifecycle.note.as_ref().map_or_else(
         || Line::from(vec![Span::raw("  ")]),
-        |note| Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                lang.tabs.log.reason_label.clone(),
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::raw(": "),
-            Span::raw(note.clone()),
-        ]),
+        |note| {
+            Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    lang.tabs.log.reason_label.clone(),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(": "),
+                Span::raw(note.clone()),
+            ])
+        },
     );
 
     [time_line, line_two, line_three]
@@ -262,8 +277,10 @@ fn build_master_comm_lines(
         ),
     ];
 
-    let config_value = comm
-        .config_index.map_or_else(|| lang.tabs.log.comm_unknown.clone(), |index| format!("0x{index:04X} ({index})"));
+    let config_value = comm.config_index.map_or_else(
+        || lang.tabs.log.comm_unknown.clone(),
+        |index| format!("0x{index:04X} ({index})"),
+    );
 
     line_two_spans.push(Span::raw(" #"));
     line_two_spans.push(Span::raw(config_value));
@@ -315,8 +332,10 @@ fn build_slave_comm_lines(
         ),
     ];
 
-    let config_value = comm
-        .config_index.map_or_else(|| lang.tabs.log.comm_unknown.clone(), |index| format!("0x{index:04X} ({index})"));
+    let config_value = comm.config_index.map_or_else(
+        || lang.tabs.log.comm_unknown.clone(),
+        |index| format!("0x{index:04X} ({index})"),
+    );
 
     line_two_spans.push(Span::raw(" #"));
     line_two_spans.push(Span::raw(config_value));
@@ -371,7 +390,8 @@ fn build_comm_success_line(lang: &Lang, comm: &types::port::PortCommunicationLog
     let station_label = lang.tabs.log.comm_station_id_label.clone();
     let unknown = lang.tabs.log.comm_unknown.clone();
     let station_value = comm
-        .station_id.map_or_else(|| unknown.clone(), |station| format!("0x{station:02X}"));
+        .station_id
+        .map_or_else(|| unknown.clone(), |station| format!("0x{station:02X}"));
     let station_segment = format!("{station_label} {station_value}");
 
     let register_label = lang.tabs.log.comm_register_type_label.clone();
@@ -585,18 +605,22 @@ fn build_management_lines(
             ]);
 
             let line_three = details.as_ref().map_or_else(
-                || Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
-                    Span::raw(": "),
-                    Span::raw(lang.tabs.log.reason_none.clone()),
-                ]),
-                |detail| Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
-                    Span::raw(": "),
-                    Span::raw(detail.clone()),
-                ]),
+                || {
+                    Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
+                        Span::raw(": "),
+                        Span::raw(lang.tabs.log.reason_none.clone()),
+                    ])
+                },
+                |detail| {
+                    Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
+                        Span::raw(": "),
+                        Span::raw(detail.clone()),
+                    ])
+                },
             );
 
             [time_line, line_two, line_three]
@@ -656,7 +680,10 @@ fn build_management_lines(
                 Span::raw(mode.clone()),
             ]);
 
-            let pid_text = pid.map_or_else(|| lang.tabs.log.comm_unknown.clone(), |value| format!("0x{value:04X} ({value})"));
+            let pid_text = pid.map_or_else(
+                || lang.tabs.log.comm_unknown.clone(),
+                |value| format!("0x{value:04X} ({value})"),
+            );
 
             let line_three = Line::from(vec![
                 Span::raw("  "),

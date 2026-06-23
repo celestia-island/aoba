@@ -14,7 +14,7 @@ pub fn handle_mouse(event: crossterm::event::MouseEvent, _bus: &Bus) -> Result<(
         MouseEventKind::ScrollDown => {
             handle_move_next(types::cursor::EntryCursor::Refresh)?;
         }
-            _ => {}
+        _ => {}
     }
     Ok(())
 }

@@ -62,7 +62,7 @@ fn handle_editing_input(
         types::cursor::ConfigPanelCursor::ProtocolMode => {
             Some(1) // Only one option: Modbus RTU for now
         }
-            _ => None,
+        _ => None,
     };
 
     // For BaudRate (custom numeric input) only allow numeric input during editing
@@ -251,7 +251,7 @@ fn handle_navigation_input(
                         KeyCode::Down | KeyCode::Char('j') => {
                             *cursor = cursor.next();
                         }
-                                            _ => {}
+                        _ => {}
                     }
                     *view_offset = cursor.view_offset();
                 }
@@ -304,7 +304,10 @@ fn handle_navigation_input(
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-        #[allow(clippy::match_wildcard_for_single_variants, clippy::wildcard_enum_match_arm)]
+        #[allow(
+            clippy::match_wildcard_for_single_variants,
+            clippy::wildcard_enum_match_arm
+        )]
         _ => Ok(()),
     }
 }
@@ -490,7 +493,8 @@ fn handle_selector_commit(
                     write_status(|status| {
                         status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
                             bytes: current_baud.to_string().into_bytes(),
-                            offset: isize::try_from(current_baud.to_string().len()).unwrap_or(isize::MAX),
+                            offset: isize::try_from(current_baud.to_string().len())
+                                .unwrap_or(isize::MAX),
                         };
                         Ok(())
                     })?;

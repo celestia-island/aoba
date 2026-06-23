@@ -169,10 +169,7 @@ impl ConfigPanelCursor {
     /// Convert from index for compatibility with existing code
     #[must_use]
     pub fn from_index(index: usize) -> Self {
-        Self::all()
-            .get(index)
-            .copied()
-            .unwrap_or(Self::EnablePort)
+        Self::all().get(index).copied().unwrap_or(Self::EnablePort)
     }
 }
 
@@ -423,7 +420,7 @@ impl Cursor for ModbusDashboardCursor {
                     let cell_row = register_index / registers_per_row;
                     return offset + 1 + config_rows + cell_row;
                 }
-                            _ => {
+                _ => {
                     offset += rows + 1;
                 }
             }
@@ -475,7 +472,7 @@ fn master_source_value_kind() -> Option<status::modbus::ModbusMasterDataSourceVa
                     let kind = master_source.value_kind();
                     return Ok(match kind {
                         status::modbus::ModbusMasterDataSourceValueKind::None => None,
-                                            other => Some(other),
+                        other => Some(other),
                     });
                 }
             }

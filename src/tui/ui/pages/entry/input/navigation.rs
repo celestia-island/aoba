@@ -174,9 +174,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 let uuid = uuid::Uuid::now_v7();
                 let new_port_name = uuid.to_string();
 
-                log::info!(
-                    "Creating new {port_type_name} port with UUID: {new_port_name}"
-                );
+                log::info!("Creating new {port_type_name} port with UUID: {new_port_name}");
 
                 // Add to ports
                 write_status(|status| {
@@ -334,7 +332,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             bus::request_refresh(&bus.ui_tx)?;
         }
-            _ => {}
+        _ => {}
     }
     Ok(())
 }

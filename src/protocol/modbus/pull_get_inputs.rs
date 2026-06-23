@@ -19,7 +19,10 @@ pub fn parse_pull_get_inputs(request: &mut ModbusRequest, response: &[u8]) -> Re
     request.parse_ok(response)?;
 
     if response.len() < 5 {
-        return Err(anyhow::anyhow!("Response too short for inputs: {} bytes", response.len()));
+        return Err(anyhow::anyhow!(
+            "Response too short for inputs: {} bytes",
+            response.len()
+        ));
     }
 
     let values = response[3..response.len() - 2]

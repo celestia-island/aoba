@@ -218,7 +218,10 @@ pub(crate) fn extract_values_from_station_configs(
     }
 
     let offset = (start_address - range.address_start) as usize;
-    let total_available = range.length.saturating_sub(u16::try_from(offset).unwrap_or(u16::MAX)) as usize;
+    let total_available = range
+        .length
+        .saturating_sub(u16::try_from(offset).unwrap_or(u16::MAX))
+        as usize;
 
     if total_available < register_length as usize {
         return Err(anyhow!(

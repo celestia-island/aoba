@@ -37,8 +37,9 @@ where
 {
     // Only operate on the global temporary buffer in a generic way.
     match key.code {
-        crossterm::event::KeyCode::Left | crossterm::event::KeyCode::Right |
-crossterm::event::KeyCode::Char('h' | 'l') => {
+        crossterm::event::KeyCode::Left
+        | crossterm::event::KeyCode::Right
+        | crossterm::event::KeyCode::Char('h' | 'l') => {
             let is_right = matches!(
                 key.code,
                 crossterm::event::KeyCode::Right | crossterm::event::KeyCode::Char('l')
@@ -148,6 +149,6 @@ crossterm::event::KeyCode::Char('h' | 'l') => {
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-            _ => Ok(()),
+        _ => Ok(()),
     }
 }

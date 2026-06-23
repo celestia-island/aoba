@@ -7,8 +7,7 @@ use tokio::sync::Mutex;
 use serialport::SerialPort;
 
 use super::parse_modbus_header;
-use crate::protocol::runtime::crc16_modbus;
-use crate::utils::sleep::sleep_1s;
+use crate::{protocol::runtime::crc16_modbus, utils::sleep::sleep_1s};
 
 const MODBUS_HEADER_TIMEOUT_SECS: i64 = 2;
 const MODBUS_BODY_TIMEOUT_SECS: i64 = 3;
@@ -188,11 +187,13 @@ pub async fn read_modbus_frame(
     if guessed_len >= MODBUS_MIN_FRAME_LEN {
         let data_no_crc_len = guessed_len - MODBUS_RTU_OVERHEAD;
         let calc = crc16_modbus(&collected[..data_no_crc_len]);
-        let frame_crc =
-            u16::from(collected[data_no_crc_len]) | (u16::from(collected[data_no_crc_len + 1]) << 8);
+        let frame_crc = u16::from(collected[data_no_crc_len])
+            | (u16::from(collected[data_no_crc_len + 1]) << 8);
         if calc != frame_crc {
             log::warn!("CRC mismatch: calc=0x{calc:04X} frame=0x{frame_crc:04X}");
-            return Err(anyhow!("CRC mismatch: calc=0x{calc:04X} frame=0x{frame_crc:04X}"));
+            return Err(anyhow!(
+                "CRC mismatch: calc=0x{calc:04X} frame=0x{frame_crc:04X}"
+            ));
         }
     }
 
@@ -203,5 +204,3 @@ pub async fn read_modbus_frame(
 
     Ok(Some(Bytes::from(collected)))
 }
-
-

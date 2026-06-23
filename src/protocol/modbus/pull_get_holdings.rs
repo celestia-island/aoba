@@ -17,7 +17,10 @@ pub fn parse_pull_get_holdings(request: &mut ModbusRequest, response: &[u8]) -> 
     request.parse_ok(response)?;
 
     if response.len() < 5 {
-        return Err(anyhow::anyhow!("Response too short for holdings: {} bytes", response.len()));
+        return Err(anyhow::anyhow!(
+            "Response too short for holdings: {} bytes",
+            response.len()
+        ));
     }
 
     let values = response[3..response.len() - 2]

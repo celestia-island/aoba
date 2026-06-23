@@ -78,7 +78,7 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
                         | types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
                             // First group items are always visible
                         }
-                                            _ => {
+                        _ => {
                             continue;
                         }
                     }
@@ -95,7 +95,7 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
                                 // Skip serial config fields for virtual ports
                                 continue;
                             }
-                                                    _ => {}
+                            _ => {}
                         }
                     }
                 }
@@ -164,7 +164,9 @@ fn create_line(
                     .get(selected_index)
                     .ok_or_else(|| anyhow!("Invalid protocol mode index: {selected_index}"))?;
                 Ok(match text_state {
-                    TextState::Editing | TextState::Selected => input_spans(display_text, text_state)?,
+                    TextState::Editing | TextState::Selected => {
+                        input_spans(display_text, text_state)?
+                    }
                     TextState::Normal => {
                         vec![Span::raw(display_text.clone())]
                     }
@@ -240,12 +242,13 @@ fn create_line(
                 }
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
-                let current_index = port_data.map_or(3usize, |port| match port.serial_config.data_bits {
-                    5 => 0usize,
-                    6 => 1usize,
-                    7 => 2usize,
-                    _ => 3usize,
-                });
+                let current_index =
+                    port_data.map_or(3usize, |port| match port.serial_config.data_bits {
+                        5 => 0usize,
+                        6 => 1usize,
+                        7 => 2usize,
+                        _ => 3usize,
+                    });
 
                 let selected_index = if matches!(text_state, TextState::Editing) {
                     match &input_raw_buffer {
@@ -262,10 +265,11 @@ fn create_line(
                 )?)
             }
             types::cursor::ConfigPanelCursor::StopBits => {
-                let current_index = port_data.map_or(0usize, |port| match port.serial_config.stop_bits {
-                    1 => 0usize,
-                    _ => 1usize,
-                });
+                let current_index =
+                    port_data.map_or(0usize, |port| match port.serial_config.stop_bits {
+                        1 => 0usize,
+                        _ => 1usize,
+                    });
 
                 let selected_index = if matches!(text_state, TextState::Editing) {
                     match &input_raw_buffer {
@@ -282,11 +286,12 @@ fn create_line(
                 )?)
             }
             types::cursor::ConfigPanelCursor::Parity => {
-                let current_index = port_data.map_or(0usize, |port| match port.serial_config.parity {
-                    types::port::SerialParity::None => 0usize,
-                    types::port::SerialParity::Odd => 1usize,
-                    types::port::SerialParity::Even => 2usize,
-                });
+                let current_index =
+                    port_data.map_or(0usize, |port| match port.serial_config.parity {
+                        types::port::SerialParity::None => 0usize,
+                        types::port::SerialParity::Odd => 1usize,
+                        types::port::SerialParity::Even => 2usize,
+                    });
 
                 let selected_index = if matches!(text_state, TextState::Editing) {
                     match &input_raw_buffer {

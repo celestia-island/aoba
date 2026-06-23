@@ -52,7 +52,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageUp: Jump to previous station group
                 let current_cursor = read_status(|status| match &status.page {
                     crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
                 })?;
 
                 let new_cursor = jump_to_prev_group(current_cursor);
@@ -94,7 +94,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageDown: Jump to next station group
                 let current_cursor = read_status(|status| match &status.page {
                     crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
                 })?;
 
                 let new_cursor = jump_to_next_group(current_cursor)?;
@@ -118,7 +118,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         KeyCode::Left | KeyCode::Char('h') => {
             let current_cursor = read_status(|status| match &status.page {
                 crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                            _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
             // Handle horizontal navigation for register table
@@ -137,7 +137,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: slave_index }
                     }
                 }
-                            _ => current_cursor.prev(),
+                _ => current_cursor.prev(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -177,7 +177,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
-                                                    _ => None,
+                            _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
@@ -213,7 +213,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         current_cursor
                     }
                 }
-                            _ => current_cursor.next(),
+                _ => current_cursor.next(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -235,7 +235,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         KeyCode::Up | KeyCode::Char('k') => {
             let current_cursor = read_status(|status| match &status.page {
                 crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                            _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
             // Handle vertical navigation for register table with dynamic registers per row
@@ -253,7 +253,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
-                                                    _ => None,
+                            _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
@@ -290,7 +290,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: slave_index }
                     }
                 }
-                            _ => current_cursor.prev(),
+                _ => current_cursor.prev(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -312,7 +312,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         KeyCode::Down | KeyCode::Char('j') => {
             let current_cursor = read_status(|status| match &status.page {
                 crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
-                            _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
             // Handle vertical navigation for register table with 8-register row alignment
@@ -330,7 +330,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
-                                                    _ => None,
+                            _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
@@ -379,7 +379,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                 }
-                            _ => current_cursor.next(),
+                _ => current_cursor.next(),
             };
 
             let new_offset = new_cursor.view_offset();
@@ -412,7 +412,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             handle_leave_page(bus)?;
             Ok(())
         }
-            _ => Ok(()),
+        _ => Ok(()),
     }
 }
 

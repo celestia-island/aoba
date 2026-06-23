@@ -49,10 +49,7 @@ fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
     let tail = s.split_once(key)?.1;
     // check for 0x... first
     if let Some((_, after)) = tail.split_once("0x") {
-        let num: String = after
-            .chars()
-            .take_while(char::is_ascii_hexdigit)
-            .collect();
+        let num: String = after.chars().take_while(char::is_ascii_hexdigit).collect();
         if !num.is_empty() {
             if let Ok(v) = u16::from_str_radix(&num, 16) {
                 return Some(v);
@@ -232,7 +229,9 @@ pub fn available_ports_enriched() -> Vec<(SerialPortInfo, PortExtra)> {
         .map(|p| {
             let meta = try_extract_vid_pid_serial(&p.port_type);
             let (vid, pid, serial, manufacturer, product) = meta
-                .map_or((None, None, None, None, None), |(v, p2, s, m, pr)| (Some(v), Some(p2), s, m, pr));
+                .map_or((None, None, None, None, None), |(v, p2, s, m, pr)| {
+                    (Some(v), Some(p2), s, m, pr)
+                });
             (
                 p,
                 PortExtra {
@@ -276,7 +275,7 @@ pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInf
             SerialPortType::UsbPort(info) => {
                 format!("{}:vid={:04x}:pid={:04x}", base, info.vid, info.pid)
             }
-                    _ => base,
+            _ => base,
         };
 
         if seen.insert(key) {
@@ -289,7 +288,11 @@ pub fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInf
     // Annotate devices sharing same basename with vid / pid so user can distinguish
     let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, p) in ports.iter().enumerate() {
-        let base = p.port_name.rsplit('/').next().map_or_else(|| p.port_name.to_lowercase(), str::to_lowercase);
+        let base = p
+            .port_name
+            .rsplit('/')
+            .next()
+            .map_or_else(|| p.port_name.to_lowercase(), str::to_lowercase);
         groups.entry(base).or_default().push(i);
     }
 

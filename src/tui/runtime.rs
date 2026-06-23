@@ -17,7 +17,10 @@ use crate::{
     tui::{
         cli_data::initialize_cli_data_source,
         ipc::handle_cli_ipc_message,
-        logs::{append_subprocess_exited_log, append_subprocess_stopped_log, append_subprocess_spawned_log, append_lifecycle_log},
+        logs::{
+            append_lifecycle_log, append_subprocess_exited_log, append_subprocess_spawned_log,
+            append_subprocess_stopped_log,
+        },
         status::{
             self as types,
             port::{PortConfig, PortData, PortState, PortStatusIndicator, PortSubprocessInfo},
@@ -45,10 +48,7 @@ fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
 // Named constant for initial stations send retries to avoid magic numbers
 const INITIAL_STATIONS_SEND_RETRIES: usize = 3;
 
-async fn send_initial_stations(
-    port_name: &str,
-    subprocess_manager: &mut SubprocessManager,
-) {
+async fn send_initial_stations(port_name: &str, subprocess_manager: &mut SubprocessManager) {
     log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
     let mut stations_sent = false;
     for attempt in 1..=INITIAL_STATIONS_SEND_RETRIES {
@@ -262,7 +262,9 @@ pub async fn run_core_thread(
 ) -> Result<()> {
     let mut polling_enabled = true;
     let scan_interval = Duration::from_secs(30);
-    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap_or_else(std::time::Instant::now);
+    let mut last_scan = std::time::Instant::now()
+        .checked_sub(scan_interval)
+        .unwrap_or_else(std::time::Instant::now);
     let mut scan_in_progress = false;
 
     let mut subprocess_manager = SubprocessManager::new();
@@ -589,7 +591,16 @@ async fn restart_runtime(
             Ok(())
         })?;
 
-        append_subprocess_stopped_log(port_name, Some(crate::utils::i18n::lang().tabs.log.runtime_restart_stopping_old_process.clone()));
+        append_subprocess_stopped_log(
+            port_name,
+            Some(
+                crate::utils::i18n::lang()
+                    .tabs
+                    .log
+                    .runtime_restart_stopping_old_process
+                    .clone(),
+            ),
+        );
     }
 
     // Start the new subprocess

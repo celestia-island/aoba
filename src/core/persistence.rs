@@ -229,7 +229,8 @@ pub fn save_port_configs<S: BuildHasher>(configs: &HashMap<String, PortConfig, S
             .with_context(|| format!("Failed to create directory {}", parent.display()))?;
     }
 
-    fs::write(&path, json).with_context(|| format!("Failed to write config to {}", path.display()))?;
+    fs::write(&path, json)
+        .with_context(|| format!("Failed to write config to {}", path.display()))?;
 
     log::info!(
         "💾 Saved {} port configurations to {}",
@@ -259,7 +260,10 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     };
 
     if !path.exists() {
-        log::info!("📂 Config file does not exist yet: {} (will be created on save)", path.display());
+        log::info!(
+            "📂 Config file does not exist yet: {} (will be created on save)",
+            path.display()
+        );
         return Ok(HashMap::new());
     }
 

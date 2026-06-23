@@ -236,7 +236,7 @@ pub mod serializable {
                     }),
                     ..PageState::default()
                 },
-                            _ => PageState::default(),
+                _ => PageState::default(),
             };
 
             let page = match &status.page {
@@ -338,7 +338,7 @@ pub mod serializable {
         };
         let status_indicator = match &state {
             PortState::OccupiedByThis => PortStatusIndicator::Running,
-                    _ => PortStatusIndicator::NotStarted,
+            _ => PortStatusIndicator::NotStarted,
         };
 
         let data = PortData {
@@ -565,9 +565,7 @@ pub mod serializable {
                         "timeout" => Ok(Self::Timeout),
                         "stationid" => Ok(Self::StationId { index }),
                         "registermode" => Ok(Self::RegisterMode { index }),
-                        "registerstartaddress" => {
-                            Ok(Self::RegisterStartAddress { index })
-                        }
+                        "registerstartaddress" => Ok(Self::RegisterStartAddress { index }),
                         "registerlength" => Ok(Self::RegisterLength { index }),
                         "register" => Ok(Self::Register {
                             slave_index: index,
