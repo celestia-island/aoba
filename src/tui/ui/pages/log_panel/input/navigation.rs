@@ -108,6 +108,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             handle_clear_logs(bus)?;
             Ok(())
         }
-            _ => Ok(()),
+        _ => Ok(()),
     }
 }

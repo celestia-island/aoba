@@ -21,7 +21,10 @@ pub fn parse_pull_get_coils(
     request.parse_ok(response)?;
 
     if response.len() < 5 {
-        return Err(anyhow::anyhow!("Response too short for coils: {} bytes", response.len()));
+        return Err(anyhow::anyhow!(
+            "Response too short for coils: {} bytes",
+            response.len()
+        ));
     }
 
     let mut values = response[3..response.len() - 2]

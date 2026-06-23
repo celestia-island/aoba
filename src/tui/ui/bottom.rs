@@ -1,7 +1,11 @@
 use anyhow::Result;
 use chrono::Local;
 
-use ratatui::{layout::{Rect, Layout, Direction, Constraint, Alignment}, prelude::*, widgets::{Block, Borders, Paragraph}};
+use ratatui::{
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    prelude::*,
+    widgets::{Block, Borders, Paragraph},
+};
 
 use crate::{
     tui::{
@@ -70,10 +74,7 @@ pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .margin(0)
-        .constraints(
-            (0..rows_count)
-                .map(|_| Constraint::Length(1)),
-        )
+        .constraints((0..rows_count).map(|_| Constraint::Length(1)))
         .split(area);
 
     // If error present, render it on the topmost lines of the bottom area.
@@ -134,7 +135,8 @@ where
 pub fn format_kv_hint(key: &str, value: &str) -> String {
     // Use localized template, replace {key} and {label}
     let tmpl = lang().hotkeys.hint_kv_template.as_str();
-    tmpl.replace("{key}", key).replace("{label}", value)}
+    tmpl.replace("{key}", key).replace("{label}", value)
+}
 
 /// Render hints into the given `area` using the project's standard hint style and separator.
 pub fn render_hints<'a, I>(frame: &mut Frame, area: Rect, hints: I)

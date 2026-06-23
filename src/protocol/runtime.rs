@@ -394,7 +394,11 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> 
     Ok(())
 }
 
-#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 fn compute_gap(cfg: &SerialConfig) -> Duration {
     let bits = 1.
         + f32::from(cfg.data_bits)

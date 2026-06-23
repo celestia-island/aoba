@@ -73,7 +73,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
-            _ => Ok(()),
+        _ => Ok(()),
     }
 }
 
@@ -87,6 +87,6 @@ pub fn handle_mouse(event: crossterm::event::MouseEvent, _bus: &Bus) -> Result<(
             handle_scroll_down(1)?;
             Ok(())
         }
-            _ => Ok(()),
+        _ => Ok(()),
     }
 }

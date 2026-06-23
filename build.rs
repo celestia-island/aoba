@@ -139,85 +139,102 @@ fn main() -> Result<()> {
 
     hydrate_package_metadata_from_env(&mut out_tbl);
 
-    // Try cargo metadata for license map (metadata is JSON)
-    if let Ok(o) = Command::new("cargo")
-        .args(["metadata", "--format-version", "1"])
-        .output()
-    {
-        if o.status.success() {
-            if let Ok(jv) = serde_json::from_slice::<JsonValue>(&o.stdout) {
-                if let Some(pkgs) = jv.get("packages").and_then(|p| p.as_array()) {
-                    // build a set of direct dependency names from the earlier parsed Cargo.toml
-                    let mut direct_set: HashSet<String> = HashSet::new();
-                    if let Some(TomlValue::Array(arr)) = out_tbl.get("direct_dependency_names") {
-                        for v in arr {
-                            if let TomlValue::String(s) = v {
-                                direct_set.insert(s.clone());
-                            }
-                        }
-                        // remove the helper entry from out_tbl so it won't be part of final file
-                        out_tbl.remove("direct_dependency_names");
-                    }
+    // Try cargo metadata for license map (metadata is JSON).
+    //
+    // Skip this entirely during `cargo publish` verification: the package
+    // tarball lives under `target/package/...`, and invoking `cargo metadata`
+    // there would create a fresh Cargo.lock inside the source directory,
+    // tripping cargo's "build script modified files outside OUT_DIR" guard.
+    // The license map is a cosmetic TUI About-page feature; an empty map in
+    // the published crate is acceptable.
+    let manifest_path = Path::new(&manifest_dir);
+    let is_publish_verify = {
+        let comps: Vec<_> = manifest_path.components().collect();
+        comps.iter().any(|c| c.as_os_str() == "target")
+            && comps.iter().any(|c| c.as_os_str() == "package")
+    };
 
-                    // for each package name, keep only the entry with the highest semver version
-                    let mut best_map: HashMap<String, (Version, String)> = HashMap::new();
-                    for p in pkgs {
-                        if let Some(n) = p.get("name").and_then(|x| x.as_str()) {
-                            // only include first-level direct dependencies
-                            if !direct_set.contains(n) {
-                                continue;
+    if !is_publish_verify {
+        if let Ok(o) = Command::new("cargo")
+            .args(["metadata", "--format-version", "1"])
+            .output()
+        {
+            if o.status.success() {
+                if let Ok(jv) = serde_json::from_slice::<JsonValue>(&o.stdout) {
+                    if let Some(pkgs) = jv.get("packages").and_then(|p| p.as_array()) {
+                        // build a set of direct dependency names from the earlier parsed Cargo.toml
+                        let mut direct_set: HashSet<String> = HashSet::new();
+                        if let Some(TomlValue::Array(arr)) = out_tbl.get("direct_dependency_names") {
+                            for v in arr {
+                                if let TomlValue::String(s) = v {
+                                    direct_set.insert(s.clone());
+                                }
                             }
-                            let lic = p
-                                .get("license")
-                                .and_then(|x| x.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let ver_str = p.get("version").and_then(|x| x.as_str()).unwrap_or("");
-                            if let Ok(ver) = Version::parse(ver_str) {
-                                match best_map.get(n) {
-                                    Some((existing_ver, _)) => {
-                                        if &ver > existing_ver {
+                            // remove the helper entry from out_tbl so it won't be part of final file
+                            out_tbl.remove("direct_dependency_names");
+                        }
+
+                        // for each package name, keep only the entry with the highest semver version
+                        let mut best_map: HashMap<String, (Version, String)> = HashMap::new();
+                        for p in pkgs {
+                            if let Some(n) = p.get("name").and_then(|x| x.as_str()) {
+                                // only include first-level direct dependencies
+                                if !direct_set.contains(n) {
+                                    continue;
+                                }
+                                let lic = p
+                                    .get("license")
+                                    .and_then(|x| x.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let ver_str = p.get("version").and_then(|x| x.as_str()).unwrap_or("");
+                                if let Ok(ver) = Version::parse(ver_str) {
+                                    match best_map.get(n) {
+                                        Some((existing_ver, _)) => {
+                                            if &ver > existing_ver {
+                                                best_map.insert(n.to_string(), (ver, lic));
+                                            }
+                                        }
+                                        None => {
                                             best_map.insert(n.to_string(), (ver, lic));
                                         }
                                     }
-                                    None => {
-                                        best_map.insert(n.to_string(), (ver, lic));
-                                    }
-                                }
-                            } else {
-                                // if version cannot be parsed, prefer to insert if missing
-                                best_map
-                                    .entry(n.to_string())
-                                    .or_insert((Version::new(0, 0, 0), lic));
-                            }
-                        }
-                    }
-
-                    if let Some(deps_arr) = out_tbl
-                        .get_mut("dependencies")
-                        .and_then(|v| v.as_array_mut())
-                    {
-                        for dep in deps_arr.iter_mut() {
-                            if let TomlValue::Table(dep_tbl) = dep {
-                                if let Some(dep_name) = dep_tbl.get("name").and_then(|x| x.as_str())
-                                {
-                                    if let Some((ver, _)) = best_map.get(dep_name) {
-                                        dep_tbl.insert(
-                                            "version".to_string(),
-                                            TomlValue::String(format_version_for_about(ver)),
-                                        );
-                                    }
+                                } else {
+                                    // if version cannot be parsed, prefer to insert if missing
+                                    best_map
+                                        .entry(n.to_string())
+                                        .or_insert((Version::new(0, 0, 0), lic));
                                 }
                             }
                         }
-                    }
 
-                    let mut map_tbl = Table::new();
-                    for (name, (_ver, lic)) in best_map {
-                        // only write a single key per package: `name` -> license
-                        map_tbl.insert(name, TomlValue::String(lic));
+                        if let Some(deps_arr) = out_tbl
+                            .get_mut("dependencies")
+                            .and_then(|v| v.as_array_mut())
+                        {
+                            for dep in deps_arr.iter_mut() {
+                                if let TomlValue::Table(dep_tbl) = dep {
+                                    if let Some(dep_name) =
+                                        dep_tbl.get("name").and_then(|x| x.as_str())
+                                    {
+                                        if let Some((ver, _)) = best_map.get(dep_name) {
+                                            dep_tbl.insert(
+                                                "version".to_string(),
+                                                TomlValue::String(format_version_for_about(ver)),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        let mut map_tbl = Table::new();
+                        for (name, (_ver, lic)) in best_map {
+                            // only write a single key per package: `name` -> license
+                            map_tbl.insert(name, TomlValue::String(lic));
+                        }
+                        out_tbl.insert("license_map".to_string(), TomlValue::Table(map_tbl));
                     }
-                    out_tbl.insert("license_map".to_string(), TomlValue::Table(map_tbl));
                 }
             }
         }
@@ -232,22 +249,30 @@ fn main() -> Result<()> {
             fs::write(out_res.join("about_cache.toml"), &content)?;
         }
 
-        // Also write to source tree when possible (for local development convenience)
-        let _ = (|| -> std::io::Result<()> {
-            fs::create_dir_all(Path::new(&manifest_dir).join("res"))?;
-            fs::write(
-                Path::new(&manifest_dir).join("res/about_cache.toml"),
-                &content,
-            )?;
-            Ok(())
-        })();
+        // Optionally also write a copy into the source tree for local
+        // development convenience. This is OFF by default because writing
+        // outside OUT_DIR violates cargo's build-script contract and breaks
+        // `cargo publish` verification. Set AOBA_WRITE_SOURCE_ABOUT_CACHE=1
+        // during local builds to regenerate `res/about_cache.toml` in-place.
+        if env::var("AOBA_WRITE_SOURCE_ABOUT_CACHE").as_deref() == Ok("1") {
+            let _ = (|| -> std::io::Result<()> {
+                fs::create_dir_all(Path::new(&manifest_dir).join("res"))?;
+                fs::write(
+                    Path::new(&manifest_dir).join("res/about_cache.toml"),
+                    &content,
+                )?;
+                Ok(())
+            })();
+        }
     }
 
     Ok(())
 }
 
 fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
-    let pkg_tbl = if let Some(TomlValue::Table(tbl)) = out_tbl.get_mut("package") { tbl } else {
+    let pkg_tbl = if let Some(TomlValue::Table(tbl)) = out_tbl.get_mut("package") {
+        tbl
+    } else {
         out_tbl.insert("package".to_string(), TomlValue::Table(Table::new()));
         match out_tbl.get_mut("package") {
             Some(TomlValue::Table(tbl)) => tbl,
