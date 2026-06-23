@@ -132,9 +132,7 @@ pub fn slave_process_one_request_with_hooks(
         if total_bytes > MODBUS_RTU_MIN_RESPONSE_SIZE * 2 + 4 {
             // Clear buffer; do not attempt parsing
             params.residual_buffer.lock().clear();
-            return Err(anyhow!(
-                "Skipped response frame echo ({total_bytes} bytes)"
-            ));
+            return Err(anyhow!("Skipped response frame echo ({total_bytes} bytes)"));
         }
     }
 
@@ -199,7 +197,7 @@ pub fn slave_process_one_request_with_hooks(
                     rmodbus::consts::ModbusFunction::GetCoils
                     | rmodbus::consts::ModbusFunction::SetCoilsBulk => RegisterMode::Coils,
                     rmodbus::consts::ModbusFunction::GetDiscretes => RegisterMode::DiscreteInputs,
-                                    _ => {
+                    _ => {
                         return Err(anyhow!(
                             "Unsupported function code: 0x{:02X} ({:?})",
                             frame.func as u8,
@@ -280,9 +278,7 @@ pub fn slave_process_one_request_with_hooks(
     }
 
     // Sliding-window traversal complete: no valid frame found
-    log::warn!(
-        "No valid Modbus frame found in {total_bytes} bytes (tried {total_bytes} offsets)"
-    );
+    log::warn!("No valid Modbus frame found in {total_bytes} bytes (tried {total_bytes} offsets)");
 
     // Improvement strategy: clear the residual buffer on parse failures
     // Reason: if data cannot be parsed, residuals accumulate and worsen the issue
@@ -331,9 +327,7 @@ fn parse_response_values(
                     let value = u16::from_be_bytes([response[offset], response[offset + 1]]);
                     values.push(value);
                 } else {
-                    log::warn!(
-                        "Incomplete register at offset {offset}: response too short"
-                    );
+                    log::warn!("Incomplete register at offset {offset}: response too short");
                 }
             }
             Ok(values)
@@ -449,12 +443,8 @@ pub(crate) fn extract_values_from_storage(
         let value = match reg_mode {
             RegisterMode::Holding => storage.get_holding(addr)?,
             RegisterMode::Input => storage.get_input(addr)?,
-            RegisterMode::Coils => {
-                u16::from(storage.get_coil(addr)?)
-            }
-            RegisterMode::DiscreteInputs => {
-                u16::from(storage.get_discrete(addr)?)
-            }
+            RegisterMode::Coils => u16::from(storage.get_coil(addr)?),
+            RegisterMode::DiscreteInputs => u16::from(storage.get_discrete(addr)?),
         };
         values.push(value);
     }
@@ -950,9 +940,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
             }
             Err(err) => {
                 consecutive_errors += 1;
-                log::warn!(
-                    "Poll error (#{consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}): {err}"
-                );
+                log::warn!("Poll error (#{consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}): {err}");
 
                 // Recovery logic
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {

@@ -124,16 +124,10 @@ impl fmt::Display for ModbusMasterDataSourceKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let label = match self {
             Self::Manual => lang().protocol.modbus.data_source_manual.clone(),
-            Self::MqttServer => {
-                lang().protocol.modbus.data_source_mqtt.clone()
-            }
-            Self::HttpServer => {
-                lang().protocol.modbus.data_source_http.clone()
-            }
+            Self::MqttServer => lang().protocol.modbus.data_source_mqtt.clone(),
+            Self::HttpServer => lang().protocol.modbus.data_source_http.clone(),
             Self::IpcPipe => lang().protocol.modbus.data_source_ipc.clone(),
-            Self::PortForwarding => {
-                lang().protocol.modbus.data_source_port_forwarding.clone()
-            }
+            Self::PortForwarding => lang().protocol.modbus.data_source_port_forwarding.clone(),
         };
         write!(f, "{label}")
     }
@@ -176,9 +170,7 @@ impl ModbusMasterDataSource {
             Self::MqttServer { .. } => ModbusMasterDataSourceKind::MqttServer,
             Self::HttpServer { .. } => ModbusMasterDataSourceKind::HttpServer,
             Self::IpcPipe { .. } => ModbusMasterDataSourceKind::IpcPipe,
-            Self::PortForwarding { .. } => {
-                ModbusMasterDataSourceKind::PortForwarding
-            }
+            Self::PortForwarding { .. } => ModbusMasterDataSourceKind::PortForwarding,
         }
     }
 
@@ -210,7 +202,7 @@ impl ModbusMasterDataSource {
     pub const fn get_port(&self) -> Option<u16> {
         match self {
             Self::HttpServer { port } => Some(*port),
-                    _ => None,
+            _ => None,
         }
     }
 
@@ -226,7 +218,7 @@ impl ModbusMasterDataSource {
             Self::MqttServer { url } => Some(url.as_str()),
             Self::IpcPipe { path } => Some(path.as_str()),
             Self::PortForwarding { source_port } => Some(source_port.as_str()),
-                    _ => None,
+            _ => None,
         }
     }
 
@@ -489,8 +481,7 @@ impl StationConfig {
 
     #[must_use]
     pub fn register_count(&self) -> u16 {
-        self.first_range()
-            .map_or(0, |(_, range)| range.length)
+        self.first_range().map_or(0, |(_, range)| range.length)
     }
 
     #[must_use]
@@ -677,7 +668,7 @@ impl std::fmt::Display for BaudRateSelector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Custom { .. } => write!(f, "{}", lang().protocol.common.custom),
-                    other => write!(f, "{}", other.as_u32()),
+            other => write!(f, "{}", other.as_u32()),
         }
     }
 }
@@ -800,7 +791,7 @@ impl BaudRateOption {
     pub const fn from_u32(v: u32) -> Self {
         match BaudRateSelector::from_u32(v) {
             BaudRateSelector::Custom { .. } => Self::Custom(v),
-                    s => Self::Preset(s),
+            s => Self::Preset(s),
         }
     }
 

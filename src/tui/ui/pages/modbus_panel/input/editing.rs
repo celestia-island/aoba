@@ -187,7 +187,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         .unwrap_or(0)
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
-                                    _ => 0,
+                    _ => 0,
                 };
 
                 if max_index == 0 {
@@ -262,7 +262,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         .unwrap_or(0)
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
-                                    _ => 0,
+                    _ => 0,
                 };
 
                 if max_index == 0 {
@@ -286,7 +286,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             Ok(())
         }
-            _ => {
+        _ => {
             handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             Ok(())
         }
@@ -414,7 +414,8 @@ fn commit_selector_edit(
                 }
                 types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
                     // Apply register mode changes
-                    let new_mode = RegisterMode::from_u8(u8::try_from(selected_index).unwrap_or(u8::MAX) + 1);
+                    let new_mode =
+                        RegisterMode::from_u8(u8::try_from(selected_index).unwrap_or(u8::MAX) + 1);
 
                     let mut should_restart = false;
                     let mut connection_mode = StationMode::Master;
@@ -492,11 +493,13 @@ fn commit_selector_edit(
                             let mut should_restart = false;
                             write_status(|status| {
                                 // First, get the source port's station configurations
-                                let source_stations = status.ports.map.get(selected_port_name).map(|source_port_data| {
-                                    let types::port::PortConfig::Modbus { stations, .. } =
-                                        &source_port_data.config;
-                                    stations.clone()
-                                });
+                                let source_stations = status.ports.map.get(selected_port_name).map(
+                                    |source_port_data| {
+                                        let types::port::PortConfig::Modbus { stations, .. } =
+                                            &source_port_data.config;
+                                        stations.clone()
+                                    },
+                                );
 
                                 let port = status
                                     .ports
@@ -571,7 +574,7 @@ fn commit_selector_edit(
                     }
                     // For other data sources (HttpServer), text input is used
                 }
-                            _ => {}
+                _ => {}
             }
         }
     }
@@ -696,8 +699,7 @@ fn commit_text_edit(
                             );
                         }
 
-                        bus.ui_tx
-                            .send(UiToCore::RestartRuntime(port_name))?;
+                        bus.ui_tx.send(UiToCore::RestartRuntime(port_name))?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::StationId { index } => {
@@ -813,9 +815,7 @@ fn commit_text_edit(
                                 let (sanitized_value, register_type) = match item.register_mode {
                                     RegisterMode::Holding => (register_value, "holding"),
                                     RegisterMode::Input => (register_value, "input"),
-                                    RegisterMode::Coils => {
-                                        (u16::from(register_value != 0), "coil")
-                                    }
+                                    RegisterMode::Coils => (u16::from(register_value != 0), "coil"),
                                     RegisterMode::DiscreteInputs => {
                                         (u16::from(register_value != 0), "discrete")
                                     }
@@ -824,7 +824,8 @@ fn commit_text_edit(
                                 register_value = sanitized_value;
                                 item.last_values[idx] = sanitized_value;
 
-                                let register_addr = item.register_address + u16::try_from(register_index).unwrap_or(u16::MAX);
+                                let register_addr = item.register_address
+                                    + u16::try_from(register_index).unwrap_or(u16::MAX);
                                 payload = Some((
                                     register_type.to_string(),
                                     item.station_id,
@@ -923,7 +924,7 @@ fn commit_text_edit(
                         })?;
                     }
                 }
-                            _ => {}
+                _ => {}
             }
         }
     }
@@ -958,7 +959,7 @@ fn enqueue_slave_write(
                 register_value != 0
             );
         }
-            _ => {
+        _ => {
             log::warn!(
                 "Cannot write to read-only register type: {:?}",
                 item.register_mode

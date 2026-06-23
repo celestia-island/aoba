@@ -189,7 +189,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 types::modbus::ModbusMasterDataSource::IpcPipe { path } => {
                                     path.clone()
                                 }
-                                                            _ => String::new(),
+                                _ => String::new(),
                             };
                             return Ok(value);
                         }
@@ -264,7 +264,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                     Ok(status.ports.order.get(*selected_port).cloned())
                 }
-                            _ => Ok(None),
+                _ => Ok(None),
             })?;
 
             if let Some(port_name) = port_name_opt {
@@ -409,8 +409,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                             stations,
                                         } = &mut port.config;
                                         if let Some(item) = stations.get_mut(slave_index) {
-                                            let register_addr =
-                                                item.register_address + u16::try_from(register_index).unwrap_or(u16::MAX);
+                                            let register_addr = item.register_address
+                                                + u16::try_from(register_index).unwrap_or(u16::MAX);
 
                                             let value_index =
                                                 (register_addr - item.register_address) as usize;
@@ -442,7 +442,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                     );
 
                                                     if should_queue {
-                                                    let coil_value = if new_value_flag {
+                                                        let coil_value = if new_value_flag {
                                                             crate::api::modbus::core::MODBUS_COIL_ON
                                                         } else {
                                                             crate::api::modbus::core::MODBUS_COIL_OFF

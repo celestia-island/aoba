@@ -151,7 +151,7 @@ impl IpcSender {
 
         match self.receive().await? {
             TuiToE2EMessage::ScreenContent { content, .. } => Ok(content),
-                    msg => bail!("Unexpected message: {msg:?}"),
+            msg => bail!("Unexpected message: {msg:?}"),
         }
     }
 }
