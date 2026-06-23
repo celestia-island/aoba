@@ -340,7 +340,7 @@ fn parse_toml_to_lang(content: &str) -> Lang {
             log::warn!(
                 "i18n: failed to parse toml: {}\ncontent preview: {}",
                 err,
-                &content.chars().take(200).collect::<String>()
+                content.chars().take(200).collect::<String>()
             );
             // Fallback: return the default Lang (keys as values)
             Lang::default()

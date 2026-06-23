@@ -301,7 +301,7 @@ sleep_ms = 3000
 # Step 10: Verify port enabled
 [[workflow.verify_port_enabled]]
 description = "Check port status shows Running"
-check_status = { path = "$.ports[0].state", expected = "OccupiedByThis" }
+check_status = { path = "$.ports['/tmp/vcom1'].state", expected = { type = "occupied_by_this" } }
 
 [[workflow.verify_port_enabled]]
 description = "Verify status indicator is Running"
@@ -358,11 +358,11 @@ mock_set_value = "Running"
 # Verify Round 1 completion
 [[workflow.verify_write_complete_round1]]
 description = "Check status returned to Running"
-check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
+check_status = { path = "$.ports['/tmp/vcom1'].status_indicator", expected = "Running" }
 
 [[workflow.verify_write_complete_round1]]
 description = "Verify local coil value updated to ON"
-check_status = { path = "$.ports[0].modbus_slaves[0].registers[2]", expected = 1 }
+check_status = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[2]", expected = 1 }
 
 [[workflow.verify_write_complete_round1]]
 description = "Verify coil displays ON"
@@ -404,15 +404,17 @@ mock_set_value = "Running"
 # Verify Round 2 completion
 [[workflow.verify_write_complete_round2]]
 description = "Check status returned to Running"
-check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
+check_status = { path = "$.ports['/tmp/vcom1'].status_indicator", expected = "Running" }
 
 [[workflow.verify_write_complete_round2]]
 description = "Verify local coil value updated to ON"
-check_status = { path = "$.ports[0].modbus_slaves[0].registers[3]", expected = 1 }
+check_status = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]", expected = 1 }
 
 [[workflow.verify_write_complete_round2]]
 description = "Verify remote master coil value updated to ON"
-check_status = { path = "$.ports[0].modbus_masters[0].registers[3]", expected = 1 }
+# In slave mode the master reads the slave's registers directly, so the
+# remote-visible value is the slave's own stored register value.
+check_status = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]", expected = 1 }
 
 [[workflow.verify_write_complete_round2]]
 verify = "ON"
@@ -465,11 +467,11 @@ mock_set_value = "Running"
 # Verify Round 3 completion
 [[workflow.verify_write_complete_round3]]
 description = "Check status returned to Running"
-check_status = { path = "$.ports[0].status_indicator", expected = "Running" }
+check_status = { path = "$.ports['/tmp/vcom1'].status_indicator", expected = "Running" }
 
 [[workflow.verify_write_complete_round3]]
 description = "Verify local coil value is OFF"
-check_status = { path = "$.ports[0].modbus_slaves[0].registers[4]", expected = 0 }
+check_status = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[4]", expected = 0 }
 
 [[workflow.verify_write_complete_round3]]
 verify = "OFF"

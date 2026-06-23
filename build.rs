@@ -164,7 +164,8 @@ fn main() -> Result<()> {
                     if let Some(pkgs) = jv.get("packages").and_then(|p| p.as_array()) {
                         // build a set of direct dependency names from the earlier parsed Cargo.toml
                         let mut direct_set: HashSet<String> = HashSet::new();
-                        if let Some(TomlValue::Array(arr)) = out_tbl.get("direct_dependency_names") {
+                        if let Some(TomlValue::Array(arr)) = out_tbl.get("direct_dependency_names")
+                        {
                             for v in arr {
                                 if let TomlValue::String(s) = v {
                                     direct_set.insert(s.clone());
@@ -187,7 +188,8 @@ fn main() -> Result<()> {
                                     .and_then(|x| x.as_str())
                                     .unwrap_or("")
                                     .to_string();
-                                let ver_str = p.get("version").and_then(|x| x.as_str()).unwrap_or("");
+                                let ver_str =
+                                    p.get("version").and_then(|x| x.as_str()).unwrap_or("");
                                 if let Ok(ver) = Version::parse(ver_str) {
                                     match best_map.get(n) {
                                         Some((existing_ver, _)) => {

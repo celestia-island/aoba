@@ -169,6 +169,14 @@ description = "Enter edit mode for data source path"
 key = "Enter"
 
 [[workflow.configure_data_source]]
+description = "Select all text in the field"
+key = "Ctrl+A"
+
+[[workflow.configure_data_source]]
+description = "Delete existing default path"
+key = "Backspace"
+
+[[workflow.configure_data_source]]
 description = "Type IPC pipe path"
 input = "string"
 value = "/tmp/test_ipc_pipe"
