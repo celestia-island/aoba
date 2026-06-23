@@ -91,25 +91,29 @@ pub fn input_spans_with_placeholder<'a>(
 
     match state {
         TextState::Normal => {
-            if let Some(ref text) = placeholder_text {
-                out.push(Span::styled(
-                    text.clone(),
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::ITALIC),
-                ));
+            if show_placeholder {
+                if let Some(ref text) = placeholder_text {
+                    out.push(Span::styled(
+                        text.clone(),
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::ITALIC),
+                    ));
+                }
             } else {
                 out.push(Span::raw(value_str));
             }
         }
         TextState::Selected => {
-            if let Some(ref text) = placeholder_text {
-                out.push(Span::styled(
-                    text.clone(),
-                    Style::default()
-                        .fg(Color::Gray)
-                        .add_modifier(Modifier::ITALIC),
-                ));
+            if show_placeholder {
+                if let Some(ref text) = placeholder_text {
+                    out.push(Span::styled(
+                        text.clone(),
+                        Style::default()
+                            .fg(Color::Gray)
+                            .add_modifier(Modifier::ITALIC),
+                    ));
+                }
             } else {
                 out.push(Span::styled(value_str, Style::default().fg(Color::Green)));
             }

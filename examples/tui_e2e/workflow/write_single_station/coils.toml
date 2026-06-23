@@ -412,7 +412,9 @@ check_status = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]", e
 
 [[workflow.verify_write_complete_round2]]
 description = "Verify remote master coil value updated to ON"
-check_status = { path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]", expected = 1 }
+# In slave mode the master reads the slave's registers directly, so the
+# remote-visible value is the slave's own stored register value.
+check_status = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]", expected = 1 }
 
 [[workflow.verify_write_complete_round2]]
 verify = "ON"
