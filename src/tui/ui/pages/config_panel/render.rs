@@ -35,7 +35,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
                 cursor: Some(types::cursor::EntryCursor::Com { index }),
                 ..
             } => *index,
-                    _ => 0usize,
+            _ => 0usize,
         })
     })?)?;
 

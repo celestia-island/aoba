@@ -7,7 +7,7 @@ use crate::tui::{status as types, status::read_status};
 pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
     match read_status(|status| Ok(status.page.clone()))? {
         crate::tui::status::Page::ConfigPanel { cursor, .. } => Ok(cursor),
-            _ => Ok(types::cursor::ConfigPanelCursor::EnablePort),
+        _ => Ok(types::cursor::ConfigPanelCursor::EnablePort),
     }
 }
 
@@ -40,7 +40,7 @@ pub fn get_serial_param_value_by_cursor(
             types::cursor::ConfigPanelCursor::StopBits => {
                 return port.serial_config.stop_bits.to_string()
             }
-                    _ => return "??".to_string(),
+            _ => return "??".to_string(),
         }
     }
 

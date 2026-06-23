@@ -54,7 +54,9 @@ pub fn boot_modbus_slave_service(
     // and trim to a single copy, fixing byte count & CRC. Applies to standard read functions 0x01..x04.
     fn trim_duplicate_payload(func: u8, frame: &mut Vec<u8>) -> Result<()> {
         if frame.len() < 5 {
-            return Err(anyhow!("Frame too short: need at least 5 bytes (id, func, byte count, data, crc)"));
+            return Err(anyhow!(
+                "Frame too short: need at least 5 bytes (id, func, byte count, data, crc)"
+            ));
         }
         match func {
             0x01..=0x04 => {}
@@ -63,12 +65,18 @@ pub fn boot_modbus_slave_service(
         let original_len = frame.len();
         let (byte_count_index, data_start) = (2usize, 3usize);
         if frame.len() < data_start + 1 + 2 {
-            return Err(anyhow!("Frame too short: need at least one data byte plus CRC"));
+            return Err(anyhow!(
+                "Frame too short: need at least one data byte plus CRC"
+            ));
         }
         let reported_bc = frame[byte_count_index] as usize;
 
         if frame.len() < data_start + reported_bc + 2 {
-            return Err(anyhow!("Frame data segment too short: reported {} bytes but only {} available", reported_bc, frame.len() - data_start - 2));
+            return Err(anyhow!(
+                "Frame data segment too short: reported {} bytes but only {} available",
+                reported_bc,
+                frame.len() - data_start - 2
+            ));
         }
         let data_total = frame.len() - data_start - 2;
         if data_total == reported_bc {
@@ -76,17 +84,23 @@ pub fn boot_modbus_slave_service(
         }
 
         if reported_bc == 0 || !data_total.is_multiple_of(reported_bc) {
-            return Err(anyhow!("Data length {data_total} is not a multiple of reported byte count {reported_bc}"));
+            return Err(anyhow!(
+                "Data length {data_total} is not a multiple of reported byte count {reported_bc}"
+            ));
         }
         let mult = data_total / reported_bc;
         if mult <= 1 || mult > 3 {
-            return Err(anyhow!("Unexpected duplicate multiplier: {mult} (expected 2 or 3)"));
+            return Err(anyhow!(
+                "Unexpected duplicate multiplier: {mult} (expected 2 or 3)"
+            ));
         }
 
         let first = &frame[data_start..data_start + reported_bc];
         for i in 1..mult {
             if &frame[data_start + i * reported_bc..data_start + (i + 1) * reported_bc] != first {
-                return Err(anyhow!("Duplicate segments at offset {i} do not match first segment"));
+                return Err(anyhow!(
+                    "Duplicate segments at offset {i} do not match first segment"
+                ));
             }
         }
 
@@ -215,7 +229,7 @@ pub fn boot_modbus_slave_service(
                     log::warn!("Failed to parse slave input registers");
                 }
             }
-                    _ => {
+            _ => {
                 log::warn!("Unsupported function code: {:?}", frame.func);
             }
         }

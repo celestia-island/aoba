@@ -84,7 +84,11 @@ pub fn is_handle_finished(port: u16) -> Option<bool> {
     let reg = HTTP_REGISTRY.lock();
     if let Some(entry) = reg.map.get(&port) {
         let guard = entry.handle.lock();
-        return Some(guard.as_ref().is_none_or(tokio::task::JoinHandle::is_finished));
+        return Some(
+            guard
+                .as_ref()
+                .is_none_or(tokio::task::JoinHandle::is_finished),
+        );
     }
     drop(reg);
     None

@@ -83,7 +83,9 @@ pub async fn run_core_thread<C: CoreContext>(
 ) -> Result<()> {
     let mut polling_enabled = config.polling_enabled;
     let scan_interval = config.scan_interval;
-    let mut last_scan = std::time::Instant::now().checked_sub(scan_interval).unwrap_or_else(std::time::Instant::now);
+    let mut last_scan = std::time::Instant::now()
+        .checked_sub(scan_interval)
+        .unwrap_or_else(std::time::Instant::now);
 
     let mut subprocess_manager = SubprocessManager::new();
 
@@ -199,7 +201,12 @@ pub async fn run_core_thread<C: CoreContext>(
                         .send(CoreToUi::Refreshed)
                         .map_err(|err| anyhow!("Failed to send Refreshed: {err}"))?;
                 }
-                UiToCore::SendRegisterUpdate { port_name, station_id, start_address, .. } => {
+                UiToCore::SendRegisterUpdate {
+                    port_name,
+                    station_id,
+                    start_address,
+                    ..
+                } => {
                     log::info!("SendRegisterUpdate for {port_name} (station={station_id}, addr={start_address}) skipped in daemon mode: UI register writes are only handled in TUI mode");
                 }
             }

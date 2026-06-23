@@ -77,7 +77,7 @@ pub fn handle_event(event: &crossterm::event::Event, bus: &Bus) -> Result<()> {
                 _ => {}
             }
         }
-            _ => {}
+        _ => {}
     }
 
     Ok(())
@@ -145,7 +145,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // Check if we have an active edit cursor - simplified check
                 !input_buffer.is_empty() || matches!(key.code, KeyCode::Enter)
             }
-                    _ => false,
+            _ => false,
         };
 
         // If in edit mode, handle character input globally

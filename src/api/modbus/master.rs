@@ -53,7 +53,7 @@ impl ModbusMaster {
     ///         poll_interval_ms: 1000,
     ///     };
     ///
-    ///     let master = ModbusMaster::new_simple(config, 1000)?;
+    ///     let master = ModbusMaster::new_simple(&config, 1000)?;
     ///
     ///     // Receive responses
     ///     while let Some(response) = master.try_recv() {
@@ -544,7 +544,7 @@ pub async fn run_master_loop_with_handler(
                             drop(port);
                             Ok(())
                         }
-                                            other => {
+                        other => {
                             log::warn!("Write operation not supported for {other:?}");
                             Ok(())
                         }
@@ -656,9 +656,7 @@ pub async fn run_master_loop_with_handler(
                                 if let Some(h) = &hooks {
                                     h.on_error(&config.port_name, &last_err);
                                 }
-                                log::warn!(
-                                    "Retry {attempt}/{max_retries} failed: {last_err}"
-                                );
+                                log::warn!("Retry {attempt}/{max_retries} failed: {last_err}");
                             }
                         }
                     }
@@ -776,10 +774,10 @@ async fn run_master_loop(
                                                     std::time::Duration::from_millis(50),
                                                 );
                                                 let mut buffer = [0u8; 256];
-                                                    match port.read(&mut buffer) {
-                                                        Ok(bytes_read) if bytes_read >= 8 => {
-                                                            let response = &buffer[..bytes_read];
-                                                            if response[1] == 0x0F {
+                                                match port.read(&mut buffer) {
+                                                    Ok(bytes_read) if bytes_read >= 8 => {
+                                                        let response = &buffer[..bytes_read];
+                                                        if response[1] == 0x0F {
                                                             log::info!("Successfully wrote {} coils to slave at address 0x{:04X}", coil_values.len(), register_address);
                                                         } else if response[1] & 0x80 != 0 {
                                                             log::error!("Modbus exception: error code 0x{:02X}", response[2]);
@@ -808,7 +806,7 @@ async fn run_master_loop(
                         RegisterMode::Holding => {
                             log::warn!("Holding register write not yet implemented");
                         }
-                                            _ => {
+                        _ => {
                             log::warn!("Write operation not supported for {register_mode:?}");
                         }
                     }
@@ -905,17 +903,13 @@ async fn run_master_loop(
                                 for hook in &hooks {
                                     hook.on_error(&port_name, &last_err);
                                 }
-                                log::warn!(
-                                    "Retry {attempt}/{max_retries} failed: {last_err}"
-                                );
+                                log::warn!("Retry {attempt}/{max_retries} failed: {last_err}");
                             }
                         }
                     }
 
                     if !success {
-                        log::warn!(
-                            "Retries exhausted for {port_name}: last error: {last_err}"
-                        );
+                        log::warn!("Retries exhausted for {port_name}: last error: {last_err}");
                     }
                 }
             }
@@ -1037,11 +1031,8 @@ async fn run_multi_register_master_loop(
                                         }; // Lock is released here
 
                                         if let Err(e) = write_result {
-                                            log::error!(
-                                                "Failed to send/flush write request: {e}"
-                                            );
-                                            let err =
-                                                anyhow!("Failed to send write request: {e}");
+                                            log::error!("Failed to send/flush write request: {e}");
+                                            let err = anyhow!("Failed to send write request: {e}");
                                             for hook in &hooks {
                                                 hook.on_error(&port_name, &err);
                                             }
@@ -1195,9 +1186,7 @@ async fn run_multi_register_master_loop(
                                     for hook in &hooks {
                                         hook.on_error(&port_name, &last_err);
                                     }
-                                    log::warn!(
-                                        "Retry {attempt}/{max_retries} failed: {last_err}"
-                                    );
+                                    log::warn!("Retry {attempt}/{max_retries} failed: {last_err}");
                                 }
                             }
                         }
