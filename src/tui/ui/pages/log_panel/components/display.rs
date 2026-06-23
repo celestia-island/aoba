@@ -52,14 +52,11 @@ pub fn render_log_display(
     let items_visible = std::cmp::max(1, content_height / lines_per_item);
 
     // Calculate which items to show based on selected_item
-    let start_index = selected_item.map_or(
-        if logs.len() <= items_visible {
-            0
-        } else {
-            logs.len() - items_visible
-        },
-        |selected_idx| selected_idx,
-    );
+    let start_index = selected_item.unwrap_or(if logs.len() <= items_visible {
+        0
+    } else {
+        logs.len() - items_visible
+    });
 
     let mut rendered_lines: Vec<Line> = Vec::new();
 
