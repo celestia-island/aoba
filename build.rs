@@ -232,15 +232,21 @@ fn main() -> Result<()> {
             fs::write(out_res.join("about_cache.toml"), &content)?;
         }
 
-        // Also write to source tree when possible (for local development convenience)
-        let _ = (|| -> std::io::Result<()> {
-            fs::create_dir_all(Path::new(&manifest_dir).join("res"))?;
-            fs::write(
-                Path::new(&manifest_dir).join("res/about_cache.toml"),
-                &content,
-            )?;
-            Ok(())
-        })();
+        // Optionally also write a copy into the source tree for local
+        // development convenience. This is OFF by default because writing
+        // outside OUT_DIR violates cargo's build-script contract and breaks
+        // `cargo publish` verification. Set AOBA_WRITE_SOURCE_ABOUT_CACHE=1
+        // during local builds to regenerate `res/about_cache.toml` in-place.
+        if env::var("AOBA_WRITE_SOURCE_ABOUT_CACHE").as_deref() == Ok("1") {
+            let _ = (|| -> std::io::Result<()> {
+                fs::create_dir_all(Path::new(&manifest_dir).join("res"))?;
+                fs::write(
+                    Path::new(&manifest_dir).join("res/about_cache.toml"),
+                    &content,
+                )?;
+                Ok(())
+            })();
+        }
     }
 
     Ok(())
