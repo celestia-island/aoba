@@ -1,5 +1,4 @@
 target
-Cargo.lock
 
 *.log
 
@@ -16,6 +15,10 @@ Cargo.lock
 *.orig
 __pycache__/
 *.pyc
+
+# Python cache
+.mypy_cache/
+
 # TUI E2E debug scripts
 examples/tui_debug*.rs
 
