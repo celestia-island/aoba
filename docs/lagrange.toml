@@ -1,0 +1,7 @@
+[site]
+title = "Aoba"
+description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus RTU."
+
+[languages]
+default = "en"
+order = ["en", "zhs", "zht", "ja", "ko", "fr", "es", "ru", "ar"]
