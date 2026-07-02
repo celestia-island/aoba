@@ -32,6 +32,7 @@ resolver = "2"
 authors = ["langyo <langyo.china@gmail.com>"]
 description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus RTU."
 repository = "https://github.com/celestia-island/aoba"
+license = "SySL-1.0"
 license-file = "LICENSE"
 version = "0.2.0"
 edition = "2021"
