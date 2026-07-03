@@ -80,3 +80,4 @@ curl -v -X POST "http://localhost:8080/" \
 - Pour les charges utiles volumineuses, envisagez de tester avec `--data-binary` et d'augmenter les timeouts du serveur.
 
 Si vous avez besoin d'un exemple adapté à un schéma interne, collez un exemple JSON ici et les développeurs adapteront le gestionnaire de point de terminaison en conséquence.
+Si vous avez besoin d'un exemple adapté à un schéma interne, collez un exemple JSON ici et les développeurs adapteront le gestionnaire de point de terminaison en conséquence.

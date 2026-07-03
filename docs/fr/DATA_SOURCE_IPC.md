@@ -117,3 +117,5 @@ client.on('data', (data) => {
 
 - Sous Windows, utilisez des tubes nommés (`\\.\pipe\<name>`). Node et Python disposent tous deux de bibliothèques pour travailler avec les tubes nommés ; Rust peut utiliser `interprocess` pour les tubes multi-plateformes.
 - Assurez-vous que les permissions du fichier socket permettent aux processus de se connecter.
+
+Si vous le souhaitez, je peux fournir un petit outil de test qui lance le serveur et le client et démontre un échange JSON complet dans le langage de votre choix.

@@ -149,7 +149,7 @@ Puedes combinar esto con el ejemplo master o la CLI/TUI de Aoba para pruebas:
 
 ## 7. Documentación relacionada
 
-- API del lado master: `docs/en/API_MODBUS_MASTER.md`;
-- Uso de Modbus a nivel de CLI: `docs/en/CLI_MODBUS.md`;
+- API del lado master: `docs/es/API_MODBUS_MASTER.md`;
+- Uso de Modbus a nivel de CLI: `docs/es/CLI_MODBUS.md`;
 - Capacidades de fuente de datos / exportación (HTTP, MQTT, IPC, etc.): consulta los documentos `DATA_SOURCE_*.md` en este directorio;
 - Más ejemplos de extremo a extremo se encuentran en el directorio `examples`.
