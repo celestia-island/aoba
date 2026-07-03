@@ -29,3 +29,6 @@ aoba_tui_config.json
 ci-results/
 
 res/about_cache.toml
+
+# Cargo lockfile (not tracked)
+/Cargo.lock
