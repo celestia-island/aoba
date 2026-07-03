@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./res/logo.png" alt="Aoba Logo" width="240" />
+  <img src="../../res/logo.png" alt="Aoba Logo" width="240" />
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml">
     <img src="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml/badge.svg?branch=master" alt="E2E CLI status" />
   </a>
-  <a href="./LICENSE">
+  <a href="../../LICENSE">
     <img src="https://img.shields.io/badge/license-SySL%201.0-blue" alt="License: SySL" />
   </a>
   <a href="https://github.com/celestia-island/aoba/releases/latest">
@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">EN</a> | ZH
+  <a href="../en/README.md">EN</a> | ZH
 </p>
 
 专用于 Modbus RTU 协议的调试与转换工具，支持硬件串口与网络端口的转发协议，提供 TUI 界面与 CLI 接口。
@@ -233,5 +233,5 @@ cargo run --package api_master -- /tmp/vcom1
 
 完整示例包含中间件钩子和数据源，请参考：
 
-- [`examples/api_master`](examples/api_master) - 主站示例（带日志钩子）
-- [`examples/api_slave`](examples/api_slave) - 从站示例（带请求监控和统计）
+- [`examples/api_master`](../../examples/api_master) - 主站示例（带日志钩子）
+- [`examples/api_slave`](../../examples/api_slave) - 从站示例（带请求监控和统计）

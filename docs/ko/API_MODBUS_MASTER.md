@@ -213,5 +213,5 @@ fn main() -> Result<()> {
 ## 8. 다음 단계
 
 - 슬레이브 측 API는 `examples/api_slave`를 참조하십시오.
-- CLI 수준의 Modbus 사용법은 `docs/en/CLI_MODBUS.md`를 참조하십시오.
+- CLI 수준의 Modbus 사용법은 `docs/ko/CLI_MODBUS.md`를 참조하십시오.
 - HTTP / MQTT / IPC를 통한 데이터 내보내기는 이 디렉토리의 `DATA_SOURCE_*.md` 문서를 참조하십시오.

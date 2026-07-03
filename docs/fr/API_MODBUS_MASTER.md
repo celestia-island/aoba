@@ -213,5 +213,5 @@ fn main() -> Result<()> {
 ## 8. Prochaines étapes
 
 - Pour les APIs côté esclave, voir `examples/api_slave`.
-- Pour l'utilisation Modbus en ligne de commande, voir `docs/en/CLI_MODBUS.md`.
+- Pour l'utilisation Modbus en ligne de commande, voir `docs/fr/CLI_MODBUS.md`.
 - Pour l'export de données via HTTP / MQTT / IPC, consultez les documentations `DATA_SOURCE_*.md` dans ce répertoire.
