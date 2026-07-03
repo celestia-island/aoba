@@ -1,34 +1,32 @@
-<p align="center">
-  <img src="../../res/logo.png" alt="Aoba Logo" width="240" />
-</p>
+<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/aoba/master/docs/logo.webp" alt="aoba" width="240" /></p>
 
-<p align="center">
-  <h1 align="center">
-    青叶（Aoba）
-  </h1>
-</p>
+<h1 align="center">Aoba</h1>
 
-<p align="center">
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/checks.yml">
-    <img src="https://github.com/celestia-island/aoba/actions/workflows/checks.yml/badge.svg?branch=master" alt="Checks status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml">
-    <img src="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml/badge.svg?branch=master" alt="E2E TUI status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml">
-    <img src="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml/badge.svg?branch=master" alt="E2E CLI status" />
-  </a>
-  <a href="../../LICENSE">
-    <img src="https://img.shields.io/badge/license-SySL%201.0-blue" alt="License: SySL" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/releases/latest">
-    <img src="https://img.shields.io/github/v/tag/celestia-island/aoba?label=version&sort=semver" alt="Latest Version" />
-  </a>
-</p>
+<p align="center"><strong>面向 Modbus RTU 的多协议调试与模拟 CLI/TUI 工具</strong></p>
 
-<p align="center">
-  <a href="../en/README.md">EN</a> | ZH
-</p>
+<div align="center">
+
+[![Checks](https://github.com/celestia-island/aoba/actions/workflows/checks.yml/badge.svg?branch=master)](https://github.com/celestia-island/aoba/actions/workflows/checks.yml)
+[![E2E TUI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml/badge.svg?branch=master)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml)
+[![E2E CLI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml/badge.svg?branch=master)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml)
+[![License: SySL](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
+[![Version](https://img.shields.io/github/v/tag/celestia-island/aoba?label=version&sort=semver)](https://github.com/celestia-island/aoba/releases/latest)
+
+</div>
+
+<div align="center">
+
+[English](../en/README.md) ·
+**简体中文** ·
+[繁體中文](../zht/README.md) ·
+[日本語](../ja/README.md) ·
+[한국어](../ko/README.md) ·
+[Français](../fr/README.md) ·
+[Español](../es/README.md) ·
+[Русский](../ru/README.md) ·
+[العربية](../ar/README.md)
+
+</div>
 
 专用于 Modbus RTU 协议的调试与转换工具，支持硬件串口与网络端口的转发协议，提供 TUI 界面与 CLI 接口。
 
