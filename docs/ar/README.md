@@ -9,7 +9,7 @@
 [![Checks](https://github.com/celestia-island/aoba/actions/workflows/checks.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/checks.yml)
 [![E2E TUI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml)
 [![E2E CLI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml)
-[![License: SySL](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
+[![License: SySL](https://img.shields.io/badge/license-SySL%201.0-blue)](https://sysl.celestia.world)
 [![Version](https://img.shields.io/github/v/tag/celestia-island/aoba?label=version&sort=semver)](https://github.com/celestia-island/aoba/releases/latest)
 
 </div>
@@ -79,4 +79,4 @@
 
 ## الترخيص
 
-مرخص بموجب [Synthetic Source License (SySL), Version 1.0](../../LICENSE).
+مرخص بموجب [Synthetic Source License (SySL), Version 1.0](https://sysl.celestia.world).

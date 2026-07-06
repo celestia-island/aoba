@@ -9,7 +9,7 @@
 [![Checks](https://github.com/celestia-island/aoba/actions/workflows/checks.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/checks.yml)
 [![E2E TUI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml)
 [![E2E CLI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml)
-[![License: SySL](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
+[![License: SySL](https://img.shields.io/badge/license-SySL%201.0-blue)](https://sysl.celestia.world)
 [![Version](https://img.shields.io/github/v/tag/celestia-island/aoba?label=version&sort=semver)](https://github.com/celestia-island/aoba/releases/latest)
 
 </div>
@@ -79,4 +79,4 @@ Modbus RTU 多協定偵錯與模擬工具，適用於實體序列埠與網路轉
 
 ## 授權條款
 
-依據 [Synthetic Source License (SySL), Version 1.0](../../LICENSE) 授權。
+依據 [Synthetic Source License (SySL), Version 1.0](https://sysl.celestia.world) 授權。
