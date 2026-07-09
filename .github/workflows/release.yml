@@ -68,7 +68,7 @@ jobs:
 
       - name: System Packages — Cache (Linux only)
         if: matrix.platform.os == 'ubuntu-24.04' || matrix.platform.os == 'ubuntu-24.04-arm'
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: |
             build-essential
@@ -93,7 +93,7 @@ jobs:
 
       - name: System Packages — Cache (i686 — 32-bit libs)
         if: matrix.platform.target == 'i686-unknown-linux-gnu'
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: |
             gcc-multilib
