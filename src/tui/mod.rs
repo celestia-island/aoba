@@ -1,4 +1,4 @@
-﻿pub mod input;
+pub mod input;
 pub mod status;
 pub mod ui;
 pub mod utils;
