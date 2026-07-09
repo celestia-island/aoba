@@ -32,3 +32,5 @@ res/about_cache.toml
 
 # Cargo lockfile (not tracked)
 /Cargo.lock
+
+dist/
