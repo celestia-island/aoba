@@ -258,7 +258,7 @@ fn render_node_grid(
 /// Calculate the visible range of nodes based on selection position
 /// Strategy:
 /// - First 2 positions: show from start
-/// - Last 2 positions: show from end  
+/// - Last 2 positions: show from end
 /// - Middle positions: selected node at 3rd position (index 2 in view)
 fn calculate_visible_range(
     selection: usize,
