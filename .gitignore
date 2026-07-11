@@ -34,3 +34,7 @@ res/about_cache.toml
 /Cargo.lock
 
 dist/
+
+# celestia-devtools: staged-on-demand shared justfile recipes (just fetch)
+/.just/
+/celestia-devtools.just
