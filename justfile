@@ -1,6 +1,6 @@
 import "./celestia-devtools.just"
 
-set windows-shell := ["C:/Program Files/Git/bin/bash.exe", "-c"]
+set windows-shell := ["pwsh.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $PSDefaultParameterValues['*:Encoding'] = 'utf8';"]
 set shell := ["bash", "-c"]
 # `set windows-shell` only governs linewise (non-shebang) recipes on Windows.
 # Shebang recipes bypass it and force `just` to call `cygpath` to translate the
