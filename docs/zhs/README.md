@@ -1,0 +1,235 @@
+<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/aoba/master/docs/logo.webp" alt="aoba" width="240" /></p>
+
+<h1 align="center">Aoba</h1>
+
+<p align="center"><strong>面向 Modbus RTU 的多协议调试与模拟 CLI/TUI 工具</strong></p>
+
+<div align="center">
+
+[![Checks](https://github.com/celestia-island/aoba/actions/workflows/checks.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/checks.yml)
+[![E2E TUI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml)
+[![E2E CLI](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml/badge.svg)](https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml)
+[![License: SySL](https://img.shields.io/badge/license-SySL%201.0-blue)](https://sysl.celestia.world)
+[![Version](https://img.shields.io/github/v/tag/celestia-island/aoba?label=version&sort=semver)](https://github.com/celestia-island/aoba/releases/latest)
+
+</div>
+
+<div align="center">
+
+[English](../en/README.md) ·
+**简体中文** ·
+[繁體中文](../zht/README.md) ·
+[日本語](../ja/README.md) ·
+[한국어](../ko/README.md) ·
+[Français](../fr/README.md) ·
+[Español](../es/README.md) ·
+[Русский](../ru/README.md) ·
+[العربية](../ar/README.md)
+
+</div>
+
+专用于 Modbus RTU 协议的调试与转换工具，支持硬件串口与网络端口的转发协议，提供 TUI 界面与 CLI 接口。
+
+## 功能
+
+- 支持 Modbus RTU（主/从）协议的调试与模拟，支持四种寄存器类型：保持寄存器 (holding)、输入寄存器 (input)、线圈 (coils) 与离散输入 (discrete)。
+- 提供功能丰富的 CLI：端口检测/查询（`--list-ports` / `--check-port`）、主/从模式（`--master-provide` / `--slave-listen`）及其持久化模式（`--*-persist`），输出可为 JSON/JSONL，适用于脚本与 CI 集成。
+- 交互式 TUI：通过终端 UI 进行端口、站点与寄存器的图形化配置；支持保存/加载配置（`Ctrl+S` 保存并自动启用端口），并与 CLI 通过 IPC 通信进行集成测试与自动化使用。
+- 多种数据源与协议支持：支持物理/虚拟串口（通过 `socat` 管理）、HTTP、MQTT、IPC（Unix socket / 命名管道）、文件与管道（FIFO）作为数据下行/上行来源或输出目标。
+- 端口转发（Port Forwarding / 透明转发）：在 TUI 内部配置源端口与目标端口实现数据转发或数据复制，用于监控、桥接或测试场景。
+- 守护进程模式（daemon）：以非交互方式运行，自动加载 TUI 保存的配置并启动所有已配置的端口/站点，适用于嵌入式部署与 CI 环境。
+- 虚拟端口与测试工具：包含 `scripts/socat_init.sh`（用于创建虚拟串口 vcom）及广泛的 E2E 示例（`examples/cli_e2e`、`examples/tui_e2e`），方便本地与 CI 测试。
+- 可扩展与集成：支持将串口数据通过 HTTP/MQTT/IPC 转发或接收，便于与其他服务集成与远程控制。
+
+> 注意：使用 `--no-config-cache` 标志可以禁用保存/加载 TUI 配置（即不使用配置缓存），`--config-file <FILE>` 与 `--no-config-cache` 互斥。
+
+## 快速开始
+
+1. 安装 Rust 工具链
+2. 克隆本仓库并进入目录
+3. 安装：
+
+   - 从源码构建并安装：`cargo install aoba`
+   - 或使用 CI 预构建的 release（如果已发布）通过 `cargo-binstall` 安装：
+
+     - 示例：`cargo binstall --manifest-path ./Cargo.toml --version <version>`
+
+     - 可使用 `--target <triple>` 指定目标平台（例如 `x86_64-unknown-linux-gnu`）。
+4. 运行 `aoba`，默认启动 TUI 界面进行配置与操作；如需在 TUI 模式下保存配置并留到后续使用，请参考下文“持久配置文件”章节
+
+## 持久配置文件
+
+`--config-file <FILE>` 用于显式指定 TUI 的配置文件路径（守护进程可通过 `--daemon-config` 指定），该选项与 `--no-config-cache` 冲突。`--no-config-cache` 会禁用配置的加载与保存（即不开启配置缓存），因此不能与 `--config-file <FILE>` 同时使用，命令行会拒绝此组合。
+
+示例：
+
+```bash
+# 启动 TUI 并显式使用自定义配置文件（允许加载/保存）
+aoba --tui --config-file /path/to/config.json
+
+# 启动 TUI 并禁用配置缓存（不加载/保存配置），这是默认选项
+aoba --tui --no-config-cache
+```
+
+在此之后，可以以非交互式方式运行 Aoba 守护进程，加载之前保存的配置文件：
+
+```bash
+# 启动 Aoba 守护进程，加载之前保存的配置文件
+aoba --daemon --config-file /path/to/config.json
+```
+
+建议使用 systemd 或其他进程管理工具来管理守护进程，以下是一个简单的 systemd 服务单元示例：
+
+```ini
+# 写入 /etc/systemd/system/aoba.service 并启用服务
+sudo tee /etc/systemd/system/aoba.service <<EOF
+[Unit]
+Description=Aoba Modbus RTU Daemon
+Wants=network.target
+After=network.target network-service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/home/youruser
+ExecStart=/usr/local/bin/aoba --daemon --config-file /home/youruser/config.json
+Restart=always
+RestartSec=1s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+## 典型使用场景
+
+- **自动化测试**：CI/CD 环境中自动启动 Modbus 模拟器
+- **嵌入式系统**：在诸如树莓派这样的开发板上运行 Modbus 守护进程，配合 CH340 等 USB 转串口模块工作
+
+## 编程 API
+
+Aoba 提供了基于 trait 的 Rust API，用于将 Modbus 功能嵌入到您的应用程序中。API 支持主站（客户端）和从站（服务器）角色，并可自定义钩子和数据源。
+
+### API 快速示例
+
+**Modbus 主站（轮询从站）：**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 创建并启动主站轮询从站
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_register(RegisterMode::Holding, 0, 10)
+        .build_master()?;
+
+    // 通过迭代器接口接收响应
+    while let Some(response) = master.recv_timeout(std::time::Duration::from_secs(2)) {
+        println!("接收到: {:?}", response.values);
+    }
+    Ok(())
+}
+```
+
+**Modbus 从站（响应请求）：**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 创建并启动从站响应主站请求
+    let slave = ModbusBuilder::new_slave(1)
+        .with_port("/dev/ttyUSB0")
+        .with_register(RegisterMode::Holding, 0, 10)
+        .build_slave()?;
+
+    // 通过迭代器接口接收请求通知
+    while let Some(notification) = slave.recv_timeout(std::time::Duration::from_secs(10)) {
+        println!("已处理请求: {:?}", notification.values);
+    }
+    Ok(())
+}
+```
+
+**手动模式（写入操作 + 单次轮询）：**
+
+```rust
+use aoba::api::modbus::{ModbusBuilder, RegisterMode};
+
+fn main() -> anyhow::Result<()> {
+    let master = ModbusBuilder::new_master(1)
+        .with_port("/dev/ttyUSB0")
+        .with_timeout(5000)
+        .build_master_manual()?;
+
+    // 单次轮询
+    let resp = master.poll_once(RegisterMode::Holding, 0, 10)?;
+    println!("值: {:?}", resp.values);
+
+    // 写入单个保持寄存器 (fc 0x06)
+    master.write_holding(0x00, 0x1234)?;
+
+    // 写入多个保持寄存器 (fc 0x10)
+    master.write_registers(0x00, &[0x1234, 0x5678])?;
+
+    // 写入线圈 (fc 0x0F)
+    master.write_coils(0x00, &[true, false, true])?;
+
+    Ok(())
+}
+```
+
+### 运行 API 示例
+
+**方法 1：使用测试脚本（推荐）**
+
+提供了一个 Python 测试脚本，可以同时运行主站和从站示例，并输出带颜色的前缀标记：
+
+```bash
+# 运行 30 秒
+python3 scripts/run_api_test.py --duration 30
+
+# 无限运行（按 Ctrl+C 停止）
+python3 scripts/run_api_test.py
+
+# 自定义端口
+python3 scripts/run_api_test.py --master-port /dev/ttyUSB0 --slave-port /dev/ttyUSB1
+
+# 跳过自动构建（使用已有的二进制文件）
+python3 scripts/run_api_test.py --no-build
+```
+
+> **注意**：日志中可能会看到 "Operation timed out" 超时警告，这是正常行为：
+>
+> - 从站在等待主站请求时会超时（1秒超时）
+> - 主站在等待从站响应时会超时（2秒超时）
+> - 双方都会自动重试并继续运行
+> - 尽管有这些警告，通信仍然成功
+
+**方法 2：手动执行**
+
+在不同终端中运行：
+
+```bash
+# 终端 1：先启动从站
+cargo run --package api_slave -- /tmp/vcom2
+
+# 终端 2：再启动主站
+cargo run --package api_master -- /tmp/vcom1
+```
+
+注意：在 Linux/WSL 上需要先初始化虚拟串口：
+
+```bash
+./scripts/socat_init.sh
+```
+
+### 完整示例
+
+完整示例包含中间件钩子和数据源，请参考：
+
+- [`examples/api_master`](../../examples/api_master) - 主站示例（带日志钩子）
+- [`examples/api_slave`](../../examples/api_slave) - 从站示例（带请求监控和统计）

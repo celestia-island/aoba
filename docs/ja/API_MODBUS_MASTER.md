@@ -213,5 +213,9 @@ fn main() -> Result<()> {
 ## 8. 次のステップ
 
 - スレーブ側 API については、`examples/api_slave` を参照してください。
+<<<<<<< HEAD
 - CLI レベルの Modbus 利用については、`docs/en/CLI_MODBUS.md` を参照してください。
+=======
+- CLI レベルの Modbus 利用については、`docs/ja/CLI_MODBUS.md` を参照してください。
+>>>>>>> origin/dev
 - HTTP / MQTT / IPC 経由のデータエクスポートについては、このディレクトリ内の `DATA_SOURCE_*.md` ドキュメントを参照してください。

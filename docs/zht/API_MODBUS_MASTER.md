@@ -247,6 +247,10 @@ fn main() -> Result<()> {
 ## 8. 延伸閱讀
 
 - 從站側 API 使用範例：`examples/api_slave`；
+<<<<<<< HEAD
 - CLI 等級的 Modbus 使用說明：`docs/zhs/CLI_MODBUS.md`；
+=======
+- CLI 等級的 Modbus 使用說明：`docs/zht/CLI_MODBUS.md`；
+>>>>>>> origin/dev
 - HTTP / MQTT / IPC 等資料來源對接文件：同目錄下 `DATA_SOURCE_*.md`；
 - 若要結合 TUI 做 E2E 測試，請參考 `examples/tui_e2e` 及根目錄下 `CLAUDE.md` 中關於 IPC 與狀態監控的介紹。

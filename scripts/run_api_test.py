@@ -20,7 +20,11 @@ from pathlib import Path
 
 class ProcessRunner:
     """Run a process and prefix its output"""
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> origin/dev
     def __init__(self, name: str, cmd: list, prefix: str, color_code: str):
         self.name = name
         self.cmd = cmd
@@ -28,7 +32,11 @@ class ProcessRunner:
         self.color_code = color_code
         self.process = None
         self.thread = None
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> origin/dev
     def stream_output(self, stream, is_stderr=False):
         """Stream output from process with prefix"""
         stream_name = "stderr" if is_stderr else "stdout"
@@ -39,11 +47,19 @@ class ProcessRunner:
                     print(f"{self.color_code}[{self.prefix}]{self._reset_color()} {decoded}", flush=True)
         except Exception as e:
             print(f"{self.color_code}[{self.prefix}]{self._reset_color()} Error reading {stream_name}: {e}", flush=True)
+<<<<<<< HEAD
     
     def _reset_color(self):
         """Reset terminal color"""
         return "\033[0m"
     
+=======
+
+    def _reset_color(self):
+        """Reset terminal color"""
+        return "\033[0m"
+
+>>>>>>> origin/dev
     def start(self):
         """Start the process"""
         print(f"{self.color_code}[{self.prefix}]{self._reset_color()} Starting: {' '.join(self.cmd)}")
@@ -53,7 +69,11 @@ class ProcessRunner:
             stderr=subprocess.PIPE,
             bufsize=1
         )
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> origin/dev
         # Start threads to stream stdout and stderr
         self.thread_stdout = threading.Thread(
             target=self.stream_output,
@@ -65,17 +85,30 @@ class ProcessRunner:
             args=(self.process.stderr, True),
             daemon=True
         )
+<<<<<<< HEAD
         
         self.thread_stdout.start()
         self.thread_stderr.start()
         
         return self.process
     
+=======
+
+        self.thread_stdout.start()
+        self.thread_stderr.start()
+
+        return self.process
+
+>>>>>>> origin/dev
     def wait(self):
         """Wait for process to complete"""
         if self.process:
             return self.process.wait()
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> origin/dev
     def terminate(self):
         """Terminate the process"""
         if self.process:
@@ -95,11 +128,19 @@ def main():
     parser.add_argument('--duration', type=int, default=0, help='Test duration in seconds (0 = run until Ctrl+C)')
     parser.add_argument('--no-build', action='store_true', help='Skip auto-build step (use existing binaries)')
     args = parser.parse_args()
+<<<<<<< HEAD
     
     # Find project root
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
     
+=======
+
+    # Find project root
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+
+>>>>>>> origin/dev
     print("=" * 80)
     print("🚀 Modbus Master/Slave Communication Test")
     print("=" * 80)
@@ -108,6 +149,7 @@ def main():
     print(f"⏱️  Duration:    {'Unlimited (Ctrl+C to stop)' if args.duration == 0 else f'{args.duration} seconds'}")
     print("=" * 80)
     print()
+<<<<<<< HEAD
     
     # ANSI color codes
     COLOR_MASTER = "\033[94m"  # Blue
@@ -117,6 +159,17 @@ def main():
     slave_bin = project_root / "target" / "debug" / "api_slave"
     master_bin = project_root / "target" / "debug" / "api_master"
     
+=======
+
+    # ANSI color codes
+    COLOR_MASTER = "\033[94m"  # Blue
+    COLOR_SLAVE = "\033[92m"   # Green
+
+    # Check if binaries exist, if not build them
+    slave_bin = project_root / "target" / "debug" / "api_slave"
+    master_bin = project_root / "target" / "debug" / "api_master"
+
+>>>>>>> origin/dev
     if not args.no_build and (not slave_bin.exists() or not master_bin.exists()):
         print("🔨 Building examples...")
         subprocess.run(
@@ -126,7 +179,11 @@ def main():
         )
         print("✅ Build completed")
         print()
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> origin/dev
     # Create process runners using pre-built binaries
     slave = ProcessRunner(
         name="Slave",
@@ -134,18 +191,27 @@ def main():
         prefix="SLAVE",
         color_code=COLOR_SLAVE
     )
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> origin/dev
     master = ProcessRunner(
         name="Master",
         cmd=[str(master_bin), args.master_port],
         prefix="MASTER",
         color_code=COLOR_MASTER
     )
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> origin/dev
     try:
         # Start slave first (it needs to be listening)
         print("📡 Starting slave (listener)...")
         slave.start()
+<<<<<<< HEAD
         
         # Wait a bit for slave to initialize
         print("⏳ Waiting 3 seconds for slave to initialize...")
@@ -155,12 +221,27 @@ def main():
         print("📡 Starting master (poller)...")
         master.start()
         
+=======
+
+        # Wait a bit for slave to initialize
+        print("⏳ Waiting 3 seconds for slave to initialize...")
+        time.sleep(3)
+
+        # Start master
+        print("📡 Starting master (poller)...")
+        master.start()
+
+>>>>>>> origin/dev
         print()
         print("✅ Both processes started!")
         print("💡 Press Ctrl+C to stop both processes")
         print("=" * 80)
         print()
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> origin/dev
         # Wait for specified duration or until Ctrl+C
         if args.duration > 0:
             time.sleep(args.duration)
@@ -182,12 +263,20 @@ def main():
                     print("=" * 80)
                     print("❌ Master process terminated unexpectedly")
                     break
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> origin/dev
     except KeyboardInterrupt:
         print()
         print("=" * 80)
         print("🛑 Interrupted by user (Ctrl+C)")
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> origin/dev
     finally:
         print("=" * 80)
         print("🔄 Shutting down processes...")

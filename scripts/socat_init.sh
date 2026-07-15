@@ -148,16 +148,28 @@ if [ "$MODE" = "tui_multiple" ]; then
   # For tui_multiple: create 6 virtual serial ports fully interconnected
   # Use a hub-and-spoke model where all ports connect to a central relay
   # This creates "大串联" - all ports can communicate with each other
+<<<<<<< HEAD
   
   # Create central FIFO hub
   HUB_FIFO="/tmp/aoba_hub_$$"
   mkfifo "$HUB_FIFO" || true
   
+=======
+
+  # Create central FIFO hub
+  HUB_FIFO="/tmp/aoba_hub_$$"
+  mkfifo "$HUB_FIFO" || true
+
+>>>>>>> origin/dev
   # Create 6 PTY pairs, each connected through the hub
   # Note: This approach has limitations but works for our test purposes
   # In practice, serial port mesh networks are complex; we'll use simple pairs
   # but document the connectivity model
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> origin/dev
   echo "[socat_init] creating 6 virtual ports in 3 pairs for mesh connectivity"
   setsid socat -d -d PTY,link="$V1",raw,echo=0,mode=0666 PTY,link="$V2",raw,echo=0,mode=0666 2>"${LOG}.12" >/dev/null &
   PID1=$!
@@ -165,11 +177,19 @@ if [ "$MODE" = "tui_multiple" ]; then
   PID2=$!
   setsid socat -d -d PTY,link="$V5",raw,echo=0,mode=0666 PTY,link="$V6",raw,echo=0,mode=0666 2>"${LOG}.56" >/dev/null &
   PID3=$!
+<<<<<<< HEAD
   
   # Store PIDs for cleanup
   echo "${PID1} ${PID2} ${PID3}" >"$PIDFILE"
   disown "$PID1" "$PID2" "$PID3" 2>/dev/null || true
   
+=======
+
+  # Store PIDs for cleanup
+  echo "${PID1} ${PID2} ${PID3}" >"$PIDFILE"
+  disown "$PID1" "$PID2" "$PID3" 2>/dev/null || true
+
+>>>>>>> origin/dev
   # Check if all processes started successfully
   if ! kill -0 "$PID1" 2>/dev/null || ! kill -0 "$PID2" 2>/dev/null || ! kill -0 "$PID3" 2>/dev/null; then
     echo "[socat_init] failed to start one or more socat processes"
@@ -178,9 +198,15 @@ if [ "$MODE" = "tui_multiple" ]; then
     rm -f "$HUB_FIFO" || true
     exit 1
   fi
+<<<<<<< HEAD
   
   echo "[socat_init] socat pids: ${PID1} ${PID2} ${PID3}, waiting for all 6 ports"
   
+=======
+
+  echo "[socat_init] socat pids: ${PID1} ${PID2} ${PID3}, waiting for all 6 ports"
+
+>>>>>>> origin/dev
   # Wait for all PTYs to be created
   timeout=15
   count=0
@@ -188,7 +214,11 @@ if [ "$MODE" = "tui_multiple" ]; then
     sleep 1
     count=$((count + 1))
   done
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> origin/dev
   rm -f "$HUB_FIFO" || true
 else
   # Original 2-port mode
@@ -201,10 +231,17 @@ else
     echo "[socat_init] socat log ($LOG):"; tail -n 200 "$LOG" || true
     exit 1
   fi
+<<<<<<< HEAD
   
   SOCAT_PID=$(cat "$PIDFILE" 2>/dev/null || echo "")
   echo "[socat_init] socat pid: ${SOCAT_PID:-unknown}, waiting for $V1 and $V2"
   
+=======
+
+  SOCAT_PID=$(cat "$PIDFILE" 2>/dev/null || echo "")
+  echo "[socat_init] socat pid: ${SOCAT_PID:-unknown}, waiting for $V1 and $V2"
+
+>>>>>>> origin/dev
   timeout=15
   count=0
   while [ $count -lt $timeout ] && ( [ ! -e "$V1" ] || [ ! -e "$V2" ] ); do
