@@ -2,7 +2,10 @@
 name = "aoba"
 description.workspace = true
 repository.workspace = true
+<<<<<<< HEAD
 license.workspace = true
+=======
+>>>>>>> origin/dev
 license-file = "LICENSE"
 authors.workspace = true
 version.workspace = true

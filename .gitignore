@@ -1,5 +1,8 @@
 target
+<<<<<<< HEAD
 Cargo.lock
+=======
+>>>>>>> origin/dev
 
 *.log
 
@@ -16,6 +19,13 @@ Cargo.lock
 *.orig
 __pycache__/
 *.pyc
+<<<<<<< HEAD
+=======
+
+# Python cache
+.mypy_cache/
+
+>>>>>>> origin/dev
 # TUI E2E debug scripts
 examples/tui_debug*.rs
 
@@ -26,3 +36,16 @@ aoba_tui_config.json
 ci-results/
 
 res/about_cache.toml
+<<<<<<< HEAD
+=======
+
+# Cargo lockfile (not tracked)
+/Cargo.lock
+
+dist/
+
+# celestia-devtools: staged-on-demand shared justfile recipes (just fetch)
+/.just/
+/celestia-devtools.just
+.trae/
+>>>>>>> origin/dev

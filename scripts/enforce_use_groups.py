@@ -687,10 +687,17 @@ def main() -> int:
     print("Starting use statement enforcement...")
     print(f"Working directory: {Path.cwd()}")
     print(f"Python version: {sys.version}")
+<<<<<<< HEAD
     
     changed: List[str] = []
     total_files = 0
     
+=======
+
+    changed: List[str] = []
+    total_files = 0
+
+>>>>>>> origin/dev
     for path in Path.cwd().rglob("*.rs"):
         if "target" in path.parts:
             continue
@@ -800,7 +807,11 @@ if __name__ == "__main__":
         print("="*80)
         print("ENFORCE USE STATEMENT GROUPS")
         print("="*80)
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> origin/dev
         # Check for test mode
         if "--test" in sys.argv:
             print("Running in test mode...")
@@ -811,7 +822,11 @@ if __name__ == "__main__":
         print("Loading workspace crates...")
         WORKSPACE_CRATES = load_workspace_crates(Path.cwd())
         print(f"Found {len(WORKSPACE_CRATES)} workspace crates")
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> origin/dev
         exit_code = main()
         print(f"Exiting with code: {exit_code}")
         sys.exit(exit_code)

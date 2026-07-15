@@ -10,7 +10,11 @@ use _main::utils::{sleep_1s, sleep_3s};
 ///
 /// Test flow:
 /// 1. Start master on port1 in listen-persist mode
+<<<<<<< HEAD
 /// 2. Start slave on port2 in listen-persist mode  
+=======
+/// 2. Start slave on port2 in listen-persist mode
+>>>>>>> origin/dev
 /// 3. Use TUI/IPC to send register updates to slave with update_reason="user_edit"
 /// 4. Slave sends write requests to master
 /// 5. Verify master received the writes
