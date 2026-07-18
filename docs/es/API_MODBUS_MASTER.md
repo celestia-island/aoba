@@ -213,9 +213,5 @@ fn main() -> Result<()> {
 ## 8. Próximos pasos
 
 - Para las APIs del lado esclavo, consulta `examples/api_slave`.
-<<<<<<< HEAD
 - Para el uso de Modbus a nivel de CLI, consulta `docs/en/CLI_MODBUS.md`.
-=======
-- Para el uso de Modbus a nivel de CLI, consulta `docs/es/CLI_MODBUS.md`.
->>>>>>> origin/dev
 - Para la exportación de datos vía HTTP / MQTT / IPC, consulta los documentos `DATA_SOURCE_*.md` en este directorio.
