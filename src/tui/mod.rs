@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 ﻿pub mod input;
-=======
-pub mod input;
->>>>>>> origin/dev
 pub mod status;
 pub mod ui;
 pub mod utils;
