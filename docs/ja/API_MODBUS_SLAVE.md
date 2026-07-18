@@ -149,12 +149,7 @@ cargo run --package api_slave -- /tmp/vcom2
 
 ## 7. 関連ドキュメント
 
-<<<<<<< HEAD
 - マスター側 API: `docs/en/API_MODBUS_MASTER.md`
 - CLI レベルの Modbus 利用: `docs/en/CLI_MODBUS.md`
-=======
-- マスター側 API: `docs/ja/API_MODBUS_MASTER.md`
-- CLI レベルの Modbus 利用: `docs/ja/CLI_MODBUS.md`
->>>>>>> origin/dev
 - データソース / エクスポート機能（HTTP、MQTT、IPC など）: このディレクトリ内の `DATA_SOURCE_*.md` ドキュメントを参照してください。
 - その他のエンドツーエンドの例は `examples` ディレクトリにあります。

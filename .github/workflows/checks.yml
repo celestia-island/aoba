@@ -29,11 +29,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-<<<<<<< HEAD
         uses: dtolnay/rust-toolchain@master
-=======
-        uses: dtolnay/rust-toolchain@stable
->>>>>>> origin/dev
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
@@ -72,11 +68,7 @@ jobs:
 
       - name: Ensure Python3 present
         if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
-<<<<<<< HEAD
         uses: actions/setup-python@v4
-=======
-        uses: actions/setup-python@v5
->>>>>>> origin/dev
         with:
           python-version: "3.x"
 
