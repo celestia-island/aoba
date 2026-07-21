@@ -53,26 +53,59 @@ codegen-units = 1
 panic = "abort"
 
 [workspace.dependencies]
+
+serde_json_path = "^0.7"
+
+yuuka = "^0.6"
+
 anyhow = { version = "^1", features = ["backtrace"] }
 async-trait = "^0.1"
-thiserror = "^2"
+axum = "^0.8"
+bytes = "^1"
 cfg-if = "^1"
+chrono = { version = "^0.4", features = ["serde", "unstable-locales"] }
+clap = "^4"
+crossterm = "^0.29"
+ctrlc = "^3"
 derive_more = { version = "^2", features = ["full"] }
+env_logger = "^0.11"
+expectrl = "^0.8"
+flume = "^0.11"
+futures = "^0.3"
+interprocess = "^2"
+libc = "^0.2"
+log = "^0.4"
 num_enum = "^0.7"
 once_cell = "^1"
+oneshot = "^0.1"
 parking_lot = "^0.12"
-
-bytes = "^1"
-chrono = { version = "^0.4", features = ["serde", "unstable-locales"] }
-url = "^2"
-
+postcard = { version = "^1", features = ["alloc"] }
+rand = "^0.9"
+ratatui = "^0.29"
+regex = "^1"
+rmodbus = { version = "^0.12", features = ["with_serde"] }
+rumqttc = { version = "^0.25", default-features = false, features = [
+  "use-rustls",
+] }
+semver = "^1"
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
-serde_json_path = "^0.7"
-postcard = { version = "^1", features = ["alloc"] }
+serialport = { version = "^4", default-features = false }
 strum = { version = "^0.27", features = ["derive"] }
+thiserror = "^2"
+tokio = { version = "^1", features = ["full"] }
+tokio-serial = { version = "^5", default-features = false }
+tokio-test = "^0.4"
 toml = "^0.9"
-semver = "^1"
+tracing = "^0.1"
+tracing-appender = "^0.2"
+tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
+unicode-width = "^0.2"
+ureq = { version = "^3", features = [
+  "json",
+  "rustls",
+], default-features = false }
+url = "^2"
 uuid = { version = "^1", features = [
   "v4",
   "v7",
@@ -80,113 +113,66 @@ uuid = { version = "^1", features = [
   "macro-diagnostics",
   "serde",
 ] }
-yuuka = "^0.6"
-rand = "^0.9"
-
-clap = "^4"
-env_logger = "^0.11"
-log = "^0.4"
-tracing = "^0.1"
-tracing-appender = "^0.2"
-tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
-
-flume = "^0.11"
-tokio = { version = "^1", features = ["full"] }
-futures = "^0.3"
-oneshot = "^0.1"
-tokio-test = "^0.4"
-
-whoami = "^1"
-crossterm = "^0.29"
-
-ratatui = "^0.29"
-unicode-width = "^0.2"
-
-rmodbus = { version = "^0.12", features = ["with_serde"] }
-libc = "^0.2"
-serialport = { version = "^4", default-features = false }
-tokio-serial = { version = "^5", default-features = false }
-interprocess = "^2"
-ureq = { version = "^3", features = [
-  "json",
-  "rustls",
-], default-features = false }
-rumqttc = { version = "^0.25", default-features = false, features = [
-  "use-rustls",
-] }
-axum = "^0.8"
-
-expectrl = "^0.8"
-regex = "^1"
 vt100 = "^0.15"
-ctrlc = "^3"
-
+whoami = "^1"
 [dependencies]
+
 anyhow.workspace = true
 async-trait.workspace = true
+axum.workspace = true
+bytes.workspace = true
 cfg-if.workspace = true
-thiserror.workspace = true
+chrono.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+ctrlc.workspace = true
 derive_more.workspace = true
+env_logger.workspace = true
+flume.workspace = true
+futures.workspace = true
+interprocess.workspace = true
+libc.workspace = true
+log.workspace = true
 num_enum.workspace = true
 once_cell.workspace = true
+oneshot.workspace = true
 parking_lot.workspace = true
-
-bytes.workspace = true
-chrono.workspace = true
-url.workspace = true
-
+postcard.workspace = true
+rand.workspace = true
+ratatui.workspace = true
+rmodbus.workspace = true
+rumqttc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_json_path.workspace = true
-postcard.workspace = true
+serialport.workspace = true
 strum.workspace = true
+thiserror.workspace = true
+tokio-serial = { workspace = true, optional = true }
+tokio.workspace = true
 toml.workspace = true
-uuid.workspace = true
-yuuka.workspace = true
-rand.workspace = true
-
-clap.workspace = true
-env_logger.workspace = true
-log.workspace = true
-tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
-
-flume.workspace = true
-futures.workspace = true
-oneshot.workspace = true
-tokio.workspace = true
-
-whoami.workspace = true
-crossterm.workspace = true
-
-ratatui.workspace = true
+tracing.workspace = true
 unicode-width.workspace = true
-ctrlc.workspace = true
-
-rmodbus.workspace = true
-libc.workspace = true
-serialport.workspace = true
-interprocess.workspace = true
 ureq.workspace = true
-rumqttc.workspace = true
-axum.workspace = true
-
-tokio-serial = { workspace = true, optional = true }
-
+url.workspace = true
+uuid.workspace = true
+whoami.workspace = true
+yuuka.workspace = true
 [features]
 default = []
 async-serial = ["dep:tokio-serial"]
 
 [dev-dependencies]
-tokio-test.workspace = true
 
+tokio-test.workspace = true
 [build-dependencies]
+
 anyhow.workspace = true
+semver.workspace = true
 serde_json.workspace = true
 toml.workspace = true
-semver.workspace = true
-
 [target.'cfg(windows)'.dependencies]
 windows = { version = "^0.62", features = [
   "Win32_Foundation",
