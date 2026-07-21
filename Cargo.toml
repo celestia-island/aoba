@@ -2,7 +2,6 @@
 name = "aoba"
 description.workspace = true
 repository.workspace = true
-license.workspace = true
 license-file = "LICENSE"
 authors.workspace = true
 version.workspace = true
@@ -111,8 +110,19 @@ ureq = { version = "^3", features = [
   "json",
   "rustls",
 ], default-features = false }
+rustls = { version = "0.23", default-features = false, features = [
+  "ring",
+  "std",
+  "logging",
+  "tls12",
+] }
+tokio-rustls = { version = "0.26", default-features = false, features = [
+  "ring",
+  "logging",
+  "tls12",
+] }
 rumqttc = { version = "^0.25", default-features = false, features = [
-  "use-rustls",
+  "use-rustls-no-provider",
 ] }
 axum = "^0.8"
 
@@ -169,6 +179,8 @@ libc.workspace = true
 serialport.workspace = true
 interprocess.workspace = true
 ureq.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
 rumqttc.workspace = true
 axum.workspace = true
 
@@ -195,8 +207,3 @@ windows = { version = "^0.62", features = [
   "Win32_Security",
   "Win32_System_Threading",
 ] }
-
-# Force all rustls instances to use ring crypto provider
-# This is required because rustls 0.23 defaults to aws-lc-rs which has build issues
-[package.metadata.cargo-all-features]
-denylist = ["aws-lc-rs"]
