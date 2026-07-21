@@ -331,9 +331,9 @@ run_workflow_tests() {
         # Write a small summary
         {
             echo ""
-            echo "==================================="
+            echo "------"
             echo "Test Summary"
-            echo "==================================="
+            echo "------"
             echo "Workflow: $workflow_type"
             echo "Module: $module"
             echo "Exit Code: $exit_code"
