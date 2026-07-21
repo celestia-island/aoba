@@ -68,8 +68,5 @@ mosquitto_pub -h localhost -p 1883 -t "aoba/data/in" -u "user" -P "pass" -m '{
 - Utilisez des noms de topics prévisibles pour simplifier le filtrage et les permissions.
 - Lorsque vous ciblez un chemin de port série physique (par ex. `/tmp/vcom1`), évitez les caractères pouvant poser problème lors de l'analyse du topic ; vous pouvez mapper les noms de ports vers des étiquettes sûres pour les topics dans la configuration.
 - Si votre broker prend en charge les messages retenus (retained), soyez prudent : les messages de liaison descendante retenus peuvent être réappliqués lors d'une reconnexion.
-<<<<<<< HEAD
-=======
 
 Si vous souhaitez un exemple de configuration de broker ou un outil de test automatisé (par exemple, un petit script qui publie une séquence de messages descendants et attend la confirmation d'état du CLI/TUI), indiquez vos outils préférés et je peux l'ajouter.
->>>>>>> origin/dev
