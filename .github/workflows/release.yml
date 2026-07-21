@@ -281,7 +281,7 @@ jobs:
         shell: bash
         run: |
           echo "Downloaded artifacts (before packaging):"
-          echo "================================"
+          echo "------"
           find ./artifacts -type f -ls | sort
           echo ""
           echo "Directory structure:"
