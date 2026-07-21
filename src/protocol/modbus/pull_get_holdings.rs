@@ -24,8 +24,10 @@ pub fn parse_pull_get_holdings(request: &mut ModbusRequest, response: &[u8]) -> 
     }
 
     let values = response[3..response.len() - 2]
-        .chunks_exact(2)
-        .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|chunk| u16::from_be_bytes(*chunk))
         .collect::<Vec<_>>();
 
     Ok(values)
