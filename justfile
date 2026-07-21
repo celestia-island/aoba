@@ -34,6 +34,7 @@ default:
     @just --list
 
 fmt:
+    just fmt-toml
     just fmt-markdown .
     cargo fmt --all
     cargo clippy --all-targets --all-features -- -D warnings
