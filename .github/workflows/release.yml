@@ -254,14 +254,14 @@ jobs:
 
       - name: Upload build artifact (non-Windows binary)
         if: matrix.platform.os != 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aoba-${{ matrix.platform.target }}
           path: target/${{ matrix.platform.target }}/release/aoba
 
       - name: Upload build artifact (Windows binary)
         if: matrix.platform.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aoba-${{ matrix.platform.target }}
           path: target/${{ matrix.platform.target }}/release/aoba.exe
