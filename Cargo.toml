@@ -81,7 +81,7 @@ oneshot = "^0.1"
 parking_lot = "^0.12"
 postcard = { version = "^1", features = ["alloc"] }
 rand = "^0.9"
-ratatui = "^0.29"
+ratatui = "^0.30"
 regex = "^1"
 rmodbus = { version = "^0.12", features = ["with_serde"] }
 rumqttc = { version = "^0.25", default-features = false, features = [
