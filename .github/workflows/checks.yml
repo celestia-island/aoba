@@ -54,7 +54,7 @@ jobs:
           echo "Skipping Linux-only system deps on Windows; install additional required packages in other CI steps if necessary"
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         continue-on-error: true
         with:
           path: |

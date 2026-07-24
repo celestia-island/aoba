@@ -43,7 +43,7 @@ jobs:
           sudo apt-get install -y libudev-dev pkg-config socat
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -102,7 +102,7 @@ jobs:
           sudo apt-get install -y libudev-dev pkg-config socat
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
