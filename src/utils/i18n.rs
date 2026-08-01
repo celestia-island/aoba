@@ -416,7 +416,7 @@ pub fn init_i18n() {
     let user = whoami::username();
     log::info!(
         "i18n: user={} locale={}",
-        user,
+        user.unwrap_or_else(|e| format!("<err:{e}>")),
         LOCALE.get().map_or("-", std::string::String::as_str)
     );
 }
