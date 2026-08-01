@@ -70,7 +70,7 @@ ctrlc = "^3"
 derive_more = { version = "^2", features = ["full"] }
 env_logger = "^0.11"
 expectrl = "^0.8"
-flume = "^0.11"
+flume = "^0.12"
 futures = "^0.3"
 interprocess = "^2"
 libc = "^0.2"
