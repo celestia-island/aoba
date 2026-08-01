@@ -1,6 +1,7 @@
 name: CLI E2E Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [master, dev]
   pull_request:
@@ -11,7 +12,7 @@ env:
 jobs:
   cli-e2e-basic:
     name: CLI E2E Basic - ${{ matrix.module }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, local]
     strategy:
       fail-fast: false
       matrix:
@@ -79,7 +80,7 @@ jobs:
 
   cli-e2e-config-mode:
     name: CLI E2E Config Mode - ${{ matrix.module }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, local]
     strategy:
       fail-fast: false
       matrix:

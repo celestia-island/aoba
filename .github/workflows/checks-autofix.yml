@@ -1,6 +1,7 @@
 name: Checks (autofix)
 
 on:
+  workflow_dispatch:
   push:
     branches: [master, dev]
 
@@ -14,7 +15,7 @@ jobs:
 
   fixes:
     name: Auto-fix and commit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, local]
     needs: [check]
     # Ensure this job runs even if the upstream `check` job failed.
     # This lets the auto-fix steps attempt fixes and commit regardless of check result.
