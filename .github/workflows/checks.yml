@@ -1,6 +1,7 @@
 name: Checks
 
 on:
+  workflow_dispatch:
   push:
     branches: [master, dev]
   pull_request:
@@ -12,7 +13,9 @@ env:
 jobs:
   check:
     name: Check
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'self-hosted' || matrix.os }}
+    if: github.event_name == 'workflow_dispatch' || matrix.os == 'ubuntu-latest'
+
     # Read-only permission: this job performs checks only.
     permissions:
       contents: read

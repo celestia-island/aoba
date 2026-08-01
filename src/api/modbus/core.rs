@@ -739,7 +739,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
             }
         }
 
-        // ==================== Execute one poll (inline logic) ====================
+        // ------ Execute one poll (inline logic) ------
 
         // Generate request frame
         let request_bytes = match params.reg_mode {
@@ -922,7 +922,7 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
             Err(e) => Err(anyhow!("Failed to generate request: {e}")),
         };
 
-        // ==================== End of inline poll logic ====================
+        // ------ End of inline poll logic ------
 
         // Handle poll result
         match poll_result {

@@ -1,0 +1,8 @@
+[site]
+title = "Aoba"
+description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus RTU."
+
+cname = "aoba.docs.celestia.world"
+[languages]
+default = "en"
+order = ["en", "zhs", "zht", "ja", "ko", "fr", "es", "ru", "ar"]
