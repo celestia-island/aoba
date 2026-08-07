@@ -97,7 +97,7 @@ semver = "^1"
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
 serialport = { version = "^4", default-features = false }
-strum = { version = "^0.27", features = ["derive"] }
+strum = { version = "^0.28", features = ["derive"] }
 thiserror = "^2"
 tokio = { version = "^1", features = ["full"] }
 tokio-rustls = { version = "0.26", default-features = false, features = [
