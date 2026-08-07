@@ -69,7 +69,7 @@ crossterm = "^0.29"
 ctrlc = "^3"
 derive_more = { version = "^2", features = ["full"] }
 env_logger = "^0.11"
-expectrl = "^0.8"
+expectrl = "^0.9"
 flume = "^0.12"
 futures = "^0.3"
 interprocess = "^2"
