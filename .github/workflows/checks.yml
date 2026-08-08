@@ -70,7 +70,7 @@ jobs:
 
       - name: Ensure Python3 present
         if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 
@@ -160,7 +160,7 @@ jobs:
 
       - name: Ensure Python3 present
         if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 
