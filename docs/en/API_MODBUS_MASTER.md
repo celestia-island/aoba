@@ -152,7 +152,7 @@ From the repo root:
 cargo run --package api_master -- /tmp/vcom1
 ```
 
-In a production‑like testbed (such as a hydrogen storage tank bench), you typically:
+In a production‑like testbed (such as a process tank bench), you typically:
 
 - Use Aoba CLI/TUI or `examples/modbus_slave` to simulate the slave side.
 - Then run the `api_master` example to verify that your Modbus wiring and application‑level logic behave as expected.
