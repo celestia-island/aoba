@@ -19,7 +19,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-release
+      - run: cargo install cargo-release --version 1.1.4
 
       - run: cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
       - run: |-
