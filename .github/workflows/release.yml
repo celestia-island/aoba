@@ -45,7 +45,7 @@ jobs:
             kind: cross
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install openssl on macOS
         if: matrix.platform.os == 'macos-latest' || matrix.platform.os == 'macos-13'
