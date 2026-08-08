@@ -13,6 +13,7 @@ jobs:
   cli-e2e-basic:
     name: CLI E2E Basic - ${{ matrix.module }}
     runs-on: [self-hosted, linux, x64, local]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
