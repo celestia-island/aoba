@@ -188,7 +188,7 @@ impl ModbusMaster {
     ///
     /// Returns Ok(()) if write was acknowledged successfully.
     ///
-    /// **Note for 储氢罐 hardware**: The hardware requires byte-swapping for 11-coil writes.
+    /// **Note for 11-coil field devices**: Some hardware requires byte-swapping for 11-coil writes.
     /// Apply `swap_coils_byte_order()` before calling this method if needed.
     ///
     /// # Errors
@@ -210,7 +210,7 @@ impl ModbusMaster {
         let mut frame = Vec::new();
         request.generate_set_coils_bulk(address, values, &mut frame)?;
 
-        // Apply byte-swapping for 储氢罐 hardware (11 coils = 2 bytes)
+        // Apply byte-swapping for 11-coil field devices (11 coils = 2 bytes)
         // Modbus frame: [station(1), func(1), addr(2), count(2), bytes(1), data(...), CRC(2)]
         if values.len() == 11 && frame.len() >= 9 && frame[6] == 2 {
             frame.swap(7, 8);
