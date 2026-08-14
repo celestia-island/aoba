@@ -34,3 +34,6 @@ ci-results/
 res/about_cache.toml
 <<<<<<< HEAD
 .cargo/config.toml
+
+# Emacs/editor backup files
+*~
