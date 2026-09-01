@@ -56,19 +56,6 @@ jobs:
         run: |
           echo "Skipping Linux-only system deps on Windows; install additional required packages in other CI steps if necessary"
 
-      - name: Cache cargo registry
-        uses: actions/cache@v6
-        continue-on-error: true
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ matrix.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ matrix.os }}-${{ matrix.rust }}-cargo-
-            ${{ matrix.os }}-cargo-
-
       - name: Ensure Python3 present
         if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
         uses: actions/setup-python@v4
