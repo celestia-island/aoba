@@ -16,6 +16,7 @@ jobs:
   fixes:
     name: Auto-fix and commit
     runs-on: [self-hosted, linux, x64, local]
+    timeout-minutes: 300
     needs: [check]
     # Ensure this job runs even if the upstream `check` job failed.
     # This lets the auto-fix steps attempt fixes and commit regardless of check result.
