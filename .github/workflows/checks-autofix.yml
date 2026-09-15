@@ -3,7 +3,7 @@ name: Checks (autofix)
 on:
   workflow_dispatch:
   push:
-    branches: [master, dev]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,6 +12,7 @@ jobs:
   check:
     name: Check (call stage1)
     uses: ./.github/workflows/checks.yml
+    timeout-minutes: 330
 
   fixes:
     name: Auto-fix and commit

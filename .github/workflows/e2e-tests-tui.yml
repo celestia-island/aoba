@@ -3,7 +3,7 @@ name: TUI E2E Tests
 on:
   workflow_dispatch:
   push:
-    branches: [master, dev]
+    branches: [master]
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
