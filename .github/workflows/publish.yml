@@ -7,7 +7,6 @@ jobs:
   checks:
     name: Checks (stage1)
     uses: ./.github/workflows/checks.yml
-    timeout-minutes: 330
 
   publish:
     name: Publish to crates.io
