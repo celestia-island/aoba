@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use yuuka::derive_struct;
 
 const EN_US_TOML: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/en_us.toml"));
-const ZH_CHS_TOML: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh_chs.toml"));
-const ZH_CHT_TOML: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh_cht.toml"));
+const ZH_HANS_TOML: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh-Hans.toml"));
+const ZH_HANT_TOML: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh-Hant.toml"));
 
 derive_struct! {
     #[derive(PartialEq, Eq, Serialize, Deserialize)]
@@ -359,8 +359,8 @@ pub fn init_i18n() {
     // Available locales in priority order
     let avail: Vec<(&str, Lang)> = vec![
         ("en_us", parse_toml_to_lang(EN_US_TOML)),
-        ("zh_chs", parse_toml_to_lang(ZH_CHS_TOML)),
-        ("zh_cht", parse_toml_to_lang(ZH_CHT_TOML)),
+        ("zh-Hans", parse_toml_to_lang(ZH_HANS_TOML)),
+        ("zh-Hant", parse_toml_to_lang(ZH_HANT_TOML)),
     ];
 
     // Detect preferred languages from env vars
@@ -384,12 +384,12 @@ pub fn init_i18n() {
     for p in &prefs {
         if p.contains("zh") {
             if p.contains("tw") || p.contains("hk") || p.contains("cht") {
-                if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh_cht") {
-                    chosen = Some(("zh_cht", l.clone()));
+                if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh-Hant") {
+                    chosen = Some(("zh-Hant", l.clone()));
                     break;
                 }
-            } else if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh_chs") {
-                chosen = Some(("zh_chs", l.clone()));
+            } else if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh-Hans") {
+                chosen = Some(("zh-Hans", l.clone()));
                 break;
             }
         }
