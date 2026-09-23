@@ -74,7 +74,6 @@ impl Pipe {
 }
 
 pub struct IpcSender {
-    _channel_id: IpcChannelId,
     to_tui_pipe: Option<Pipe>,
     from_tui_pipe: Option<Pipe>,
 }
@@ -105,7 +104,6 @@ impl IpcSender {
         log::info!("IPC [{}] TUI connected successfully", channel_id.0);
 
         Ok(Self {
-            _channel_id: channel_id,
             to_tui_pipe: Some(Pipe::new(to_tui_stream)),
             from_tui_pipe: Some(Pipe::new(from_tui_stream)),
         })
@@ -157,7 +155,6 @@ impl IpcSender {
 }
 
 pub struct IpcReceiver {
-    _channel_id: IpcChannelId,
     to_tui_pipe: Option<Pipe>,
     from_tui_pipe: Option<Pipe>,
 }
@@ -179,7 +176,6 @@ impl IpcReceiver {
         log::info!("IPC [{}] Connected to E2E test successfully", channel_id.0);
 
         Ok(Self {
-            _channel_id: channel_id,
             to_tui_pipe: Some(Pipe::new(to_tui_stream)),
             from_tui_pipe: Some(Pipe::new(from_tui_stream)),
         })

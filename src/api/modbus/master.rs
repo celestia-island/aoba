@@ -17,7 +17,9 @@ use crate::{
 pub struct ModbusMaster {
     receiver: flume::Receiver<ModbusResponse>,
     control_sender: Option<flume::Sender<String>>,
-    _handle: tokio::task::JoinHandle<Result<()>>,
+    /// Handle to the background polling task; exposed through [`ModbusMaster::abort`]
+    /// and [`ModbusMaster::is_finished`] so callers can manage the task lifetime.
+    handle: tokio::task::JoinHandle<Result<()>>,
     /// Shared port handle for manual operations
     port_arc: Option<Arc<Mutex<Box<dyn serialport::SerialPort>>>>,
     /// Station ID for manual operations
@@ -104,7 +106,7 @@ impl ModbusMaster {
         Ok(Self {
             receiver: response_rx,
             control_sender: Some(control_tx),
-            _handle: handle,
+            handle,
             port_arc: None,
             station_id,
         })
@@ -150,7 +152,7 @@ impl ModbusMaster {
         Ok(Self {
             receiver: response_rx,
             control_sender: Some(control_tx),
-            _handle: handle,
+            handle,
             port_arc: Some(port_arc_clone),
             station_id,
         })
@@ -399,6 +401,25 @@ impl ModbusMaster {
     pub fn stop(&self) -> Result<()> {
         self.send_control("stop")
     }
+
+    /// Abort the background polling task behind this master.
+    ///
+    /// For masters built through the Builder API (`new` / `new_multi_register`)
+    /// the async task is cancelled at its next await point. For the blocking
+    /// constructors (`new_simple` / `new_manual`) an already-running blocking
+    /// closure cannot be interrupted once started; abort only detaches the
+    /// task so its result is discarded. Prefer [`ModbusMaster::stop`] for a
+    /// graceful shutdown of the polling loop.
+    pub fn abort(&self) {
+        self.handle.abort();
+    }
+
+    /// Returns `true` if the background polling task has finished
+    /// (completed, returned an error, or been aborted).
+    #[must_use]
+    pub fn is_finished(&self) -> bool {
+        self.handle.is_finished()
+    }
 }
 
 /// Create and start a new Modbus master (legacy Builder API with middleware)
@@ -418,7 +439,7 @@ fn new_master_legacy(
     ModbusMaster {
         receiver,
         control_sender: None,
-        _handle: handle,
+        handle,
         port_arc: None,
         station_id,
     }
@@ -448,7 +469,7 @@ impl ModbusMaster {
         Ok(Self {
             receiver,
             control_sender: None,
-            _handle: handle,
+            handle,
             port_arc: None,
             station_id,
         })
@@ -1211,5 +1232,42 @@ async fn run_multi_register_master_loop(
             // Interval is configurable via `with_poll_interval`; default is 1000ms
             tokio::time::sleep(Duration::from_millis(poll_interval_ms)).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ModbusMaster;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn abort_terminates_background_task() {
+        // Build a master whose background task blocks forever, without any
+        // serial hardware (fields are module-private, so direct construction
+        // is fine in a unit test).
+        let handle = tokio::spawn(std::future::pending::<anyhow::Result<()>>());
+        let master = ModbusMaster {
+            receiver: flume::unbounded().1,
+            control_sender: None,
+            handle,
+            port_arc: None,
+            station_id: 1,
+        };
+
+        assert!(!master.is_finished());
+
+        master.abort();
+
+        // The task is cancelled at its next await point; give the runtime a
+        // bounded window to observe the cancellation.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !master.is_finished() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert!(
+            master.is_finished(),
+            "background task must be finished after abort()"
+        );
     }
 }

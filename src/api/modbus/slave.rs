@@ -24,7 +24,10 @@ pub struct SlaveIteratorParams {
 /// Handle to a running Modbus slave that provides an iterator-like interface
 pub struct ModbusSlave {
     receiver: flume::Receiver<ModbusResponse>,
-    _handle: tokio::task::JoinHandle<Result<()>>,
+    /// Handle to the background slave loop task; exposed through
+    /// [`ModbusSlave::abort`] and [`ModbusSlave::is_finished`] so callers can
+    /// manage the task lifetime.
+    handle: tokio::task::JoinHandle<Result<()>>,
     // Optional one-shot sender used to request the slave loop to stop.
     // Keeping the sender alive allows callers to trigger a graceful shutdown
     // by sending a unit value. It's optional because other call sites may
@@ -53,7 +56,7 @@ impl ModbusSlave {
 
         Ok(Self {
             receiver,
-            _handle: handle,
+            handle,
             stop_sender: Some(stop_tx),
         })
     }
@@ -64,6 +67,23 @@ impl ModbusSlave {
         if let Some(tx) = self.stop_sender.take() {
             let _ = tx.send(());
         }
+    }
+
+    /// Abort the background slave loop task.
+    ///
+    /// The async loop is cancelled at its next await point; a request that is
+    /// currently being processed (blocking serial I/O inside the task) is not
+    /// interrupted. Prefer [`ModbusSlave::stop`] for a graceful shutdown via
+    /// the control channel.
+    pub fn abort(&self) {
+        self.handle.abort();
+    }
+
+    /// Returns `true` if the background slave task has finished
+    /// (completed, returned an error, or been aborted).
+    #[must_use]
+    pub fn is_finished(&self) -> bool {
+        self.handle.is_finished()
     }
 
     /// Try to receive a response without blocking (Iterator-like interface)
@@ -740,4 +760,39 @@ async fn run_slave_loop(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ModbusSlave;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn abort_terminates_background_task() {
+        // Build a slave whose background task blocks forever, without any
+        // serial hardware (fields are module-private, so direct construction
+        // is fine in a unit test).
+        let handle = tokio::spawn(std::future::pending::<anyhow::Result<()>>());
+        let slave = ModbusSlave {
+            receiver: flume::unbounded().1,
+            handle,
+            stop_sender: None,
+        };
+
+        assert!(!slave.is_finished());
+
+        slave.abort();
+
+        // The task is cancelled at its next await point; give the runtime a
+        // bounded window to observe the cancellation.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !slave.is_finished() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert!(
+            slave.is_finished(),
+            "background task must be finished after abort()"
+        );
+    }
 }
