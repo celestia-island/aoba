@@ -1651,6 +1651,11 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                     }
                 };
 
+                if parsed_url.scheme() == "mqtts" {
+                    log::error!("mqtts:// requested but TLS is not supported; refusing plaintext fallback");
+                    return Err(anyhow!("mqtts:// is not supported yet; use mqtt:// (TLS support pending)"));
+                }
+
                 let host = parsed_url.host_str().unwrap_or("localhost").to_string();
                 let port = parsed_url.port().unwrap_or(1883);
                 let topic = parsed_url.path().trim_start_matches('/').to_string();
@@ -2073,6 +2078,11 @@ async fn read_one_data_update(
             let join_result = tokio::task::spawn_blocking(move || {
                 let parsed_url =
                     url::Url::parse(&url).map_err(|e| anyhow!("Invalid MQTT URL: {e}"))?;
+                if parsed_url.scheme() == "mqtts" {
+                    return Err(anyhow!(
+                        "mqtts:// is not supported yet; use mqtt:// (TLS support pending)"
+                    ));
+                }
                 let host = parsed_url
                     .host_str()
                     .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
