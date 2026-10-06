@@ -71,11 +71,11 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x scripts/run_ci_locally.sh
-          chmod +x scripts/socat_init.sh
+          chmod +x scripts/run_ci_locally.py
+          chmod +x scripts/socat_init.py
 
       - name: Run TUI E2E module (rendering mode)
-        run: ./scripts/run_ci_locally.sh --workflow tui-rendering --module ${{ matrix.module }}
+        run: ./scripts/run_ci_locally.py --workflow tui-rendering --module ${{ matrix.module }}
 
   # Drill-down mode tests (full integration) - 23 modules
   tui-e2e-drilldown:
@@ -135,8 +135,8 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x scripts/run_ci_locally.sh
-          chmod +x scripts/socat_init.sh
+          chmod +x scripts/run_ci_locally.py
+          chmod +x scripts/socat_init.py
 
       - name: Run TUI E2E module (drill-down mode)
-        run: ./scripts/run_ci_locally.sh --workflow tui-drilldown --module ${{ matrix.module }}
+        run: ./scripts/run_ci_locally.py --workflow tui-drilldown --module ${{ matrix.module }}

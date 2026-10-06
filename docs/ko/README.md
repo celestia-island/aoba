@@ -38,7 +38,7 @@ Modbus RTU를 위한 멀티 프로토콜 디버깅 및 시뮬레이션 도구로
 - 다양한 데이터 소스 및 프로토콜: 물리적/가상 직렬 포트 (`socat`으로 관리), HTTP, MQTT, IPC (Unix 도메인 소켓 / 네임드 파이프), 파일, FIFO.
 - 포트 전달: TUI 내에서 소스 및 대상 포트를 구성하여 데이터 복제, 모니터링 또는 브리징.
 - 데몬 모드: 저장된 TUI 구성을 사용하여 헤드리스로 실행, 구성된 모든 포트/스테이션 시작 (임베디드/CI 배포에 적합).
-- 가상 포트 및 테스트 도구: 가상 직렬 포트용 `scripts/socat_init.sh` 및 `examples/cli_e2e`, `examples/tui_e2e`의 예제 테스트 포함.
+- 가상 포트 및 테스트 도구: 가상 직렬 포트용 `scripts/socat_init.py` 및 `examples/cli_e2e`, `examples/tui_e2e`의 예제 테스트 포함.
 
 > 참고: `--no-config-cache`로 TUI 저장/로드 비활성화; `--config-file <FILE>`과 `--no-config-cache`는 상호 배타적입니다.
 
