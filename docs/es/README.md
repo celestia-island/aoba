@@ -38,7 +38,7 @@ Herramienta de depuracion y simulacion multiprotocolo para Modbus RTU, compatibl
 - Multiples fuentes de datos y protocolos: puertos serie fisicos/virtuales (gestionados via `socat`), HTTP, MQTT, IPC (sockets Unix / tuberias con nombre), archivos y FIFOs.
 - Reenvio de puertos: configuracion de puertos de origen y destino dentro del TUI para replicacion de datos, monitoreo o puenteo.
 - Modo demonio: ejecucion sin interfaz usando una configuracion TUI guardada para iniciar todos los puertos/estaciones configurados (apto para despliegues embebidos/CI).
-- Herramientas de puerto virtual y pruebas: incluye `scripts/socat_init.sh` para puertos serie virtuales y pruebas de ejemplo en `examples/cli_e2e` y `examples/tui_e2e`.
+- Herramientas de puerto virtual y pruebas: incluye `scripts/socat_init.py` para puertos serie virtuales y pruebas de ejemplo en `examples/cli_e2e` y `examples/tui_e2e`.
 
 > Nota: use `--no-config-cache` para deshabilitar guardar/cargar en TUI; `--config-file <FILE>` y `--no-config-cache` son mutuamente excluyentes.
 

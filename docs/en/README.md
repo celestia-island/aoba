@@ -38,7 +38,7 @@ Multi-protocol debugging and simulation tool for Modbus RTU, suitable for both p
 - Multiple data sources and protocols: physical/virtual serial ports (managed via `socat`), HTTP, MQTT, IPC (Unix domain sockets / named pipes), files, and FIFOs.
 - Port Forwarding: configure source and target ports within the TUI for data replication, monitoring, or bridging.
 - Daemon mode: run headless using a saved TUI configuration to start all configured ports/stations (suitable for embedded/CI deployments).
-- Virtual port and test tooling: includes `scripts/socat_init.sh` for virtual serial ports and example tests in `examples/cli_e2e` and `examples/tui_e2e` for local/CI testing.
+- Virtual port and test tooling: includes `scripts/socat_init.py` for virtual serial ports and example tests in `examples/cli_e2e` and `examples/tui_e2e` for local/CI testing.
 - Extensible integrations: forward or receive port data via HTTP/MQTT/IPC for (remote) integrations.
 
 > Note: use `--no-config-cache` to disable TUI save/load; `--config-file <FILE>` and `--no-config-cache` are mutually exclusive.
@@ -224,7 +224,7 @@ cargo run --package api_master -- /tmp/vcom1
 Note: On Linux/WSL, initialize virtual serial ports first:
 
 ```bash
-./scripts/socat_init.sh
+./scripts/socat_init.py
 ```
 
 ### Complete Examples

@@ -38,7 +38,7 @@ Modbus RTU 多協定偵錯與模擬工具，適用於實體序列埠與網路轉
 - 多種資料來源與協定：實體/虛擬序列埠（透過 `socat` 管理）、HTTP、MQTT、IPC（Unix 域通訊端 / 命名管道）、檔案與 FIFO。
 - 連接埠轉發：在 TUI 內設定來源與目標連接埠，進行資料複製、監控或橋接。
 - 守護進程模式：使用已儲存的 TUI 設定以無頭模式執行，啟動所有已設定的連接埠/站台（適用於嵌入式/CI 部署）。
-- 虛擬連接埠與測試工具：包含用於虛擬序列埠的 `scripts/socat_init.sh`，以及 `examples/cli_e2e` 與 `examples/tui_e2e` 中的範例測試。
+- 虛擬連接埠與測試工具：包含用於虛擬序列埠的 `scripts/socat_init.py`，以及 `examples/cli_e2e` 與 `examples/tui_e2e` 中的範例測試。
 
 > 注意：使用 `--no-config-cache` 停用 TUI 儲存/載入；`--config-file <FILE>` 與 `--no-config-cache` 互斥。
 

@@ -81,19 +81,19 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     {
         log::info!("🧪 Setting up virtual serial ports...");
 
-        // Find the socat_init.sh script (centralized at repo root)
-        let script_path = std::path::Path::new("scripts/socat_init.sh");
+        // Find the socat_init.py script (centralized at repo root)
+        let script_path = std::path::Path::new("scripts/socat_init.py");
 
         if !script_path.exists() {
             log::warn!(
-                "⚠️ socat_init.sh script not found at {}",
+                "⚠️ socat_init.py script not found at {}",
                 script_path.display()
             );
             return Ok(false);
         }
 
         // Run the script (no sudo required) to reset/reinitialize virtual serial ports
-        let output = Command::new("bash")
+        let output = Command::new("python3")
             .arg(script_path)
             .arg("--mode")
             .arg("cli")

@@ -38,7 +38,7 @@ Modbus RTU 向けマルチプロトコルデバッグ・シミュレーション
 - 複数のデータソースとプロトコル：物理/仮想シリアルポート (`socat` で管理)、HTTP、MQTT、IPC (Unix ドメインソケット / 名前付きパイプ)、ファイル、FIFO。
 - ポート転送：TUI 内で送信元ポートと送信先ポートを設定し、データ複製、監視、ブリッジングが可能。
 - デーモンモード：保存した TUI 設定を使用してヘッドレス実行し、設定済みの全ポート/ステーションを起動 (組み込み/CI デプロイに最適)。
-- 仮想ポートとテストツール：仮想シリアルポート用の `scripts/socat_init.sh` と、`examples/cli_e2e` および `examples/tui_e2e` のサンプルテストを含む。
+- 仮想ポートとテストツール：仮想シリアルポート用の `scripts/socat_init.py` と、`examples/cli_e2e` および `examples/tui_e2e` のサンプルテストを含む。
 
 > 注意：`--no-config-cache` で TUI の保存/読み込みを無効化；`--config-file <FILE>` と `--no-config-cache` は同時に使用できません。
 

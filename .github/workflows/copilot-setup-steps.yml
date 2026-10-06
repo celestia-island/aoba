@@ -39,8 +39,8 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+          chmod +x scripts/socat_init.py
+          ./scripts/socat_init.py
 
       - name: Cleanup virtual ports
         if: always()

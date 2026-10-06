@@ -67,8 +67,8 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+          chmod +x scripts/socat_init.py
+          ./scripts/socat_init.py
 
       - name: Run CLI E2E module
         run: ./target/debug/cli_e2e --module ${{ matrix.module }}
@@ -118,8 +118,8 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+          chmod +x scripts/socat_init.py
+          ./scripts/socat_init.py
 
       - name: Run CLI E2E module
         run: ./target/debug/cli_e2e --module ${{ matrix.module }}

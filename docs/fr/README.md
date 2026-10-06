@@ -38,7 +38,7 @@ Outil de debogage et de simulation multi-protocole pour Modbus RTU, compatible a
 - Multiples sources de donnees et protocoles : ports serie physiques/virtuels (geres via `socat`), HTTP, MQTT, IPC (sockets Unix / tubes nommes), fichiers et FIFOs.
 - Redirection de ports : configuration des ports source et destination dans le TUI pour la replication, la surveillance ou le pontage des donnees.
 - Mode demon : execution sans interface en utilisant une configuration TUI sauvegardee pour demarrer tous les ports/stations configures (adapte aux deploiements embarques/CI).
-- Outils de port virtuel et de test : inclut `scripts/socat_init.sh` pour les ports serie virtuels et des tests d'exemple dans `examples/cli_e2e` et `examples/tui_e2e`.
+- Outils de port virtuel et de test : inclut `scripts/socat_init.py` pour les ports serie virtuels et des tests d'exemple dans `examples/cli_e2e` et `examples/tui_e2e`.
 
 > Remarque : utilisez `--no-config-cache` pour desactiver la sauvegarde/chargement du TUI ; `--config-file <FILE>` et `--no-config-cache` sont mutuellement exclusifs.
 
