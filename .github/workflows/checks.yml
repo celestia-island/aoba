@@ -64,17 +64,15 @@ jobs:
         run: |
           echo "Skipping Linux-only system deps on Windows; install additional required packages in other CI steps if necessary"
 
-      - name: Ensure Python3 present
-        if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-
+      # The use-group enforcement script needs nothing beyond a stock python3,
+      # which every ubuntu image (hosted or the self-hosted Debian runners)
+      # already ships. setup-python is deliberately gone: its "3.x" alias
+      # resolution fails outright on the Debian 12 runners.
       - name: Enforce use statement groups
         id: enforce_use_groups
         if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
         run: |
-          python scripts/enforce_use_groups.py
+          python3 scripts/enforce_use_groups.py
           if ! git diff --quiet; then
             echo "::error::Use statements are not grouped correctly. Run scripts/enforce_use_groups.py locally."
             git diff --name-only
@@ -83,6 +81,11 @@ jobs:
 
       - name: Check formatting
         id: fmt_check
+        # Formatting is anchored to the stable rustfmt: nightly rustfmt is a
+        # moving style target and periodically reformats code stable accepted
+        # (currently the include_str!/concat!/env! chains), failing this leg
+        # for reasons unrelated to what the nightly compiler should test.
+        if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Check compilation
@@ -154,17 +157,15 @@ jobs:
             ${{ matrix.os }}-${{ matrix.rust }}-cargo-
             ${{ matrix.os }}-cargo-
 
-      - name: Ensure Python3 present
-        if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-
+      # The use-group enforcement script needs nothing beyond a stock python3,
+      # which every ubuntu image (hosted or the self-hosted Debian runners)
+      # already ships. setup-python is deliberately gone: its "3.x" alias
+      # resolution fails outright on the Debian 12 runners.
       - name: Enforce use statement groups
         id: enforce_use_groups
         if: startsWith(matrix.os, 'ubuntu') && matrix.rust == 'stable'
         run: |
-          python scripts/enforce_use_groups.py
+          python3 scripts/enforce_use_groups.py
           if ! git diff --quiet; then
             echo "::error::Use statements are not grouped correctly. Run scripts/enforce_use_groups.py locally."
             git diff --name-only
@@ -173,6 +174,11 @@ jobs:
 
       - name: Check formatting
         id: fmt_check
+        # Formatting is anchored to the stable rustfmt: nightly rustfmt is a
+        # moving style target and periodically reformats code stable accepted
+        # (currently the include_str!/concat!/env! chains), failing this leg
+        # for reasons unrelated to what the nightly compiler should test.
+        if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Check compilation
