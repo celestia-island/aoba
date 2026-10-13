@@ -628,40 +628,46 @@ pub async fn run_master_loop_with_handler(
                             // Audit aoba-R1-3: the holding write never read
                             // the echo — the write result was unknown. Read
                             // + verify the confirmation (station id, echo
-                            // function code, CRC).
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-                            let mut buffer = [0u8; 256];
-                            let bytes_read = {
-                                let mut port = port_arc.lock();
-                                port.read(&mut buffer)?
-                            };
-                            if bytes_read < 8 {
-                                return Err(anyhow::anyhow!(
-                                    "holding write confirmation too short: {bytes_read} bytes"
-                                ));
-                            }
-                            let response = &buffer[..bytes_read];
-                            if response[0] != config.station_id {
-                                return Err(anyhow::anyhow!(
-                                    "holding write station mismatch: expected {}, got {}",
-                                    config.station_id,
-                                    response[0]
-                                ));
-                            }
-                            if response[1] & 0x80 != 0 {
-                                return Err(anyhow::anyhow!(
-                                    "Modbus exception: error code 0x{:02X}",
-                                    response[2]
-                                ));
-                            }
-                            if response[1] != 0x10 {
-                                return Err(anyhow::anyhow!(
-                                    "holding write confirmation function mismatch: expected 0x10, got 0x{:02X}",
-                                    response[1]
-                                ));
-                            }
-                            crate::api::modbus::core::verify_response_crc(response)?;
-                            Ok(())
+                            // function code, CRC). Every failure produces a
+                            // match-arm Err (R2 review: `return Err` here is
+                            // inside the master loop — one bad frame would
+                            // kill the whole poll cycle).
+                            let confirm: Result<()> = (|| {
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                let mut buffer = [0u8; 256];
+                                let bytes_read = {
+                                    let mut port = port_arc.lock();
+                                    port.read(&mut buffer)?
+                                };
+                                if bytes_read < 8 {
+                                    return Err(anyhow::anyhow!(
+                                        "holding write confirmation too short: {bytes_read} bytes"
+                                    ));
+                                }
+                                let response = &buffer[..bytes_read];
+                                if response[0] != config.station_id {
+                                    return Err(anyhow::anyhow!(
+                                        "holding write station mismatch: expected {}, got {}",
+                                        config.station_id,
+                                        response[0]
+                                    ));
+                                }
+                                if response[1] & 0x80 != 0 {
+                                    return Err(anyhow::anyhow!(
+                                        "Modbus exception: error code 0x{:02X}",
+                                        response[2]
+                                    ));
+                                }
+                                if response[1] != 0x10 {
+                                    return Err(anyhow::anyhow!(
+                                        "holding write confirmation function mismatch: expected 0x10, got 0x{:02X}",
+                                        response[1]
+                                    ));
+                                }
+                                crate::api::modbus::core::verify_response_crc(response)?;
+                                Ok(())
+                            })();
+                            confirm
                         }
                         other => {
                             log::warn!("Write operation not supported for {other:?}");

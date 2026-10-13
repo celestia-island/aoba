@@ -61,20 +61,6 @@ pub struct ModbusPortConfig {
     pub poll_interval_ms: u64,
 }
 
-impl ModbusPortConfig {
-    /// Audit aoba-R1-4: the effective register length for a poll —
-    /// clamped to the protocol per-mode limit AND the 121-register
-    /// ceiling that keeps the response inside the 256-byte read buffer
-    /// used by the sync/async poll paths (5 + 2·len + 10 ≤ 256).
-    #[must_use]
-    pub fn clamped_register_length(&self) -> u16 {
-        match self.register_mode {
-            RegisterMode::Holding | RegisterMode::Input => self.register_length.min(121),
-            RegisterMode::Coils | RegisterMode::DiscreteInputs => self.register_length.min(121),
-        }
-    }
-}
-
 /// Configuration for a single register polling task
 #[derive(Debug, Clone)]
 pub struct RegisterPollConfig {

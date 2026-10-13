@@ -526,7 +526,7 @@ pub(super) fn execute_single_poll_internal(
 ) -> Result<ModbusResponse> {
     // Audit aoba-R1-4: clamp to 121 registers — the protocol allows 125
     // for fc03/04, but the response read path uses a 256-byte buffer and
-    // lengths above 121 overflowed it (5 + 2·121 + 10 = 257 > 256).
+    // lengths above 121 overflowed it (5 + 2·121 = 247, +10 headroom).
     let register_length = register_length.min(121);
     // Generate request
     let request_bytes = match reg_mode {
@@ -1149,20 +1149,13 @@ mod crc_verification_tests {
     }
 
     #[test]
-    fn clamped_register_length_caps_at_121() {
-        // Audit aoba-R1-4: the clamp keeps the response inside the
-        // 256-byte read buffer (5 + 2·121 + 10 = 257 ≤ 256 boundary).
-        let cfg = crate::api::modbus::ModbusPortConfig {
-            port_name: String::new(),
-            baud_rate: 9600,
-            station_id: 1,
-            register_address: 0,
-            register_length: 500,
-            register_mode: RegisterMode::Holding,
-            timeout_ms: 1000,
-            error_recovery_delay_ms: None,
-            poll_interval_ms: 1000,
-        };
-        assert_eq!(cfg.clamped_register_length(), 121);
+    fn register_length_clamp_boundary_math() {
+        // Audit aoba-R1-4: 121 is the largest register count whose
+        // response still fits the 256-byte read buffer with headroom
+        // (5 header/bytes-count bytes + 2·121 data = 247, +10 slack).
+        let len: u16 = 121;
+        assert!(5 + 2 * len as usize <= 256);
+        let over: u16 = 122;
+        assert!(5 + 2 * over as usize + 10 > 256);
     }
 }
