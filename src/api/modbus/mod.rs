@@ -43,6 +43,11 @@ pub struct ModbusPortConfig {
     pub baud_rate: u32,
     pub station_id: u8,
     pub register_address: u16,
+    /// Audit aoba-R1-4: holding/input reads cap at 125 registers (fc03/04
+    /// protocol limit); coils/discrete at 1600 (fc01/02). The sync poll's
+    /// 256-byte response buffer overflows above 121 holding registers, so
+    /// the accessor clamps and callers should prefer the accessor over
+    /// reading the field directly.
     pub register_length: u16,
     pub register_mode: RegisterMode,
     pub timeout_ms: u64,

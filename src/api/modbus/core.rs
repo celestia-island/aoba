@@ -15,6 +15,43 @@ use std::{
 };
 
 pub(crate) const MODBUS_RTU_MIN_RESPONSE_SIZE: usize = 8;
+
+/// Audit aoba-R1-1: verify the trailing CRC16 of a raw RTU response
+/// frame. `frame` is the full PDU + 2 CRC bytes; returns an error when
+/// the checksum does not match (bus corruption / collided frame).
+/// The standard Modbus RTU CRC16 (poly 0xA001, init 0xFFFF) - same
+/// algorithm as protocol::status::util::crc16_modbus, which is private
+/// to its module.
+fn crc16_modbus(data: &[u8]) -> u16 {
+    let mut crc: u16 = 0xFFFF;
+    for &b in data {
+        crc ^= u16::from(b);
+        for _ in 0..8 {
+            if crc & 0x0001 != 0 {
+                crc >>= 1;
+                crc ^= 0xA001;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    crc
+}
+
+pub(crate) fn verify_response_crc(frame: &[u8]) -> Result<()> {
+    if frame.len() < 4 {
+        return Err(anyhow!("frame too short for CRC: {} bytes", frame.len()));
+    }
+    let data_len = frame.len() - 2;
+    let calc = crc16_modbus(&frame[..data_len]);
+    let wire = u16::from(frame[data_len]) | (u16::from(frame[data_len + 1]) << 8);
+    if calc != wire {
+        return Err(anyhow!(
+            "CRC mismatch: calc=0x{calc:04X} frame=0x{wire:04X}"
+        ));
+    }
+    Ok(())
+}
 pub(crate) const MODBUS_COIL_ON: u16 = 0xFF00;
 pub(crate) const MODBUS_COIL_OFF: u16 = 0x0000;
 
@@ -412,17 +449,34 @@ pub fn master_write_coils(
 
     let response = &buffer[..bytes_read];
 
-    // Verify response (function code should match, or be error code)
-    if response[1] == 0x0F {
-        log::info!(
-            "Successfully wrote {} coils at address 0x{:04X}",
-            coil_values.len(),
-            start_address
-        );
-    } else if response[1] & 0x80 != 0 {
+    // Audit aoba-R1-1/R1-3: the confirmation was previously accepted on
+    // function code alone — no station-id comparison, no CRC. A
+    // collided frame or another slave's echo could "confirm" a write
+    // that never landed. Full verification now: station id, function
+    // code, and CRC.
+    if response[0] != station_id {
+        return Err(anyhow!(
+            "Write confirmation station mismatch: expected {station_id}, got {}",
+            response[0]
+        ));
+    }
+    if response[1] & 0x80 != 0 {
         let error_code = response[2];
         return Err(anyhow!("Modbus exception: error code 0x{error_code:02X}"));
     }
+    if response[1] != 0x0F {
+        return Err(anyhow!(
+            "Write confirmation function mismatch: expected 0x0F, got 0x{:02X}",
+            response[1]
+        ));
+    }
+    verify_response_crc(response)?;
+
+    log::info!(
+        "Successfully wrote {} coils at address 0x{:04X}",
+        coil_values.len(),
+        start_address
+    );
 
     Ok(request_frame)
 }
@@ -470,6 +524,10 @@ pub(super) fn execute_single_poll_internal(
     register_length: u16,
     reg_mode: RegisterMode,
 ) -> Result<ModbusResponse> {
+    // Audit aoba-R1-4: clamp to 121 registers — the protocol allows 125
+    // for fc03/04, but the response read path uses a 256-byte buffer and
+    // lengths above 121 overflowed it (5 + 2·121 = 247, +10 headroom).
+    let register_length = register_length.min(121);
     // Generate request
     let request_bytes = match reg_mode {
         RegisterMode::Holding => crate::protocol::modbus::generate_pull_get_holdings_request(
@@ -532,9 +590,11 @@ pub(super) fn execute_single_poll_internal(
         std::thread::sleep(std::time::Duration::from_millis(20));
         let mut port = port_arc.lock();
         let remaining_needed = expected_frame_length - total_bytes;
-        if let Ok(additional) =
-            port.read(&mut buffer[total_bytes..total_bytes + remaining_needed + 10])
-        {
+        // Audit aoba-R1-4: the old slice `total_bytes..total_bytes +
+        // remaining_needed + 10` panicked once register_length pushed
+        // the end past the 256-byte buffer — clamp to the buffer.
+        let read_end = (total_bytes + remaining_needed + 10).min(buffer.len());
+        if let Ok(additional) = port.read(&mut buffer[total_bytes..read_end]) {
             if additional > 0 {
                 total_bytes += additional;
             }
@@ -593,6 +653,11 @@ pub(super) fn execute_single_poll_internal(
             "Byte count mismatch: expected {expected_byte_count}, got {byte_count}"
         ));
     }
+
+    // Audit aoba-R1-1: verify the response CRC before trusting the
+    // payload — bus corruption / collided frames must not be ingested
+    // as register values.
+    verify_response_crc(response)?;
 
     let values = parse_response_values(response, register_length, reg_mode)?;
 
@@ -707,12 +772,17 @@ pub struct MasterPollParams {
 #[allow(clippy::too_many_lines)]
 pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
     const MAX_CONSECUTIVE_ERRORS: u32 = 10;
+    // Audit aoba-R1-4: clamp to 121 registers for the WHOLE loop — the
+    // response read path uses a 256-byte buffer and lengths above 121
+    // overflowed it. Shadowing the field keeps every downstream use
+    // (request generation, byte-count checks, value parsing) consistent.
+    let register_length = params.register_length.min(121);
 
     log::info!(
         "Starting master poll loop: station={}, addr=0x{:04X}, len={}, mode={:?}",
         params.station_id,
         params.register_address,
-        params.register_length,
+        register_length,
         params.reg_mode
     );
 
@@ -746,23 +816,23 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
             RegisterMode::Holding => crate::protocol::modbus::generate_pull_get_holdings_request(
                 params.station_id,
                 params.register_address,
-                params.register_length,
+                register_length,
             ),
             RegisterMode::Input => crate::protocol::modbus::generate_pull_get_inputs_request(
                 params.station_id,
                 params.register_address,
-                params.register_length,
+                register_length,
             ),
             RegisterMode::Coils => crate::protocol::modbus::generate_pull_get_coils_request(
                 params.station_id,
                 params.register_address,
-                params.register_length,
+                register_length,
             ),
             RegisterMode::DiscreteInputs => {
                 crate::protocol::modbus::generate_pull_get_discrete_inputs_request(
                     params.station_id,
                     params.register_address,
-                    params.register_length,
+                    register_length,
                 )
             }
         };
@@ -783,11 +853,9 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                 } else {
                     // Calculate expected response length
                     let expected_data_bytes = match params.reg_mode {
-                        RegisterMode::Holding | RegisterMode::Input => {
-                            params.register_length as usize * 2
-                        }
+                        RegisterMode::Holding | RegisterMode::Input => register_length as usize * 2,
                         RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                            (params.register_length as usize).div_ceil(8)
+                            (register_length as usize).div_ceil(8)
                         }
                     };
                     let expected_frame_length = 3 + expected_data_bytes + 2;
@@ -815,9 +883,9 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
 
                         let mut port = params.port_arc.lock();
                         let remaining_needed = expected_frame_length - total_bytes;
-                        if let Ok(additional) =
-                            port.read(&mut buffer[total_bytes..total_bytes + remaining_needed + 10])
-                        {
+                        // Audit aoba-R1-4: clamp to the buffer (see sync poll).
+                        let read_end = (total_bytes + remaining_needed + 10).min(buffer.len());
+                        if let Ok(additional) = port.read(&mut buffer[total_bytes..read_end]) {
                             if additional > 0 {
                                 total_bytes += additional;
                             }
@@ -849,42 +917,48 @@ pub fn master_poll_loop(params: &MasterPollParams) -> Result<()> {
                             let byte_count = response[2] as usize;
                             let expected_byte_count = match params.reg_mode {
                                 RegisterMode::Holding | RegisterMode::Input => {
-                                    params.register_length as usize * 2
+                                    register_length as usize * 2
                                 }
                                 RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                                    (params.register_length as usize).div_ceil(8)
+                                    (register_length as usize).div_ceil(8)
                                 }
                             };
 
                             if byte_count == expected_byte_count {
-                                // Parse values
-                                match parse_response_values(
-                                    response,
-                                    params.register_length,
-                                    params.reg_mode,
-                                ) {
-                                    Ok(values) => {
-                                        if values.len() == params.register_length as usize {
-                                            Ok(ModbusResponse {
-                                                station_id: params.station_id,
-                                                register_address: params.register_address,
-                                                register_mode:
-                                                    ResponseRegisterMode::from_register_mode(
-                                                        params.reg_mode,
-                                                    ),
-                                                values,
-                                                timestamp: chrono::Utc::now().to_rfc3339(),
-                                            })
-                                        } else {
-                                            Err(anyhow!(
-                                                "Value count mismatch: expected {}, got {}",
-                                                params.register_length,
-                                                values.len()
-                                            ))
+                                // Audit aoba-R1-1: verify CRC before
+                                // trusting the payload.
+                                if let Err(crc_err) = verify_response_crc(response) {
+                                    Err(crc_err)
+                                } else {
+                                    // Parse values
+                                    match parse_response_values(
+                                        response,
+                                        register_length,
+                                        params.reg_mode,
+                                    ) {
+                                        Ok(values) => {
+                                            if values.len() == register_length as usize {
+                                                Ok(ModbusResponse {
+                                                    station_id: params.station_id,
+                                                    register_address: params.register_address,
+                                                    register_mode:
+                                                        ResponseRegisterMode::from_register_mode(
+                                                            params.reg_mode,
+                                                        ),
+                                                    values,
+                                                    timestamp: chrono::Utc::now().to_rfc3339(),
+                                                })
+                                            } else {
+                                                Err(anyhow!(
+                                                    "Value count mismatch: expected {}, got {}",
+                                                    register_length,
+                                                    values.len()
+                                                ))
+                                            }
                                         }
+                                        Err(e) => Err(anyhow!("Failed to parse values: {e}")),
                                     }
-                                    Err(e) => Err(anyhow!("Failed to parse values: {e}")),
-                                }
+                                } // close the CRC-verified else block
                             } else {
                                 Err(anyhow!(
                                     "Byte count mismatch: expected {expected_byte_count}, got {byte_count}"
@@ -1037,4 +1111,51 @@ pub fn master_poll_once_and_stop(
 
     // Return result
     result.map_err(|e| anyhow!("Timeout or channel error: {e}"))
+}
+
+#[cfg(test)]
+mod crc_verification_tests {
+    use super::*;
+
+    /// Build a valid RTU frame: payload + little-endian CRC16.
+    fn frame_with_crc(payload: &[u8]) -> Vec<u8> {
+        let mut frame = payload.to_vec();
+        let crc = crc16_modbus(payload);
+        frame.push((crc & 0xFF) as u8);
+        frame.push((crc >> 8) as u8);
+        frame
+    }
+
+    #[test]
+    fn valid_crc_passes() {
+        // A realistic fc03 response: station 1, func 3, byte count 2,
+        // two register bytes.
+        let frame = frame_with_crc(&[0x01, 0x03, 0x02, 0x12, 0x34]);
+        assert!(verify_response_crc(&frame).is_ok());
+    }
+
+    #[test]
+    fn corrupted_payload_fails() {
+        let mut frame = frame_with_crc(&[0x01, 0x03, 0x02, 0x12, 0x34]);
+        let len = frame.len();
+        frame[3] ^= 0xFF; // flip bits in the payload
+        assert!(verify_response_crc(&frame).is_err());
+        let _ = len;
+    }
+
+    #[test]
+    fn truncated_frame_fails() {
+        assert!(verify_response_crc(&[0x01, 0x03, 0x02]).is_err());
+    }
+
+    #[test]
+    fn register_length_clamp_boundary_math() {
+        // Audit aoba-R1-4: 121 is the largest register count whose
+        // response still fits the 256-byte read buffer with headroom
+        // (5 header/bytes-count bytes + 2·121 data = 247, +10 slack).
+        let len: u16 = 121;
+        assert!(5 + 2 * len as usize <= 256);
+        let over: u16 = 122;
+        assert!(5 + 2 * over as usize + 10 > 256);
+    }
 }

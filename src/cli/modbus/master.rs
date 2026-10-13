@@ -1652,8 +1652,12 @@ async fn update_storage_loop(args: UpdateStorageArgs) -> Result<()> {
                 };
 
                 if parsed_url.scheme() == "mqtts" {
-                    log::error!("mqtts:// requested but TLS is not supported; refusing plaintext fallback");
-                    return Err(anyhow!("mqtts:// is not supported yet; use mqtt:// (TLS support pending)"));
+                    log::error!(
+                        "mqtts:// requested but TLS is not supported; refusing plaintext fallback"
+                    );
+                    return Err(anyhow!(
+                        "mqtts:// is not supported yet; use mqtt:// (TLS support pending)"
+                    ));
                 }
 
                 let host = parsed_url.host_str().unwrap_or("localhost").to_string();

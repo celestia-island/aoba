@@ -4,10 +4,14 @@ use serde::{Deserialize, Serialize};
 use yuuka::derive_struct;
 
 const EN_US_TOML: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/en_us.toml"));
-const ZH_HANS_TOML: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh-Hans.toml"));
-const ZH_HANT_TOML: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/res/i18n/zh-Hant.toml"));
+const ZH_HANS_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/res/i18n/zh-Hans.toml"
+));
+const ZH_HANT_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/res/i18n/zh-Hant.toml"
+));
 
 derive_struct! {
     #[derive(PartialEq, Eq, Serialize, Deserialize)]
