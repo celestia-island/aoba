@@ -216,6 +216,22 @@ impl ModbusMaster {
         use crate::protocol::modbus::generate_pull_set_coils_request;
         use std::io::{Read, Write};
 
+        // Audit aoba-R1-2/R3: the dry-run guard runs before the port
+        // handle is resolved — a dry-run write must work with NO port
+        // at all (that is its purpose: verify the frame without
+        // touching hardware).
+        if self.dry_run {
+            let mut request = generate_pull_set_coils_request(self.station_id, values)?;
+            let mut frame = Vec::new();
+            request.generate_set_coils_bulk(address, values, &mut frame)?;
+            log::warn!(
+                "DRY-RUN write_coils: station={} address=0x{address:04X} frame={:02X?}",
+                self.station_id,
+                frame
+            );
+            return Ok(());
+        }
+
         let port_arc = self
             .port_arc
             .as_ref()
@@ -231,17 +247,6 @@ impl ModbusMaster {
         if values.len() == 11 && frame.len() >= 9 && frame[6] == 2 {
             frame.swap(7, 8);
             log::debug!("🔄 Applied byte-swap for 11-coil write");
-        }
-
-        // Audit aoba-R1-2: dry-run — log the frame and stop before the
-        // port is touched.
-        if self.dry_run {
-            log::warn!(
-                "DRY-RUN write_coils: station={} address=0x{address:04X} frame={:02X?}",
-                self.station_id,
-                frame
-            );
-            return Ok(());
         }
 
         // Send request
@@ -304,16 +309,10 @@ impl ModbusMaster {
         use crate::protocol::modbus::generate_pull_set_holdings_bulk_request;
         use std::io::{Read, Write};
 
-        let port_arc = self
-            .port_arc
-            .as_ref()
-            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
-
-        let (_request, frame) =
-            generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
-
-        // Audit aoba-R1-2: dry-run guard (see write_coils).
+        // Audit aoba-R1-2/R3: dry-run guard before port resolution.
         if self.dry_run {
+            let (_request, frame) =
+                generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
             log::warn!(
                 "DRY-RUN write_registers: station={} address=0x{address:04X} frame={:02X?}",
                 self.station_id,
@@ -321,6 +320,14 @@ impl ModbusMaster {
             );
             return Ok(());
         }
+
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
+
+        let (_request, frame) =
+            generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
 
         let mut port = port_arc.lock();
         port.write_all(&frame)?;
@@ -336,6 +343,16 @@ impl ModbusMaster {
         }
 
         let response = &buffer[..bytes_read];
+        // Audit aoba-R1-1: station id + CRC on the write echo (mirror of
+        // write_coils — R3 gap ①).
+        if response[0] != self.station_id {
+            return Err(anyhow!(
+                "Write confirmation station mismatch: expected {}, got {}",
+                self.station_id,
+                response[0]
+            ));
+        }
+        crate::api::modbus::core::verify_response_crc(response)?;
         if response[1] == 0x10 {
             Ok(())
         } else if response[1] & 0x80 != 0 {
@@ -361,15 +378,10 @@ impl ModbusMaster {
         use crate::protocol::modbus::generate_pull_set_holding_request;
         use std::io::{Read, Write};
 
-        let port_arc = self
-            .port_arc
-            .as_ref()
-            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
-
-        let (_request, frame) = generate_pull_set_holding_request(self.station_id, address, value)?;
-
-        // Audit aoba-R1-2: dry-run guard (see write_coils).
+        // Audit aoba-R1-2/R3: dry-run guard before port resolution.
         if self.dry_run {
+            let (_request, frame) =
+                generate_pull_set_holding_request(self.station_id, address, value)?;
             log::warn!(
                 "DRY-RUN write_holding: station={} address=0x{address:04X} value={value} frame={:02X?}",
                 self.station_id,
@@ -377,6 +389,13 @@ impl ModbusMaster {
             );
             return Ok(());
         }
+
+        let port_arc = self
+            .port_arc
+            .as_ref()
+            .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
+
+        let (_request, frame) = generate_pull_set_holding_request(self.station_id, address, value)?;
 
         let mut port = port_arc.lock();
         port.write_all(&frame)?;
@@ -392,6 +411,15 @@ impl ModbusMaster {
         }
 
         let response = &buffer[..bytes_read];
+        // Audit aoba-R1-1: station id + CRC on the write echo (R3 gap ①).
+        if response[0] != self.station_id {
+            return Err(anyhow!(
+                "Write confirmation station mismatch: expected {}, got {}",
+                self.station_id,
+                response[0]
+            ));
+        }
+        crate::api::modbus::core::verify_response_crc(response)?;
         if response[1] == 0x06 {
             Ok(())
         } else if response[1] & 0x80 != 0 {
@@ -1386,5 +1414,43 @@ mod tests {
             master.is_finished(),
             "background task must be finished after abort()"
         );
+    }
+
+    /// Audit aoba-R1-2/R3: a dry-run write must succeed WITHOUT any
+    /// serial port — that is the entire point (verify the frame without
+    /// touching hardware). The guard runs before the port handle is
+    /// resolved, so port_arc=None is fine.
+    #[tokio::test]
+    async fn dry_run_write_succeeds_without_a_port() {
+        let handle = tokio::spawn(std::future::pending::<anyhow::Result<()>>());
+        let master = ModbusMaster {
+            receiver: flume::unbounded().1,
+            control_sender: None,
+            handle,
+            port_arc: None,
+            station_id: 1,
+            dry_run: true,
+        };
+
+        // All three write methods must return Ok with no port attached.
+        assert!(master.write_coils(0x0000, &[true, false, true]).is_ok());
+        assert!(master.write_registers(0x0000, &[0x1234, 0x5678]).is_ok());
+        assert!(master.write_holding(0x0000, 0xABCD).is_ok());
+    }
+
+    /// The non-dry-run path still requires a port (manual mode guard).
+    #[tokio::test]
+    async fn non_dry_run_write_requires_a_port() {
+        let handle = tokio::spawn(std::future::pending::<anyhow::Result<()>>());
+        let master = ModbusMaster {
+            receiver: flume::unbounded().1,
+            control_sender: None,
+            handle,
+            port_arc: None,
+            station_id: 1,
+            dry_run: false,
+        };
+
+        assert!(master.write_coils(0x0000, &[true]).is_err());
     }
 }
