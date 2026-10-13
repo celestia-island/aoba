@@ -749,27 +749,43 @@ fn commit_text_edit(
                     }
                 }
                 types::cursor::ModbusDashboardCursor::RegisterLength { index } => {
-                    if let Ok(length) = value.parse::<u16>() {
-                        write_status(|status| {
-                            let port = status
-                                .ports
-                                .map
-                                .get_mut(&port_name)
-                                .ok_or_else(|| anyhow!("Port not found"))?;
-                            let types::port::PortConfig::Modbus {
-                                mode: _,
-                                master_source: _,
-                                stations,
-                            } = &mut port.config;
-                            let mut all_items: Vec<_> = stations.iter_mut().collect();
-                            if let Some(item) = all_items.get_mut(index) {
-                                item.register_length = length;
-                                item.last_values.resize(length as usize, 0);
-                                port.config_modified = true; // Mark as modified
-                                log::info!("Updated register length for index {index} to {length}");
-                            }
-                            Ok(())
-                        })?;
+                    // Audit aoba-R4-1: a failed parse used to be silent —
+                    // the user believed the new value was applied. Surface
+                    // the rejection through the status error channel.
+                    match value.parse::<u16>() {
+                        Ok(length) => {
+                            write_status(|status| {
+                                let port = status
+                                    .ports
+                                    .map
+                                    .get_mut(&port_name)
+                                    .ok_or_else(|| anyhow!("Port not found"))?;
+                                let types::port::PortConfig::Modbus {
+                                    mode: _,
+                                    master_source: _,
+                                    stations,
+                                } = &mut port.config;
+                                let mut all_items: Vec<_> = stations.iter_mut().collect();
+                                if let Some(item) = all_items.get_mut(index) {
+                                    item.register_length = length;
+                                    item.last_values.resize(length as usize, 0);
+                                    port.config_modified = true; // Mark as modified
+                                    log::info!(
+                                        "Updated register length for index {index} to {length}"
+                                    );
+                                }
+                                Ok(())
+                            })?;
+                        }
+                        Err(e) => {
+                            write_status(|status| {
+                                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                                    message: format!("invalid register length {value:?}: {e}"),
+                                    timestamp: chrono::Local::now(),
+                                });
+                                Ok(())
+                            })?;
+                        }
                     }
                 }
                 types::cursor::ModbusDashboardCursor::Register {
