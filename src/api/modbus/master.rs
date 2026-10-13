@@ -24,6 +24,10 @@ pub struct ModbusMaster {
     port_arc: Option<Arc<Mutex<Box<dyn serialport::SerialPort>>>>,
     /// Station ID for manual operations
     station_id: u8,
+    /// Audit aoba-R1-2: when set, write methods generate and log the
+    /// frame but never touch the serial port — a dry-run guard so a
+    /// misconfigured port/station cannot write a real actuator.
+    dry_run: bool,
 }
 
 impl ModbusMaster {
@@ -109,6 +113,7 @@ impl ModbusMaster {
             handle,
             port_arc: None,
             station_id,
+            dry_run: false,
         })
     }
 
@@ -155,6 +160,7 @@ impl ModbusMaster {
             handle,
             port_arc: Some(port_arc_clone),
             station_id,
+            dry_run: false,
         })
     }
 
@@ -184,6 +190,14 @@ impl ModbusMaster {
             length,
             register_mode,
         )
+    }
+
+    /// Enable dry-run mode: write methods generate and log the frame
+    /// but never touch the serial port (audit aoba-R1-2).
+    #[must_use]
+    pub const fn with_dry_run(mut self) -> Self {
+        self.dry_run = true;
+        self
     }
 
     /// Write coils (01 function code) to the slave
@@ -219,6 +233,17 @@ impl ModbusMaster {
             log::debug!("🔄 Applied byte-swap for 11-coil write");
         }
 
+        // Audit aoba-R1-2: dry-run — log the frame and stop before the
+        // port is touched.
+        if self.dry_run {
+            log::warn!(
+                "DRY-RUN write_coils: station={} address=0x{address:04X} frame={:02X?}",
+                self.station_id,
+                frame
+            );
+            return Ok(());
+        }
+
         // Send request
         let mut port = port_arc.lock();
         port.write_all(&frame)?;
@@ -236,6 +261,15 @@ impl ModbusMaster {
 
         // Check response
         let response = &buffer[..bytes_read];
+        // Audit aoba-R1-1: verify station id and CRC on the write echo.
+        if response[0] != self.station_id {
+            return Err(anyhow!(
+                "Write confirmation station mismatch: expected {}, got {}",
+                self.station_id,
+                response[0]
+            ));
+        }
+        crate::api::modbus::core::verify_response_crc(response)?;
         if response[1] == 0x0F {
             // Success
             Ok(())
@@ -277,6 +311,16 @@ impl ModbusMaster {
 
         let (_request, frame) =
             generate_pull_set_holdings_bulk_request(self.station_id, address, values)?;
+
+        // Audit aoba-R1-2: dry-run guard (see write_coils).
+        if self.dry_run {
+            log::warn!(
+                "DRY-RUN write_registers: station={} address=0x{address:04X} frame={:02X?}",
+                self.station_id,
+                frame
+            );
+            return Ok(());
+        }
 
         let mut port = port_arc.lock();
         port.write_all(&frame)?;
@@ -323,6 +367,16 @@ impl ModbusMaster {
             .ok_or_else(|| anyhow!("Manual mode not available (created with automatic polling)"))?;
 
         let (_request, frame) = generate_pull_set_holding_request(self.station_id, address, value)?;
+
+        // Audit aoba-R1-2: dry-run guard (see write_coils).
+        if self.dry_run {
+            log::warn!(
+                "DRY-RUN write_holding: station={} address=0x{address:04X} value={value} frame={:02X?}",
+                self.station_id,
+                frame
+            );
+            return Ok(());
+        }
 
         let mut port = port_arc.lock();
         port.write_all(&frame)?;
@@ -442,6 +496,7 @@ fn new_master_legacy(
         handle,
         port_arc: None,
         station_id,
+        dry_run: false,
     }
 }
 
@@ -472,6 +527,7 @@ impl ModbusMaster {
             handle,
             port_arc: None,
             station_id,
+            dry_run: false,
         })
     }
 
@@ -543,13 +599,18 @@ pub async fn run_master_loop_with_handler(
                     let write_result = match config.register_mode {
                         RegisterMode::Coils => {
                             let coil_values: Vec<bool> = values.iter().map(|&v| v != 0).collect();
+                            // Audit aoba-R1-3: the `?` here propagated a
+                            // single confirmation timeout out of the whole
+                            // master loop — the error now flows into the
+                            // write_result handling (warn + hook + continue)
+                            // like every other write failure.
                             crate::api::modbus::core::master_write_coils(
                                 &port_arc,
                                 config.station_id,
                                 config.register_address,
                                 &coil_values,
-                            )?;
-                            Ok(())
+                            )
+                            .map(|_| ())
                         }
                         RegisterMode::Holding => {
                             use std::io::Write;
@@ -559,10 +620,47 @@ pub async fn run_master_loop_with_handler(
                                     config.register_address,
                                     &values,
                                 )?;
-                            let mut port = port_arc.lock();
-                            port.write_all(&frame)?;
-                            port.flush()?;
-                            drop(port);
+                            {
+                                let mut port = port_arc.lock();
+                                port.write_all(&frame)?;
+                                port.flush()?;
+                            }
+                            // Audit aoba-R1-3: the holding write never read
+                            // the echo — the write result was unknown. Read
+                            // + verify the confirmation (station id, echo
+                            // function code, CRC).
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            let mut buffer = [0u8; 256];
+                            let bytes_read = {
+                                let mut port = port_arc.lock();
+                                port.read(&mut buffer)?
+                            };
+                            if bytes_read < 8 {
+                                return Err(anyhow::anyhow!(
+                                    "holding write confirmation too short: {bytes_read} bytes"
+                                ));
+                            }
+                            let response = &buffer[..bytes_read];
+                            if response[0] != config.station_id {
+                                return Err(anyhow::anyhow!(
+                                    "holding write station mismatch: expected {}, got {}",
+                                    config.station_id,
+                                    response[0]
+                                ));
+                            }
+                            if response[1] & 0x80 != 0 {
+                                return Err(anyhow::anyhow!(
+                                    "Modbus exception: error code 0x{:02X}",
+                                    response[2]
+                                ));
+                            }
+                            if response[1] != 0x10 {
+                                return Err(anyhow::anyhow!(
+                                    "holding write confirmation function mismatch: expected 0x10, got 0x{:02X}",
+                                    response[1]
+                                ));
+                            }
+                            crate::api::modbus::core::verify_response_crc(response)?;
                             Ok(())
                         }
                         other => {
@@ -798,7 +896,13 @@ async fn run_master_loop(
                                                 match port.read(&mut buffer) {
                                                     Ok(bytes_read) if bytes_read >= 8 => {
                                                         let response = &buffer[..bytes_read];
-                                                        if response[1] == 0x0F {
+                                                        // Audit aoba-R1-1: station
+                                                        // id + CRC on the write echo.
+                                                        if response[0] != station_id {
+                                                            log::error!("Write confirmation station mismatch: expected {}, got {}", station_id, response[0]);
+                                                        } else if let Err(e) = crate::api::modbus::core::verify_response_crc(response) {
+                                                            log::error!("Write confirmation {e}");
+                                                        } else if response[1] == 0x0F {
                                                             log::info!("Successfully wrote {} coils to slave at address 0x{:04X}", coil_values.len(), register_address);
                                                         } else if response[1] & 0x80 != 0 {
                                                             log::error!("Modbus exception: error code 0x{:02X}", response[2]);
@@ -1071,7 +1175,13 @@ async fn run_multi_register_master_loop(
                                             match read_result {
                                                 Ok(bytes_read) if bytes_read >= 8 => {
                                                     let response = &buffer[..bytes_read];
-                                                    if response[1] == 0x0F {
+                                                    // Audit aoba-R1-1: station
+                                                    // id + CRC on the write echo.
+                                                    if response[0] != station_id {
+                                                        log::error!("Write confirmation station mismatch: expected {}, got {}", station_id, response[0]);
+                                                    } else if let Err(e) = crate::api::modbus::core::verify_response_crc(response) {
+                                                        log::error!("Write confirmation {e}");
+                                                    } else if response[1] == 0x0F {
                                                         log::info!("Successfully wrote {} coils to slave at address 0x{:04X}", coil_values.len(), coils_config.register_address);
                                                     } else if response[1] & 0x80 != 0 {
                                                         log::error!(
@@ -1252,6 +1362,7 @@ mod tests {
             handle,
             port_arc: None,
             station_id: 1,
+            dry_run: false,
         };
 
         assert!(!master.is_finished());

@@ -43,6 +43,11 @@ pub struct ModbusPortConfig {
     pub baud_rate: u32,
     pub station_id: u8,
     pub register_address: u16,
+    /// Audit aoba-R1-4: holding/input reads cap at 125 registers (fc03/04
+    /// protocol limit); coils/discrete at 1600 (fc01/02). The sync poll's
+    /// 256-byte response buffer overflows above 121 holding registers, so
+    /// the accessor clamps and callers should prefer the accessor over
+    /// reading the field directly.
     pub register_length: u16,
     pub register_mode: RegisterMode,
     pub timeout_ms: u64,
@@ -54,6 +59,20 @@ pub struct ModbusPortConfig {
     /// this is the interval between each register type poll, ensuring the slave has time to process.
     /// Default: 1000ms (1 second); adjust based on slave response time and communication stability.
     pub poll_interval_ms: u64,
+}
+
+impl ModbusPortConfig {
+    /// Audit aoba-R1-4: the effective register length for a poll —
+    /// clamped to the protocol per-mode limit AND the 121-register
+    /// ceiling that keeps the response inside the 256-byte read buffer
+    /// used by the sync/async poll paths (5 + 2·len + 10 ≤ 256).
+    #[must_use]
+    pub fn clamped_register_length(&self) -> u16 {
+        match self.register_mode {
+            RegisterMode::Holding | RegisterMode::Input => self.register_length.min(121),
+            RegisterMode::Coils | RegisterMode::DiscreteInputs => self.register_length.min(121),
+        }
+    }
 }
 
 /// Configuration for a single register polling task
