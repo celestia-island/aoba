@@ -137,7 +137,11 @@ pub fn slave_process_one_request_with_hooks(
     let bytes_read = port.read(&mut buffer[total_bytes..])?;
     if bytes_read == 0 && total_bytes == 0 {
         drop(port);
-        return Err(anyhow!("No data received"));
+        return Err(PollError::Protocol {
+            tag: ProtocolTag::Timeout,
+            detail: "No data received".to_string(),
+        }
+        .into());
     }
     total_bytes += bytes_read;
 
@@ -169,7 +173,11 @@ pub fn slave_process_one_request_with_hooks(
         if total_bytes > MODBUS_RTU_MIN_RESPONSE_SIZE * 2 + 4 {
             // Clear buffer; do not attempt parsing
             params.residual_buffer.lock().clear();
-            return Err(anyhow!("Skipped response frame echo ({total_bytes} bytes)"));
+            return Err(PollError::Protocol {
+                tag: ProtocolTag::Echo,
+                detail: format!("Skipped response frame echo ({total_bytes} bytes)"),
+            }
+            .into());
         }
     }
 
@@ -334,11 +342,19 @@ pub fn slave_process_one_request_with_hooks(
     // Return a special marker error to tell the caller to pause polling
     last_parse_error.map_or_else(
         || {
-            Err(anyhow!(
-                "PARSE_FAILED: No valid frame found in {total_bytes} bytes"
-            ))
+            Err(PollError::Protocol {
+                tag: ProtocolTag::Parse,
+                detail: format!("No valid frame found in {total_bytes} bytes"),
+            }
+            .into())
         },
-        |err| Err(anyhow!("PARSE_FAILED: {err}")),
+        |err| {
+            Err(PollError::Protocol {
+                tag: ProtocolTag::Parse,
+                detail: format!("{err}"),
+            }
+            .into())
+        },
     )
 }
 
@@ -516,6 +532,61 @@ pub(crate) fn extract_values_from_storage(
 /// Returns an error if generating the request frame fails, writing to or reading
 /// from the port fails, or if the response is invalid (station ID mismatch,
 /// function code mismatch, byte count mismatch, etc.).
+/// Audit aoba-R5-1: structured poll error — the slave loop used to
+/// classify failures by matching substrings of the error MESSAGE
+/// ("crc"/"frame"/"parse"), which broke silently whenever a wording
+/// changed. Protocol errors are transient (bus noise — retry/ignore);
+/// everything else is fatal (port gone, permission denied).
+#[derive(Debug, thiserror::Error)]
+pub enum PollError {
+    /// Transient bus-level failure: the frame was unreadable or failed
+    /// its integrity check. Safe to ignore and retry next cycle. The
+    /// tag carries the machine-readable failure class (audit
+    /// aoba-R5-1: classification must not depend on message wording).
+    #[error("protocol error ({tag:?}): {detail}")]
+    Protocol { tag: ProtocolTag, detail: String },
+    /// Fatal transport failure: the port is gone or unusable.
+    #[error("io error: {0}")]
+    Io(String),
+}
+
+/// Machine-readable class of a transient protocol failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProtocolTag {
+    /// Nothing arrived within the window.
+    Timeout,
+    /// The frame could not be parsed.
+    Parse,
+    /// Integrity check (CRC) failed or the frame was too short.
+    Integrity,
+    /// Our own echoed request was skipped.
+    Echo,
+}
+
+impl PollError {
+    /// Whether the failed poll should be retried on the next cycle
+    /// (true) or is fatal for the port (false).
+    #[must_use]
+    pub fn is_transient(&self) -> bool {
+        matches!(self, Self::Protocol { .. })
+    }
+
+    /// The failure class of a transient protocol error.
+    #[must_use]
+    pub const fn tag(&self) -> Option<ProtocolTag> {
+        match self {
+            Self::Protocol { tag, .. } => Some(*tag),
+            Self::Io(_) => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for PollError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e.to_string())
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 pub(super) fn execute_single_poll_internal(
     port_arc: &Arc<Mutex<Box<dyn serialport::SerialPort>>>,

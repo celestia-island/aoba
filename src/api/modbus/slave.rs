@@ -3,6 +3,7 @@ use parking_lot::Mutex;
 use std::{sync::Arc, time::Duration};
 
 use super::{
+    core::ProtocolTag,
     core::{slave_process_one_request, SlaveRequestParams},
     traits::ModbusSlaveHandler,
     ModbusHook, ModbusPortConfig, RegisterMode,
@@ -301,19 +302,21 @@ impl ModbusSlaveIterator {
                     return Ok(response);
                 }
                 Err(e) => {
-                    let err_msg = e.to_string().to_lowercase();
-
-                    // Timeout or empty read - retry silently
-                    if err_msg.contains("timeout")
-                        || err_msg.contains("timed out")
-                        || err_msg.contains("no data received")
-                    {
+                    // Audit aoba-R5-1: classification is now STRUCTURED —
+                    // the poll error carries its failure class as a tag,
+                    // so wording changes can no longer flip a fatal I/O
+                    // error into "ignore" (or vice versa).
+                    let poll_tag = e
+                        .downcast_ref::<super::core::PollError>()
+                        .and_then(super::core::PollError::tag);
+                    if poll_tag == Some(ProtocolTag::Timeout) {
                         continue;
                     }
 
                     // Parse/protocol errors - log warning and continue
-                    // Special handling: PARSE_FAILED indicates need to detect consecutive failures
-                    if err_msg.contains("parse_failed") {
+                    // Special handling: the Parse tag indicates need to
+                    // detect consecutive failures
+                    if poll_tag == Some(ProtocolTag::Parse) {
                         // Increment consecutive failure counter
                         let mut counter = self.consecutive_parse_failures.lock();
                         *counter += 1;
@@ -356,15 +359,9 @@ impl ModbusSlaveIterator {
                         continue;
                     }
 
-                    if err_msg.contains("parse")
-                        || err_msg.contains("invalid")
-                        || err_msg.contains("checksum")
-                        || err_msg.contains("crc")
-                        || err_msg.contains("frame")
-                        || err_msg.contains("broken")
-                        || err_msg.contains("malformed")
-                        || err_msg.contains("incomplete")
-                    {
+                    // Any other tagged protocol failure (integrity/echo)
+                    // is transient by definition.
+                    if poll_tag.is_some() {
                         log::warn!("⚠️  Modbus protocol error (ignoring): {e}");
                         continue;
                     }

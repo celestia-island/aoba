@@ -2152,8 +2152,21 @@ fn run_ipc_socket_server_sync(
         #[cfg(unix)]
         IpcSocketTarget::File { name, path } => {
             if path.exists() {
+                // Audit aoba-R2-1: only a previous SOCKET may be removed
+                // — an ordinary file at the path (user mistake) must
+                // refuse instead of being silently unlinked.
+                let meta = std::fs::metadata(path)
+                    .map_err(|e| anyhow!("cannot stat ipc path {}: {e}", path.display()))?;
+                use std::os::unix::fs::FileTypeExt;
+                if !meta.file_type().is_socket() {
+                    return Err(anyhow!(
+                        "ipc path {} exists and is not a socket; refusing to remove it",
+                        path.display()
+                    ));
+                }
                 log::warn!("Removing existing socket file: {}", path.display());
-                let _ = std::fs::remove_file(path);
+                std::fs::remove_file(path)
+                    .map_err(|e| anyhow!("cannot remove stale socket: {e}"))?;
             }
             ListenerOptions::new().name(name.clone()).create_sync()
         }

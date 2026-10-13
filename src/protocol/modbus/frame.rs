@@ -83,7 +83,12 @@ pub async fn read_modbus_frame(
         if collected.is_empty() {
             return Ok(None);
         }
-        return Ok(Some(Bytes::from(collected)));
+        // Audit aoba-R5-2: a partial header never carries a verifiable
+        // CRC — serving it as a frame would bypass integrity checking.
+        anyhow::bail!(
+            "incomplete frame: header timeout with {} bytes",
+            collected.len()
+        );
     }
 
     // Helper: attempt to determine full frame length from currently collected bytes.
@@ -130,7 +135,11 @@ pub async fn read_modbus_frame(
             if collected.is_empty() {
                 return Ok(None);
             }
-            return Ok(Some(Bytes::from(collected)));
+            // Audit aoba-R5-2: unverified partial (see header-timeout note).
+            anyhow::bail!(
+                "incomplete frame: length undecidable after header timeout ({} bytes)",
+                collected.len()
+            );
         }
         // attempt to read one more byte to progress for functions that need more header
         // try to read up to 1 more byte
@@ -145,14 +154,23 @@ pub async fn read_modbus_frame(
         if collected.is_empty() {
             return Ok(None);
         }
-        return Ok(Some(Bytes::from(collected)));
+        // Audit aoba-R5-2: unverified partial (see header-timeout note).
+        anyhow::bail!(
+            "incomplete frame: length undecidable ({} bytes collected)",
+            collected.len()
+        );
     };
     if !(MODBUS_MIN_FRAME_LEN..=MODBUS_MAX_FRAME_LEN).contains(&guessed_len) {
         log::warn!("Guessed invalid frame length: {guessed_len}");
         if collected.is_empty() {
             return Ok(None);
         }
-        return Ok(Some(Bytes::from(collected)));
+        // Audit aoba-R5-2: the length guess failed, so the bytes were
+        // never CRC-verified against a known frame boundary.
+        anyhow::bail!(
+            "frame with undecidable length ({} bytes collected)",
+            collected.len()
+        );
     }
     // Read the remaining bytes with a 3 s additional deadline
     let body_deadline = chrono::Utc::now() + Duration::seconds(MODBUS_BODY_TIMEOUT_SECS);
@@ -170,7 +188,12 @@ pub async fn read_modbus_frame(
             if collected.is_empty() {
                 return Ok(None);
             }
-            return Ok(Some(Bytes::from(collected)));
+            // Audit aoba-R5-2: truncated body — CRC cannot cover what
+            // never arrived.
+            anyhow::bail!(
+                "incomplete frame: body timeout (expected {guessed_len}, got {})",
+                collected.len()
+            );
         }
         // Use async sleep instead of blocking sleep
         sleep_1s().await;
@@ -180,7 +203,11 @@ pub async fn read_modbus_frame(
         if collected.is_empty() {
             return Ok(None);
         }
-        return Ok(Some(Bytes::from(collected)));
+        // Audit aoba-R5-2: length mismatch — treat as unverified partial.
+        anyhow::bail!(
+            "incomplete frame: expected {guessed_len}, got {}",
+            collected.len()
+        );
     }
 
     // CRC check (little endian stored: low then high)
