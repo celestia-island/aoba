@@ -78,6 +78,7 @@ rand = "^0.10"
 ratatui = "^0.30"
 regex = "^1"
 rmodbus = { version = "^0.12", features = ["with_serde"] }
+hare = { version = "0.1", git = "https://github.com/celestia-island/hare.git", branch = "master", default-features = false }
 rumqttc = { version = "^0.25", default-features = false, features = [
   "use-rustls-no-provider",
 ] }
@@ -136,6 +137,8 @@ parking_lot.workspace = true
 postcard.workspace = true
 ratatui.workspace = true
 rmodbus.workspace = true
+# hare — family protocol hub (no_std bridge; modbus codec layer adopted 2026-10-22)
+hare.workspace = true
 rumqttc.workspace = true
 rustls.workspace = true
 serde.workspace = true

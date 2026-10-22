@@ -3,8 +3,9 @@ use parking_lot::Mutex;
 use std::{sync::Arc, time::Duration};
 
 use super::{
-    core::ProtocolTag,
-    core::{slave_process_one_request, SlaveRequestParams},
+    core::{
+        ProtocolTag, {slave_process_one_request, SlaveRequestParams},
+    },
     traits::ModbusSlaveHandler,
     ModbusHook, ModbusPortConfig, RegisterMode,
 };

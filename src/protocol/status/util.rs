@@ -16,22 +16,12 @@ pub fn port_stations_to_config(port_data: &PortData) -> Vec<StationConfig> {
     }
 }
 
-/// CRC16 checksum for Modbus
+/// CRC16 checksum for Modbus — delegates to the family hub
+/// (`hare::protocol::modbus::crc16`, the single source since 2026-10-22;
+/// the local implementation this used to carry is retired).
 #[must_use]
 pub fn crc16_modbus(data: &[u8]) -> u16 {
-    let mut crc: u16 = 0xFFFF;
-    for &b in data {
-        crc ^= u16::from(b);
-        for _ in 0..8 {
-            if crc & 0x0001 != 0 {
-                crc >>= 1;
-                crc ^= 0xA001;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    crc
+    hare::protocol::modbus::crc16(data)
 }
 
 /// Create a serial port builder

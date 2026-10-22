@@ -1,4 +1,4 @@
-use anyhow::{ensure, Result};
+use anyhow::{anyhow, ensure, Result};
 
 use rmodbus::client::ModbusRequest;
 
@@ -27,13 +27,8 @@ pub fn parse_pull_get_coils(
         ));
     }
 
-    let mut values = response[3..response.len() - 2]
-        .iter()
-        .flat_map(|byte| (0..8).map(move |i| ((*byte) & (1 << i)) != 0))
-        .collect::<Vec<bool>>();
-    if values.len() > count as usize {
-        values.truncate(count as usize);
-    }
+    let values = hare::protocol::modbus::parse_bit_values(response, count as usize)
+        .map_err(|e| anyhow::anyhow!("coils parse: {e:?}"))?;
     ensure!(
         values.len() == count as usize,
         "Invalid number of coils in response"
