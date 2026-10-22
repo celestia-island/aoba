@@ -25,12 +25,6 @@ pub fn parse_pull_get_inputs(request: &mut ModbusRequest, response: &[u8]) -> Re
         ));
     }
 
-    let values = response[3..response.len() - 2]
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|c| u16::from_be_bytes(*c))
-        .collect::<Vec<_>>();
-
-    Ok(values)
+    hare::protocol::modbus::parse_register_values(response)
+        .map_err(|e| anyhow::anyhow!("inputs parse: {e:?}"))
 }

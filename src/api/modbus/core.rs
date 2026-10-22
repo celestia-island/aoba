@@ -19,24 +19,8 @@ pub(crate) const MODBUS_RTU_MIN_RESPONSE_SIZE: usize = 8;
 /// Audit aoba-R1-1: verify the trailing CRC16 of a raw RTU response
 /// frame. `frame` is the full PDU + 2 CRC bytes; returns an error when
 /// the checksum does not match (bus corruption / collided frame).
-/// The standard Modbus RTU CRC16 (poly 0xA001, init 0xFFFF) - same
-/// algorithm as protocol::status::util::crc16_modbus, which is private
-/// to its module.
-fn crc16_modbus(data: &[u8]) -> u16 {
-    let mut crc: u16 = 0xFFFF;
-    for &b in data {
-        crc ^= u16::from(b);
-        for _ in 0..8 {
-            if crc & 0x0001 != 0 {
-                crc >>= 1;
-                crc ^= 0xA001;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    crc
-}
+/// CRC16 itself comes from the family hub (single source).
+use hare::protocol::modbus::crc16 as crc16_modbus;
 
 pub(crate) fn verify_response_crc(frame: &[u8]) -> Result<()> {
     if frame.len() < 4 {
