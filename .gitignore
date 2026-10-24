@@ -1,27 +1,34 @@
+# Rust build artifacts
 target
 Cargo.lock
 
+# Local scratch / logs
 *.log
-
-.DS_Store
-*.local
 *.log*
+*.local
+.DS_Store
 
+# Editors
 .vscode
 .idea
-
-.env
 *.swp
 *.swo
+*~
+
+# Local cargo config (may carry machine-specific paths)
+.cargo/config.toml
+
+# Environment files
+.env
+
+# Patch debris
 *.orig
-__pycache__/
-*.pyc
-=======
 
 # Python cache
+__pycache__/
+*.pyc
 .mypy_cache/
 
->>>>>>> origin/dev
 # TUI E2E debug scripts
 examples/tui_debug*.rs
 
@@ -32,11 +39,6 @@ aoba_tui_config.json
 ci-results/
 
 res/about_cache.toml
-<<<<<<< HEAD
-.cargo/config.toml
-
-# Emacs/editor backup files
-*~
 
 # celestia-devtools: staged-on-demand shared justfile recipes (celestia-devtools init / just fetch)
 /.just/
