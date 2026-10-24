@@ -1,4 +1,4 @@
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{ensure, Result};
 
 use rmodbus::client::ModbusRequest;
 
