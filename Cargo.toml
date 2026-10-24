@@ -78,7 +78,7 @@ rand = "^0.10"
 ratatui = "^0.30"
 regex = "^1"
 rmodbus = { version = "^0.12", features = ["with_serde"] }
-hare = { version = "0.1", git = "https://github.com/celestia-island/hare.git", branch = "master", default-features = false }
+hare = { version = "^0.1", default-features = false, features = ["codec"] }
 rumqttc = { version = "^0.25", default-features = false, features = [
   "use-rustls-no-provider",
 ] }
