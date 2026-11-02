@@ -152,7 +152,7 @@ Depuis la racine du dépôt :
 cargo run --package api_master -- /tmp/vcom1
 ```
 
-Dans un banc de test de type production (tel qu'un banc de stockage d'hydrogène), vous procédez généralement ainsi :
+Dans un banc de test de type production (tel qu'un banc de réservoir de procédé), vous procédez généralement ainsi :
 
 - Utiliser l'interface CLI/TUI d'Aoba ou `examples/modbus_slave` pour simuler le côté esclave.
 - Puis exécuter l'exemple `api_master` pour vérifier que votre câblage Modbus et votre logique applicative se comportent comme prévu.

@@ -152,7 +152,7 @@ Desde la raíz del repositorio:
 cargo run --package api_master -- /tmp/vcom1
 ```
 
-En un entorno de prueba similar a producción (como un banco de pruebas de almacenamiento de hidrógeno), normalmente:
+En un entorno de prueba similar a producción (como un banco de pruebas de tanque de proceso), normalmente:
 
 - Usas la CLI/TUI de Aoba o `examples/modbus_slave` para simular el lado esclavo.
 - Luego ejecutas el ejemplo `api_master` para verificar que el cableado Modbus y la lógica a nivel de aplicación funcionan correctamente.

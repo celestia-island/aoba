@@ -152,7 +152,7 @@ Aoba는 `tokio` 기반으로 구축되었으므로, 마스터 API는 비동기 �
 cargo run --package api_master -- /tmp/vcom1
 ```
 
-프로덕션 유사 테스트베드(예: 수소 저장 탱크 벤치)에서는 일반적으로:
+프로덕션 유사 테스트베드(예: 프로세스 탱크 벤치)에서는 일반적으로:
 
 - Aoba CLI/TUI 또는 `examples/modbus_slave`를 사용하여 슬레이브 측을 시뮬레이션합니다.
 - 그런 다음 `api_master` 예제를 실행하여 Modbus 배선 및 애플리케이션 수준 로직이 예상대로 작동하는지 확인합니다.
