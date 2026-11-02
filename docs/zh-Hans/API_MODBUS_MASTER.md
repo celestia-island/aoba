@@ -247,6 +247,6 @@ fn main() -> Result<()> {
 ## 8. 延伸阅读
 
 - 从站侧 API 使用示例：`examples/api_slave`；
-- CLI 级别的 Modbus 使用说明：`docs/zhs/CLI_MODBUS.md`；
+- CLI 级别的 Modbus 使用说明：`docs/zh-Hans/CLI_MODBUS.md`；
 - HTTP / MQTT / IPC 等数据源对接文档：同目录下 `DATA_SOURCE_*.md`；
 - 若要结合 TUI 做 E2E 测试，请参考 `examples/tui_e2e` 及根目录下 `CLAUDE.md` 中关于 IPC 与状态监控的介绍。

@@ -5,4 +5,4 @@ description = "Multi-protocol debugging and simulation CLI/TUI tool for Modbus R
 cname = "aoba.docs.celestia.world"
 [languages]
 default = "en"
-order = ["en", "zhs", "zht", "ja", "ko", "fr", "es", "ru", "ar"]
+order = ["en", "zh-Hans", "zh-Hant", "ja", "ko", "fr", "es", "ru", "ar"]
