@@ -149,8 +149,8 @@ pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
             log::warn!("⚠️  Virtual serial port tests disabled on Windows: missing ports");
             log::warn!("📖 To enable tests, create virtual COM port pairs using:");
             log::warn!("   1. Install com0com from https://sourceforge.net/projects/com0com/");
-            log::warn!("   2. Run: .\\scripts\\setup_windows_vcom.ps1 (as Administrator)");
-            log::warn!("   3. Or see docs\\zhs\\WINDOWS_VIRTUAL_PORTS.md for details");
+            log::warn!("   2. Create a pair of virtual COM ports in com0com (the defaults are COM1 and COM2)");
+            log::warn!("   3. Or set CI_FORCE_VCOM=1 when the ports come from another source");
             return false;
         }
         log::info!("✅ Both ports available, tests will run");
