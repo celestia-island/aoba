@@ -17,8 +17,8 @@
 <div align="center">
 
 [English](../en/README.md) ·
-[简体中文](../zhs/README.md) ·
-[繁體中文](../zht/README.md) ·
+[简体中文](../zh-Hans/README.md) ·
+[繁體中文](../zh-Hant/README.md) ·
 [日本語](../ja/README.md) ·
 **한국어** ·
 [Français](../fr/README.md) ·
@@ -74,8 +74,8 @@ Modbus RTU를 위한 멀티 프로토콜 디버깅 및 시뮬레이션 도구로
 | 日本語 | [JA](../ja/README.md) |
 | 한국어 | [KO](README.md) |
 | Русский | [RU](../ru/README.md) |
-| 简体中文 | [ZH](../zhs/README.md) |
-| 繁體中文 | [ZHT](../zht/README.md) |
+| 简体中文 | [ZH](../zh-Hans/README.md) |
+| 繁體中文 | [ZHT](../zh-Hant/README.md) |
 
 ## 라이선스
 

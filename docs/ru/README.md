@@ -17,8 +17,8 @@
 <div align="center">
 
 [English](../en/README.md) ·
-[简体中文](../zhs/README.md) ·
-[繁體中文](../zht/README.md) ·
+[简体中文](../zh-Hans/README.md) ·
+[繁體中文](../zh-Hant/README.md) ·
 [日本語](../ja/README.md) ·
 [한국어](../ko/README.md) ·
 [Français](../fr/README.md) ·
@@ -74,8 +74,8 @@
 | 日本語 | [JA](../ja/README.md) |
 | 한국어 | [KO](../ko/README.md) |
 | Русский | [RU](README.md) |
-| 简体中文 | [ZH](../zhs/README.md) |
-| 繁體中文 | [ZHT](../zht/README.md) |
+| 简体中文 | [ZH](../zh-Hans/README.md) |
+| 繁體中文 | [ZHT](../zh-Hant/README.md) |
 
 ## Лицензия
 

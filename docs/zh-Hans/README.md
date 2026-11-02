@@ -18,7 +18,7 @@
 
 [English](../en/README.md) ·
 **简体中文** ·
-[繁體中文](../zht/README.md) ·
+[繁體中文](../zh-Hant/README.md) ·
 [日本語](../ja/README.md) ·
 [한국어](../ko/README.md) ·
 [Français](../fr/README.md) ·

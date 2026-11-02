@@ -17,7 +17,7 @@
 <div align="center">
 
 [English](../en/README.md) ·
-[简体中文](../zhs/README.md) ·
+[简体中文](../zh-Hans/README.md) ·
 **繁體中文** ·
 [日本語](../ja/README.md) ·
 [한국어](../ko/README.md) ·
@@ -74,7 +74,7 @@ Modbus RTU 多協定偵錯與模擬工具，適用於實體序列埠與網路轉
 | 日本語 | [JA](../ja/README.md) |
 | 한국어 | [KO](../ko/README.md) |
 | Русский | [RU](../ru/README.md) |
-| 简体中文 | [ZH](../zhs/README.md) |
+| 简体中文 | [ZH](../zh-Hans/README.md) |
 | 繁體中文 | [ZHT](README.md) |
 
 ## 授權條款
