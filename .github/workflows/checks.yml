@@ -31,10 +31,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        # One full suite per PR, on stable only: the self-hosted farm has a
-        # handful of worker slots and PR jobs already queue for 38-77 minutes,
-        # so a second full leg on nightly spends a slot without adding signal.
-        rust: [stable]
+        # Both toolchains stay in the matrix because this repo has NO separate
+        # clippy/fmt workflow: the nightly leg is the only nightly
+        # `cargo check --all-targets --all-features` + `cargo clippy -D warnings`
+        # we have. The SUITE still runs once per PR — the test step below is
+        # gated to `matrix.rust == 'stable'`, so nightly runs static checks only.
+        rust: [stable, nightly]
 
     steps:
       - uses: actions/checkout@v7
@@ -100,6 +102,8 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run unit tests
+        # One full suite per PR (the org rule): nightly keeps check + clippy only.
+        if: matrix.rust == 'stable'
         run: cargo test --lib
 
   check-official:
