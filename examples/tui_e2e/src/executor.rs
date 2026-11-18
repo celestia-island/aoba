@@ -308,8 +308,6 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
         "communication_params": {
             "mode": "stdio",
             "dynamic_pull": false,
-            "wait_time": 1.0,
-            "timeout": 3.0,
             "persistence": "persistent"
         },
         "stations": stations

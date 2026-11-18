@@ -142,16 +142,6 @@ impl IpcSender {
             Err(e) => Err(e),
         }
     }
-
-    pub async fn send_key_and_get_screen(&mut self, key: String) -> Result<String> {
-        self.send(E2EToTuiMessage::KeyPress { key }).await?;
-        self.send(E2EToTuiMessage::RequestScreen).await?;
-
-        match self.receive().await? {
-            TuiToE2EMessage::ScreenContent { content, .. } => Ok(content),
-            msg => bail!("Unexpected message: {msg:?}"),
-        }
-    }
 }
 
 pub struct IpcReceiver {
