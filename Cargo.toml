@@ -116,7 +116,6 @@ uuid = { version = "^1", features = [
   "macro-diagnostics",
   "serde",
 ] }
-vt100 = "^0.15"
 whoami = "^2"
 [dependencies]
 

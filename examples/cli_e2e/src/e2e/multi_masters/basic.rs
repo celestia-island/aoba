@@ -21,8 +21,6 @@ pub async fn test_multi_masters() -> Result<()> {
         communication_params: CommunicationParams {
             mode: CommunicationMethod::Stdio,
             dynamic_pull: false,
-            wait_time: Some(1.0),
-            timeout: Some(3.0),
             request_interval_ms: 1000,
             timeout_ms: 3000,
             persistence: PersistenceMode::Persistent,
