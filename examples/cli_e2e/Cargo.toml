@@ -14,10 +14,8 @@ anyhow.workspace = true
 chrono = { workspace = true, features = ["serde", "alloc"] }
 clap = { workspace = true, features = ["derive"] }
 env_logger.workspace = true
-expectrl.workspace = true
 interprocess.workspace = true
 log.workspace = true
-rand.workspace = true
 regex.workspace = true
 rumqttc.workspace = true
 serde.workspace = true
