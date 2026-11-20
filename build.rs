@@ -39,9 +39,8 @@ fn main() -> Result<()> {
                         );
                     }
                     // License: prefer the package-level field, fall back to the
-                    // workspace declaration. The package uses license-file (non-SPDX
-                    // SySL-1.0) for crates.io compatibility, so the textual license
-                    // id lives only in [workspace.package].
+                    // workspace declaration (SySL-1.0 is non-SPDX, so the textual
+                    // id lives in [workspace.package] and is inherited).
                     let lic = t.get("license").and_then(|x| x.as_str()).or_else(|| {
                         v.get("workspace")
                             .and_then(|w| w.get("package"))
