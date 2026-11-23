@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/logo.webp" alt="aoba" width="200" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/celestia-island.github.io/main/res/logos/aoba.webp" alt="aoba" width="200" /></p>
 
 <h1 align="center">aoba</h1>
 
